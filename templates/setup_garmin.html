@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Setup Garmin - Garmin Heart Rate Analyzer{% endblock %}
+
+{% block content %}
+<div class="main-container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-cog me-2"></i>
+                        Setup Garmin Connect Credentials
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Important:</strong> Your Garmin credentials are encrypted and stored securely. 
+                        We only use them to authenticate with Garmin Connect and collect your heart rate data.
+                    </div>
+                    
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Garmin Connect Email</label>
+                            <input type="email" class="form-control" id="email" name="email" 
+                                   required placeholder="your.email@example.com">
+                            <div class="form-text">The email address you use to log into Garmin Connect</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Garmin Connect Password</label>
+                            <input type="password" class="form-control" id="password" name="password" 
+                                   required placeholder="Your Garmin Connect password">
+                            <div class="form-text">Your Garmin Connect password (will be encrypted)</div>
+                        </div>
+                        
+                        <div class="alert alert-warning">
+                            <i class="fas fa-shield-alt me-2"></i>
+                            <strong>2FA Support:</strong> If you have two-factor authentication enabled, 
+                            you'll be prompted to enter your authentication code after submitting this form.
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-save me-2"></i>
+                                Save Credentials
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="text-center">
+                        <h6>What happens next?</h6>
+                        <div class="row text-start">
+                            <div class="col-md-6">
+                                <ul class="list-unstyled">
+                                    <li><i class="fas fa-check text-success me-2"></i>Credentials are encrypted</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>Test authentication</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>Handle 2FA if needed</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <ul class="list-unstyled">
+                                    <li><i class="fas fa-check text-success me-2"></i>Store securely</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>Ready to collect data</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>Return to dashboard</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center mt-3">
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>
+                    Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

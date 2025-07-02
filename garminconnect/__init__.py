@@ -246,25 +246,18 @@ class Garmin:
 
             return None, None
         else:
-            if self.return_on_mfa:
-                token1, token2 = self.garth.login(
-                    self.username,
-                    self.password,
-                    return_on_mfa=self.return_on_mfa,
-                )
-            else:
-                token1, token2 = self.garth.login(
-                    self.username, self.password, prompt_mfa=self.prompt_mfa
-                )
-                self.display_name = self.garth.profile["displayName"]
-                self.full_name = self.garth.profile["fullName"]
+            self.garth.login(
+                self.username, self.password, prompt_mfa=self.prompt_mfa
+            )
+            self.display_name = self.garth.profile["displayName"]
+            self.full_name = self.garth.profile["fullName"]
 
-                settings = self.garth.connectapi(
-                    self.garmin_connect_user_settings_url
-                )
-                self.unit_system = settings["userData"]["measurementSystem"]
+            settings = self.garth.connectapi(
+                self.garmin_connect_user_settings_url
+            )
+            self.unit_system = settings["userData"]["measurementSystem"]
 
-        return token1, token2
+        return None, None
 
     def resume_login(self, client_state: dict, mfa_code: str):
         """Resume login using Garth."""

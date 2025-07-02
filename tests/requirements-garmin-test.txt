@@ -1,0 +1,3 @@
+garminconnect==0.1.50
+garth>=0.4.25
+python-dotenv 

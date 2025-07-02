@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Two-Factor Authentication - Garmin Heart Rate Analyzer{% endblock %}
+
+{% block content %}
+<div class="main-container">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0">
+                        <i class="fas fa-shield-alt me-2"></i>
+                        Two-Factor Authentication
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>2FA Required:</strong> Your Garmin Connect account has two-factor authentication enabled. 
+                        Please enter the authentication code from your authenticator app.
+                    </div>
+                    
+                    <form method="POST" action="{{ url_for('handle_mfa') }}">
+                        <div class="mb-3">
+                            <label for="mfa_code" class="form-label">Authentication Code</label>
+                            <input type="text" class="form-control form-control-lg text-center" 
+                                   id="mfa_code" name="mfa_code" 
+                                   required placeholder="123456" 
+                                   maxlength="6" pattern="[0-9]{6}"
+                                   autocomplete="off">
+                            <div class="form-text">Enter the 6-digit code from your authenticator app</div>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-warning btn-lg">
+                                <i class="fas fa-unlock me-2"></i>
+                                Verify & Continue
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="text-center">
+                        <h6>Need help?</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-mobile-alt me-2"></i>Check your authenticator app</li>
+                            <li><i class="fas fa-clock me-2"></i>Codes refresh every 30 seconds</li>
+                            <li><i class="fas fa-redo me-2"></i>Try again if code expires</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center mt-3">
+                <a href="{{ url_for('setup_garmin') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>
+                    Back to Setup
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-focus on the MFA code input
+document.getElementById('mfa_code').focus();
+
+// Auto-submit when 6 digits are entered
+document.getElementById('mfa_code').addEventListener('input', function(e) {
+    if (this.value.length === 6) {
+        this.form.submit();
+    }
+});
+</script>
+{% endblock %} 
