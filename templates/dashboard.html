@@ -7,9 +7,20 @@
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>Dashboard</h1>
-            <div>
-                <label for="dateSelector" class="form-label me-2">Select Date:</label>
-                <input type="date" id="dateSelector" class="form-control d-inline-block" style="width: auto;" value="{{ today }}">
+            <div class="d-flex align-items-center gap-3">
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary" id="prevWeek">
+                        <span>←</span>
+                    </button>
+                    <button type="button" class="btn btn-primary" id="todayBtn">Today</button>
+                    <button type="button" class="btn btn-outline-primary" id="nextWeek">
+                        <span>→</span>
+                    </button>
+                </div>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-secondary active" id="trimpBtn">TRIMP</button>
+                    <button type="button" class="btn btn-outline-secondary" id="minutesBtn">Minutes</button>
+                </div>
             </div>
         </div>
         
@@ -17,45 +28,17 @@
     </div>
 </div>
 
-<!-- Daily Data Section -->
-<div class="row">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Daily Heart Rate Zones</h5>
-            </div>
-            <div class="card-body">
-                <div id="dailyChartContainer" class="chart-container">
-                    <canvas id="dailyChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Daily Summary</h5>
-            </div>
-            <div class="card-body">
-                <div id="dailySummary">
-                    <p class="text-muted">Select a date to view data</p>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Weekly Data Section -->
+<!-- Two Week Chart Section -->
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0">Weekly Overview</h5>
+                <h5 class="mb-0">Two Week Overview</h5>
+                <small class="text-muted" id="dateRange"></small>
             </div>
             <div class="card-body">
-                <div id="weeklyChartContainer" class="chart-container">
-                    <canvas id="weeklyChart"></canvas>
+                <div id="chartContainer" class="chart-container">
+                    <canvas id="twoWeekChart"></canvas>
                 </div>
             </div>
         </div>
@@ -71,222 +54,346 @@
 </div>
 
 <script>
+// Register the DataLabels plugin
+Chart.register(ChartDataLabels);
+
 // Chart.js configuration
 Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 Chart.defaults.font.size = 12;
 Chart.defaults.color = '#2c3e50';
 
-// Zone colors
+// Zone colors - temperature scale from cool to hot
 const zoneColors = {
-    'Zone 1': '#28a745',
-    'Zone 2': '#ffc107', 
-    'Zone 3': '#fd7e14',
-    'Zone 4': '#dc3545',
-    'Zone 5': '#6f42c1'
+    '90-99': '#004080',    // Night sky blue
+    '100-109': '#006d5b',  // Deep teal
+    '110-119': '#28a745',  // Green
+    '120-129': '#9acd32',  // Yellow-green
+    '130-139': '#ffc107',  // Yellow
+    '140-149': '#fd7e14',  // Orange
+    '150-159': '#e74c3c',  // Red
+    '160+': '#dc3545'      // Hot red
 };
 
-let dailyChart = null;
-let weeklyChart = null;
+// Zone order for stacking (bottom to top)
+const zoneOrder = [
+    '90-99',
+    '100-109', 
+    '110-119',
+    '120-129',
+    '130-139',
+    '140-149',
+    '150-159',
+    '160+'
+];
 
-// Date selector change handler
-document.getElementById('dateSelector').addEventListener('change', function() {
-    const selectedDate = this.value;
-    loadDailyData(selectedDate);
-    loadWeeklyData(selectedDate);
+let twoWeekChart = null;
+let currentStartDate = null;
+let currentEndDate = null;
+let currentMetric = 'trimp'; // 'trimp' or 'minutes'
+
+// Initialize the dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up event listeners
+    document.getElementById('prevWeek').addEventListener('click', () => navigateWeek(-1));
+    document.getElementById('nextWeek').addEventListener('click', () => navigateWeek(1));
+    document.getElementById('todayBtn').addEventListener('click', goToToday);
+    document.getElementById('trimpBtn').addEventListener('click', () => switchMetric('trimp'));
+    document.getElementById('minutesBtn').addEventListener('click', () => switchMetric('minutes'));
+    
+    // Start with today's view
+    goToToday();
 });
 
-// Load daily data
-function loadDailyData(date) {
-    showLoading();
+// Calculate the two-week period that includes today
+function calculateTwoWeekPeriod(today) {
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to Monday-based
     
-    fetch(`/api/data/${date}`)
+    // Find the Monday of the second week (7 days before today's Monday)
+    const mondayOfSecondWeek = new Date(today);
+    mondayOfSecondWeek.setDate(today.getDate() - daysFromMonday - 7);
+    
+    // Set to Monday
+    mondayOfSecondWeek.setDate(mondayOfSecondWeek.getDate() - mondayOfSecondWeek.getDay() + 1);
+    
+    // Calculate start (Monday of first week) and end (Sunday of second week)
+    const startDate = new Date(mondayOfSecondWeek);
+    startDate.setDate(mondayOfSecondWeek.getDate() - 7);
+    
+    const endDate = new Date(mondayOfSecondWeek);
+    endDate.setDate(mondayOfSecondWeek.getDate() + 6);
+    
+    return { startDate, endDate };
+}
+
+// Navigate by one week
+function navigateWeek(direction) {
+    if (!currentStartDate || !currentEndDate) return;
+    
+    const newStartDate = new Date(currentStartDate);
+    newStartDate.setDate(currentStartDate.getDate() + (direction * 7));
+    
+    const newEndDate = new Date(currentEndDate);
+    newEndDate.setDate(currentEndDate.getDate() + (direction * 7));
+    
+    loadTwoWeekData(newStartDate, newEndDate);
+}
+
+// Go to today's two-week period
+function goToToday() {
+    const today = new Date();
+    const { startDate, endDate } = calculateTwoWeekPeriod(today);
+    loadTwoWeekData(startDate, endDate);
+}
+
+// Switch between TRIMP and minutes
+function switchMetric(metric) {
+    currentMetric = metric;
+    
+    // Update button states
+    document.getElementById('trimpBtn').classList.toggle('active', metric === 'trimp');
+    document.getElementById('minutesBtn').classList.toggle('active', metric === 'minutes');
+    
+    // Reload data with new metric
+    if (currentStartDate && currentEndDate) {
+        loadTwoWeekData(currentStartDate, currentEndDate);
+    }
+}
+
+// Load two weeks of data
+function loadTwoWeekData(startDate, endDate) {
+    currentStartDate = startDate;
+    currentEndDate = endDate;
+    
+    showLoading();
+    updateDateRange();
+    
+    // Generate array of 14 dates
+    const dates = [];
+    const currentDate = new Date(startDate);
+    for (let i = 0; i < 14; i++) {
+        dates.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Load data for all dates
+    Promise.all(dates.map(date => loadDateData(date)))
+        .then(results => {
+            updateTwoWeekChart(dates, results);
+            hideLoading();
+        })
+        .catch(error => {
+            console.error('Error loading two week data:', error);
+            hideLoading();
+        });
+}
+
+// Load data for a single date
+function loadDateData(date) {
+    const dateStr = date.toISOString().split('T')[0];
+    
+    return fetch(`/api/data/${dateStr}`)
         .then(response => {
             if (!response.ok) {
-                throw new Error('No data available for this date');
+                // Return null for dates with no data
+                return null;
             }
             return response.json();
         })
-        .then(data => {
-            updateDailyChart(data);
-            updateDailySummary(data);
-            hideLoading();
-        })
         .catch(error => {
-            console.error('Error loading daily data:', error);
-            document.getElementById('dailySummary').innerHTML = `
-                <div class="alert alert-info">
-                    <p class="mb-0">${error.message}</p>
-                </div>
-            `;
-            hideLoading();
+            console.error(`Error loading data for ${dateStr}:`, error);
+            return null;
         });
 }
 
-// Load weekly data
-function loadWeeklyData(startDate) {
-    fetch(`/api/weekly-data/${startDate}`)
-        .then(response => response.json())
-        .then(data => {
-            updateWeeklyChart(data);
-        })
-        .catch(error => {
-            console.error('Error loading weekly data:', error);
-        });
-}
-
-// Update daily chart
-function updateDailyChart(data) {
-    const ctx = document.getElementById('dailyChart').getContext('2d');
+// Update the two-week chart
+function updateTwoWeekChart(dates, dataResults) {
+    const ctx = document.getElementById('twoWeekChart').getContext('2d');
     
-    if (dailyChart) {
-        dailyChart.destroy();
+    if (twoWeekChart) {
+        twoWeekChart.destroy();
     }
     
-    const chartData = {
-        labels: Object.keys(data.presentation_buckets),
-        datasets: [{
-            data: Object.values(data.presentation_buckets),
-            backgroundColor: Object.keys(data.presentation_buckets).map(zone => zoneColors[zone] || '#6c757d'),
+    // Prepare data for stacked column chart
+    const labels = dates.map(date => {
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+        const dayNum = date.getDate();
+        return `${dayName} ${dayNum}`;
+    });
+    
+    // Get all unique zones from the data
+    const allZones = new Set();
+    dataResults.forEach(data => {
+        if (data && data.presentation_buckets) {
+            Object.keys(data.presentation_buckets).forEach(zone => allZones.add(zone));
+        }
+    });
+    
+    // Sort zones according to our defined order (bottom to top)
+    const sortedZones = zoneOrder.filter(zone => allZones.has(zone));
+    
+    // Create datasets for each zone in the correct order
+    const datasets = sortedZones.map(zone => {
+        const data = labels.map((_, index) => {
+            const dayData = dataResults[index];
+            if (!dayData || !dayData.presentation_buckets || !dayData.presentation_buckets[zone]) {
+                return 0;
+            }
+            
+            if (currentMetric === 'trimp') {
+                return dayData.presentation_buckets[zone].trimp || 0;
+            } else {
+                return dayData.presentation_buckets[zone].minutes || 0;
+            }
+        });
+        
+        return {
+            label: zone,
+            data: data,
+            backgroundColor: zoneColors[zone] || '#6c757d',
             borderWidth: 1,
             borderColor: '#ffffff'
-        }]
-    };
+        };
+    });
     
-    dailyChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: chartData,
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        padding: 20,
-                        usePointStyle: true
-                    }
+    // Calculate the maximum value for Y-axis scaling
+    let maxValue = 0;
+    dataResults.forEach((dayData, index) => {
+        if (dayData) {
+            if (currentMetric === 'trimp') {
+                maxValue = Math.max(maxValue, dayData.total_trimp || 0);
+            } else {
+                // Calculate total minutes for this day
+                let totalMinutes = 0;
+                if (dayData.presentation_buckets) {
+                    Object.values(dayData.presentation_buckets).forEach(bucket => {
+                        totalMinutes += bucket.minutes || 0;
+                    });
                 }
+                maxValue = Math.max(maxValue, totalMinutes);
             }
         }
     });
-}
-
-// Update weekly chart
-function updateWeeklyChart(data) {
-    const ctx = document.getElementById('weeklyChart').getContext('2d');
     
-    if (weeklyChart) {
-        weeklyChart.destroy();
+    // Calculate a proper max that aligns with Chart.js tick intervals
+    let yAxisMax;
+    if (maxValue === 0) {
+        yAxisMax = 10; // Default for no data
+    } else {
+        // Determine step size based on the range
+        let step;
+        if (maxValue <= 50) step = 10;
+        else if (maxValue <= 100) step = 20;
+        else if (maxValue <= 200) step = 20;
+        else if (maxValue <= 500) step = 50;
+        else step = 100;
+        
+        // Add one extra step for label space
+        yAxisMax = Math.ceil(maxValue / step) * step + step;
     }
     
-    const labels = data.map(item => {
-        const date = new Date(item.date);
-        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    });
-    
-    const trimpData = data.map(item => item.total_trimp || 0);
-    const scoreData = data.map(item => item.daily_score || 0);
-    
-    weeklyChart = new Chart(ctx, {
-        type: 'line',
+    twoWeekChart = new Chart(ctx, {
+        type: 'bar',
         data: {
             labels: labels,
-            datasets: [{
-                label: 'TRIMP Score',
-                data: trimpData,
-                borderColor: '#3498db',
-                backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                tension: 0.4,
-                yAxisID: 'y'
-            }, {
-                label: 'Daily Score',
-                data: scoreData,
-                borderColor: '#e74c3c',
-                backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                tension: 0.4,
-                yAxisID: 'y1'
-            }]
+            datasets: datasets
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
-            },
             scales: {
                 x: {
-                    display: true,
+                    stacked: true,
                     title: {
                         display: true,
                         text: 'Date'
                     }
                 },
                 y: {
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
+                    stacked: true,
                     title: {
                         display: true,
-                        text: 'TRIMP Score'
-                    }
-                },
-                y1: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Daily Score'
+                        text: currentMetric === 'trimp' ? 'TRIMP Score' : 'Minutes'
                     },
-                    grid: {
-                        drawOnChartArea: false,
-                    },
+                    beginAtZero: true,
+                    max: yAxisMax
                 }
             },
             plugins: {
                 legend: {
                     position: 'top',
+                    labels: {
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        afterBody: function(context) {
+                            const dataIndex = context[0].dataIndex;
+                            const dayData = dataResults[dataIndex];
+                            if (dayData && dayData.total_trimp !== undefined) {
+                                return `Total: ${dayData.total_trimp.toFixed(1)} TRIMP`;
+                            }
+                            return '';
+                        }
+                    }
+                }
+            },
+            plugins: {
+                datalabels: {
+                    display: function(context) {
+                        // Only show labels for the top dataset (last in the stack)
+                        return context.datasetIndex === datasets.length - 1;
+                    },
+                    anchor: 'end',
+                    align: 'top',
+                    formatter: function(value, context) {
+                        // Calculate total for this column
+                        const dataIndex = context.dataIndex;
+                        const dayData = dataResults[dataIndex];
+                        if (dayData) {
+                            if (currentMetric === 'trimp') {
+                                return dayData.total_trimp ? dayData.total_trimp.toFixed(1) : '0';
+                            } else {
+                                // Calculate total minutes
+                                let totalMinutes = 0;
+                                if (dayData.presentation_buckets) {
+                                    Object.values(dayData.presentation_buckets).forEach(bucket => {
+                                        totalMinutes += bucket.minutes || 0;
+                                    });
+                                }
+                                return totalMinutes > 0 ? totalMinutes.toFixed(0) : '0';
+                            }
+                        }
+                        return '0';
+                    },
+                    color: '#2c3e50',
+                    font: {
+                        weight: 'bold',
+                        size: 11
+                    },
+                    offset: 4
                 }
             }
         }
     });
 }
 
-// Update daily summary
-function updateDailySummary(data) {
-    const summary = document.getElementById('dailySummary');
+// Update the date range display
+function updateDateRange() {
+    if (!currentStartDate || !currentEndDate) return;
     
-    summary.innerHTML = `
-        <div class="row">
-            <div class="col-6">
-                <div class="text-center">
-                    <div class="score-display">${data.total_trimp.toFixed(1)}</div>
-                    <p class="text-muted">Total TRIMP</p>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="text-center">
-                    <div class="score-display">${data.daily_score.toFixed(1)}</div>
-                    <p class="text-muted">Daily Score</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="mt-4">
-            <h6>Heart Rate Zones</h6>
-            ${Object.entries(data.presentation_buckets).map(([zone, value]) => `
-                <div class="zone-bar" style="background: linear-gradient(90deg, ${zoneColors[zone] || '#6c757d'} ${value}%, transparent ${value}%)">
-                    <span class="zone-label">${zone}</span>
-                    <span class="zone-value">${value}%</span>
-                </div>
-            `).join('')}
-        </div>
-        
-        <div class="mt-3">
-            <small class="text-muted">Activity Type: ${data.activity_type || 'Unknown'}</small>
-        </div>
-    `;
+    const startStr = currentStartDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+    });
+    const endStr = currentEndDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+    });
+    
+    document.getElementById('dateRange').textContent = `${startStr} - ${endStr}`;
 }
 
 // Show/hide loading
@@ -297,12 +404,5 @@ function showLoading() {
 function hideLoading() {
     document.getElementById('loading').style.display = 'none';
 }
-
-// Load initial data
-document.addEventListener('DOMContentLoaded', function() {
-    const today = document.getElementById('dateSelector').value;
-    loadDailyData(today);
-    loadWeeklyData(today);
-});
 </script>
 {% endblock %} 
