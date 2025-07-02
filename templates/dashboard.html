@@ -106,22 +106,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Calculate the two-week period that includes today
 function calculateTwoWeekPeriod(today) {
+    // Find the Monday of the week that contains today
     const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
     const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to Monday-based
     
-    // Find the Monday of the second week (7 days before today's Monday)
-    const mondayOfSecondWeek = new Date(today);
-    mondayOfSecondWeek.setDate(today.getDate() - daysFromMonday - 7);
+    const mondayOfThisWeek = new Date(today);
+    mondayOfThisWeek.setDate(today.getDate() - daysFromMonday);
     
-    // Set to Monday
-    mondayOfSecondWeek.setDate(mondayOfSecondWeek.getDate() - mondayOfSecondWeek.getDay() + 1);
+    // The second week is the week that contains today (Monday to Sunday)
+    // The first week is the week before that (Monday to Sunday)
+    const startDate = new Date(mondayOfThisWeek);
+    startDate.setDate(mondayOfThisWeek.getDate() - 7);
     
-    // Calculate start (Monday of first week) and end (Sunday of second week)
-    const startDate = new Date(mondayOfSecondWeek);
-    startDate.setDate(mondayOfSecondWeek.getDate() - 7);
-    
-    const endDate = new Date(mondayOfSecondWeek);
-    endDate.setDate(mondayOfSecondWeek.getDate() + 6);
+    const endDate = new Date(mondayOfThisWeek);
+    endDate.setDate(mondayOfThisWeek.getDate() + 6);
     
     return { startDate, endDate };
 }
