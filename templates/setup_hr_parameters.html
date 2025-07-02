@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Setup HR Parameters{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">Setup Heart Rate Parameters</h3>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-4">
+                        These parameters are used to calculate your TRIMP (Training Impulse) scores. 
+                        Please enter your personal heart rate values.
+                    </p>
+                    
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="resting_hr" class="form-label">Resting Heart Rate (BPM)</label>
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="resting_hr" 
+                                   name="resting_hr" 
+                                   value="{{ resting_hr }}" 
+                                   min="40" 
+                                   max="100" 
+                                   required>
+                            <div class="form-text">
+                                Your resting heart rate in beats per minute. This is typically measured first thing in the morning.
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="max_hr" class="form-label">Maximum Heart Rate (BPM)</label>
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="max_hr" 
+                                   name="max_hr" 
+                                   value="{{ max_hr }}" 
+                                   min="150" 
+                                   max="220" 
+                                   required>
+                            <div class="form-text">
+                                Your maximum heart rate in beats per minute. This can be estimated using 220 - age, or measured during a maximum effort test.
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <strong>Current Settings:</strong><br>
+                            Resting HR: {{ resting_hr }} BPM<br>
+                            Max HR: {{ max_hr }} BPM<br>
+                            HR Reserve: {{ max_hr - resting_hr }} BPM
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">Save Parameters</button>
+                            <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Dashboard</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

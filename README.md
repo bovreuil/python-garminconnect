@@ -1,251 +1,193 @@
-# Garmin Heart Rate Analyzer
+# Garmin Heart Rate Analyzer with TRIMP Calculations
 
-A Flask web application that analyzes heart rate data from Garmin Connect devices (like Forerunner 955 with HRM Pro Plus) to provide insights into daily activity patterns and fitness scores.
+A Flask web application that analyzes heart rate data from Garmin Connect using TRIMP (Training Impulse) calculations with an exponential model.
 
 ## Features
 
-- 🔐 **Google SSO Authentication** - Secure login using Google OAuth
-- 📊 **Heart Rate Zone Analysis** - Bucket heart rate data into custom zones (90-100, 100-110, etc.)
-- 🎯 **Daily Score Calculation** - Weighted scoring based on time spent in each zone
-- 📈 **Activity Type Classification** - Determine if activity was long low-intensity or short high-intensity
-- 🗄️ **PostgreSQL Storage** - Secure data storage with encrypted credentials
-- 🔒 **2FA Support** - Full support for Garmin Connect two-factor authentication
-- 📱 **Responsive Web Interface** - Modern, mobile-friendly dashboard with charts
-- ☁️ **Heroku Ready** - Easy deployment to Heroku with PostgreSQL
+- **Google OAuth Authentication**: Secure login with user restrictions
+- **TRIMP Calculations**: Exponential model based on heart rate reserve
+- **Heart Rate Bucketing**: Individual 1 BPM buckets for calculations, 10 BPM buckets for presentation
+- **Color-coded Zones**: Temperature scale visualization (blue to red)
+- **Daily & Weekly Views**: Charts and analysis for different time periods
+- **Personal HR Parameters**: Configurable resting and maximum heart rates
+- **SQLite Database**: Simple file-based database for both local and production
+- **Sample Data**: Built-in sample data for testing and development
 
-## Screenshots
-
-### Dashboard
-- Heart rate zone histogram
-- Daily activity score
-- Activity type classification
-- Interactive charts and visualizations
-
-### Setup Process
-- Google OAuth login
-- Garmin Connect credential setup
-- 2FA handling
-- Secure credential storage
-
-## Technology Stack
-
-- **Backend**: Flask, Python 3.11
-- **Database**: PostgreSQL
-- **Authentication**: Google OAuth, Garmin Connect API
-- **Frontend**: Bootstrap 5, Chart.js
-- **Data Collection**: python-garminconnect library
-- **Security**: Fernet encryption for credentials
-- **Deployment**: Heroku
-
-## Installation & Setup
+## Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
-- PostgreSQL database
+- Python 3.9+
 - Google OAuth credentials
 - Garmin Connect account
 
 ### Local Development
 
-1. **Clone the repository**
+1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
-   cd garmin-heart-rate-analyzer
+   git clone <your-repo-url>
+   cd python-garminconnect
    ```
 
-2. **Install dependencies**
+2. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Set up environment variables**
-   ```bash
-   cp env.example .env
-   # Edit .env with your configuration
-   ```
-
-4. **Generate encryption key**
-   ```bash
-   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-   # Add the output to your .env file as ENCRYPTION_KEY
-   ```
-
-5. **Set up Google OAuth**
+3. **Set up Google OAuth**:
    - Go to [Google Cloud Console](https://console.cloud.google.com/)
    - Create a new project or select existing one
    - Enable Google+ API
    - Create OAuth 2.0 credentials
    - Add authorized redirect URIs:
-     - `http://localhost:5000/login/authorized` (for local development)
+     - `http://localhost:5001/login/authorized` (for local development)
      - `https://your-app.herokuapp.com/login/authorized` (for production)
-   - Copy Client ID and Client Secret to your `.env` file
 
-6. **Set up PostgreSQL**
+4. **Set up environment**:
    ```bash
-   # Create database
-   createdb garmin_hr_db
-   
-   # Update DATABASE_URL in .env
-   DATABASE_URL=postgresql://username:password@localhost:5432/garmin_hr_db
+   cp env.example env.local
+   # Edit env.local with your configuration
    ```
 
-7. **Run the application**
+5. **Generate encryption key**:
+   ```bash
+   python3 -c "from cryptography.fernet import Fernet; print('ENCRYPTION_KEY=' + Fernet.generate_key().decode())"
+   ```
+   Copy the output to your `env.local` file.
+
+6. **Run the application**:
    ```bash
    python3 app.py
    ```
 
-8. **Access the application**
-   - Open http://localhost:5000
-   - Login with Google
-   - Setup Garmin Connect credentials
-   - Start analyzing your heart rate data!
+7. **Access the app**: Open http://localhost:5001 in your browser
 
-### Heroku Deployment
+### Production Deployment
 
-1. **Create Heroku app**
-   ```bash
-   heroku create your-app-name
-   ```
+For production deployment:
 
-2. **Add PostgreSQL addon**
-   ```bash
-   heroku addons:create heroku-postgresql:mini
-   ```
+1. **Set up your hosting platform** (Heroku, Railway, etc.)
+2. **Configure environment variables** with your Google OAuth credentials
+3. **Deploy the application**
 
-3. **Set environment variables**
-   ```bash
-   heroku config:set SECRET_KEY="your-secret-key"
-   heroku config:set GOOGLE_ID="your-google-oauth-client-id"
-   heroku config:set GOOGLE_SECRET="your-google-oauth-client-secret"
-   heroku config:set ENCRYPTION_KEY="your-encryption-key"
-   ```
+## Configuration
 
-4. **Deploy**
-   ```bash
-   git add .
-   git commit -m "Initial deployment"
-   git push heroku main
-   ```
+### Environment Variables
 
-5. **Open the app**
-   ```bash
-   heroku open
-   ```
+- `SECRET_KEY`: Flask secret key for sessions
+- `GOOGLE_ID`: Google OAuth client ID
+- `GOOGLE_SECRET`: Google OAuth client secret
+- `ENCRYPTION_KEY`: Fernet key for password encryption
 
-## Usage
+### User Access Control
 
-### First Time Setup
+Access is restricted to specific email addresses defined in the `ALLOWED_USERS` dictionary in `app.py`:
 
-1. **Login with Google** - Use your Google account to authenticate
-2. **Setup Garmin Credentials** - Enter your Garmin Connect email and password
-3. **Handle 2FA** - If you have 2FA enabled, enter your authentication code
-4. **Start Collecting Data** - Select a date and collect heart rate data
+```python
+ALLOWED_USERS = {
+    'peter.buckney@gmail.com': 'Peter Buckney'
+    # Add more users here as needed
+}
+```
 
-### Daily Analysis
+### Heart Rate Parameters
 
-1. **Select Date** - Choose the date you want to analyze
-2. **Collect Data** - Click "Collect Data" to fetch from Garmin Connect
-3. **View Results** - See your heart rate zones, daily score, and activity type
+Default values (configurable per user):
+- **Resting HR**: 48 BPM
+- **Max HR**: 167 BPM
 
-### Understanding Your Data
+## TRIMP Calculation
 
-#### Heart Rate Zones
-- **90-100 BPM**: Very light activity
-- **100-110 BPM**: Light activity
-- **110-120 BPM**: Moderate activity
-- **120-130 BPM**: Moderate-high activity
-- **130-140 BPM**: High activity
-- **140-150 BPM**: Very high activity
-- **150+ BPM**: Maximum effort
+The app uses an exponential TRIMP model:
 
-#### Daily Score
-The daily score is calculated using weighted averages:
-- Higher heart rate zones have higher weights
-- Score ranges from 0-400
-- Based on time distribution across zones
+```
+TRIMP = minutes × HR_reserve_ratio × 0.64 × e^(1.92 × HR_reserve_ratio)
+```
 
-#### Activity Types
-- **Long Low-Intensity**: Extended periods in lower heart rate zones
-- **Short High-Intensity**: Brief periods in higher heart rate zones
-- **Mixed**: Balanced distribution across zones
+Where:
+- `HR_reserve_ratio = (HR - resting_HR) / (max_HR - resting_HR)`
+- Only HR ≥ 90 BPM is counted (exercise threshold)
+
+## Heart Rate Zones
+
+### Individual Buckets (1 BPM each)
+Used for precise TRIMP calculations: 90, 91, 92, ..., 160+
+
+### Presentation Buckets (10 BPM each)
+Used for charts and visualization:
+- **90-99**: Blue (low intensity)
+- **100-109**: Light blue
+- **110-119**: Cyan
+- **120-129**: Green (moderate intensity)
+- **130-139**: Orange
+- **140-149**: Dark orange
+- **150-159**: Red (high intensity)
+- **160+**: Dark red (very high intensity)
 
 ## API Endpoints
 
-### Authentication
-- `GET /login` - Google OAuth login
-- `GET /logout` - Logout user
-- `GET /login/authorized` - OAuth callback
+- `GET /`: Main dashboard (requires authentication)
+- `GET /login`: Google OAuth login
+- `GET /logout`: Logout user
+- `POST /collect-data`: Collect heart rate data for a date
+- `GET /api/data/<date>`: Get data for specific date
+- `GET /api/weekly-data/<start_date>`: Get weekly data
+- `GET/POST /api/hr-parameters`: Get/update HR parameters
+- `GET/POST /setup-garmin`: Setup Garmin credentials
+- `GET/POST /setup-hr-parameters`: Setup HR parameters
 
-### Garmin Setup
-- `GET /setup-garmin` - Setup Garmin credentials form
-- `POST /setup-garmin` - Save Garmin credentials
-- `POST /mfa` - Handle 2FA code
+## Database Schema
 
-### Data Collection
-- `POST /collect-data` - Collect heart rate data for a date
-- `GET /api/data/<date>` - Get stored data for a date
+### Tables
+- `users`: User information with Google OAuth IDs
+- `garmin_credentials`: Encrypted Garmin login credentials
+- `user_hr_parameters`: Personal HR settings
+- `heart_rate_data`: Heart rate data with TRIMP calculations
+
+### Key Fields
+- `individual_hr_buckets`: JSON of 1 BPM buckets
+- `presentation_buckets`: JSON of 10 BPM buckets with minutes and TRIMP
+- `trimp_data`: JSON of TRIMP values per HR
+- `total_trimp`: Daily TRIMP score
+- `activity_type`: Classification (long_low_intensity, short_high_intensity, mixed)
+
+## Development
+
+### Testing TRIMP Calculations
+
+Run the test script to verify calculations:
+```bash
+python3 test_trimp.py
+```
+
+### Adding Real Garmin Data
+
+To integrate real Garmin Connect data collection:
+
+1. **Setup Garmin credentials** in the web interface
+2. **Modify the `collect_data` route** in `app.py` to fetch real data
+3. **Handle 2FA authentication** if needed
+
+### Adding New Users
+
+To add new users to the application:
+
+1. **Edit the `ALLOWED_USERS` dictionary** in `app.py`
+2. **Add the user's email and display name**:
+   ```python
+   ALLOWED_USERS = {
+       'peter.buckney@gmail.com': 'Peter Buckney',
+       'newuser@example.com': 'New User Name'
+   }
+   ```
 
 ## Security Features
 
+- **Google OAuth Authentication**: Secure login with Google accounts
+- **User Access Control**: Only authorized email addresses can access the app
 - **Encrypted Credentials**: Garmin passwords are encrypted using Fernet
-- **OAuth Authentication**: Secure Google SSO
-- **Session Management**: Secure session handling
-- **Database Security**: PostgreSQL with proper access controls
-- **2FA Support**: Full support for Garmin Connect 2FA
-
-## Data Privacy
-
-- Your Garmin credentials are encrypted and stored securely
-- Heart rate data is stored in your own database
-- No data is shared with third parties
-- You can delete your data at any time
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Authentication Errors**
-   - Verify Google OAuth credentials
-   - Check redirect URIs in Google Cloud Console
-   - Ensure environment variables are set correctly
-
-2. **Garmin Connect Issues**
-   - Verify your Garmin Connect credentials
-   - Check if 2FA is enabled and enter correct code
-   - Ensure your device has synced data to Garmin Connect
-
-3. **Database Connection Issues**
-   - Verify DATABASE_URL is correct
-   - Check PostgreSQL is running
-   - Ensure database exists and is accessible
-
-4. **Heroku Deployment Issues**
-   - Check Heroku logs: `heroku logs --tail`
-   - Verify all environment variables are set
-   - Ensure PostgreSQL addon is provisioned
-
-### Getting Help
-
-- Check the logs for detailed error messages
-- Verify all environment variables are set correctly
-- Ensure your Garmin device has synced recent data
-- Check that your Google OAuth credentials are properly configured
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+- **Session Management**: Secure session handling with Flask
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- [python-garminconnect](https://github.com/cyberjunky/python-garminconnect) - Garmin Connect API wrapper
-- [Garth](https://github.com/matin/garth) - Garmin authentication library
-- Flask and the Python community for excellent tools and documentation
+MIT License - see LICENSE file for details.

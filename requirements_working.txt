@@ -1,7 +1,0 @@
-# Core dependencies for the working Garmin Heart Rate Analyzer demo
-Flask==2.3.3
-python-dotenv==1.0.0
-garth>=0.4.25
-requests==2.31.0
-cryptography==41.0.4
-Werkzeug==2.3.7 

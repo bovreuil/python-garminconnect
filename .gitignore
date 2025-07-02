@@ -1,6 +1,10 @@
 # Custom
 response.json
 
+# Local environment and database files
+env.local
+garmin_hr.db
+
 # Virtual environments
 .venv/
 .pdm-python

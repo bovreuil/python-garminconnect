@@ -14,92 +14,237 @@
         </div>
     </div>
 
-    <!-- Data Collection Section -->
+    <!-- Navigation Tabs -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-download me-2"></i>
-                        Collect Heart Rate Data
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <form id="collectDataForm" class="row g-3">
-                        <div class="col-md-6">
-                            <label for="dateInput" class="form-label">Select Date</label>
-                            <input type="date" class="form-control" id="dateInput" name="date" 
-                                   value="{{ today }}" max="{{ today }}">
-                        </div>
-                        <div class="col-md-6 d-flex align-items-end">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-sync-alt me-2"></i>
-                                Collect Data
-                            </button>
-                        </div>
-                    </form>
-                    
-                    <div id="loading" class="loading">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-2">Collecting heart rate data from Garmin Connect...</p>
-                    </div>
-                </div>
-            </div>
+            <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="daily-tab" data-bs-toggle="tab" data-bs-target="#daily" type="button" role="tab">
+                        <i class="fas fa-calendar-day me-2"></i>Daily View
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="weekly-tab" data-bs-toggle="tab" data-bs-target="#weekly" type="button" role="tab">
+                        <i class="fas fa-calendar-week me-2"></i>Weekly View
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
+                        <i class="fas fa-cog me-2"></i>Settings
+                    </button>
+                </li>
+            </ul>
         </div>
     </div>
 
-    <!-- Analysis Results -->
-    <div id="analysisResults" style="display: none;">
-        <!-- Daily Score -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0">
-                            <i class="fas fa-chart-line me-2"></i>
-                            Daily Heart Rate Score
-                        </h5>
+    <!-- Tab Content -->
+    <div class="tab-content" id="dashboardTabContent">
+        <!-- Daily View Tab -->
+        <div class="tab-pane fade show active" id="daily" role="tabpanel">
+            <!-- Data Collection Section -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-download me-2"></i>
+                                Collect Heart Rate Data
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="collectDataForm" class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="dateInput" class="form-label">Select Date</label>
+                                    <input type="date" class="form-control" id="dateInput" name="date" 
+                                           value="{{ today }}" max="{{ today }}">
+                                </div>
+                                <div class="col-md-6 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-sync-alt me-2"></i>
+                                        Collect Data
+                                    </button>
+                                </div>
+                            </form>
+                            
+                            <div id="loading" class="loading text-center py-4" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2">Collecting heart rate data from Garmin Connect...</p>
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-body text-center">
-                        <div id="dailyScore" class="score-display">0</div>
-                        <p class="text-muted">Weighted score based on time spent in different heart rate zones</p>
-                        <div id="activityType" class="badge bg-info fs-6"></div>
+                </div>
+            </div>
+
+            <!-- TRIMP Score -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-chart-line me-2"></i>
+                                Daily TRIMP Score
+                            </h5>
+                        </div>
+                        <div class="card-body text-center">
+                            <div id="trimpScore" class="score-display">0</div>
+                            <p class="text-muted">Training Impulse (TRIMP) - Exponential model based on heart rate reserve</p>
+                            <div id="activityType" class="badge bg-info fs-6"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="row mb-4">
+                <!-- Minutes Chart -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-clock me-2"></i>
+                                Time in Heart Rate Zones
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="minutesChart" width="400" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TRIMP Chart -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0">
+                                <i class="fas fa-chart-area me-2"></i>
+                                TRIMP by Heart Rate Zone
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="trimpChart" width="400" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Zone Details -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-list me-2"></i>
+                                Zone Breakdown
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="zoneBreakdown"></div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Heart Rate Zones Chart -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="mb-0">
-                            <i class="fas fa-chart-bar me-2"></i>
-                            Time Spent in Heart Rate Zones
-                        </h5>
+        <!-- Weekly View Tab -->
+        <div class="tab-pane fade" id="weekly" role="tabpanel">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-calendar-week me-2"></i>
+                                Weekly Analysis
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="weekStartInput" class="form-label">Week Starting</label>
+                                    <input type="date" class="form-control" id="weekStartInput">
+                                </div>
+                                <div class="col-md-6 d-flex align-items-end">
+                                    <button type="button" class="btn btn-primary" onclick="loadWeeklyData()">
+                                        <i class="fas fa-chart-bar me-2"></i>
+                                        Load Week
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <canvas id="zoneChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Weekly Charts -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-clock me-2"></i>
+                                Weekly Minutes by Zone
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="weeklyMinutesChart" width="800" height="400"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0">
+                                <i class="fas fa-chart-area me-2"></i>
+                                Weekly TRIMP by Zone
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="weeklyTrimpChart" width="800" height="400"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Zone Details -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-warning text-dark">
-                        <h5 class="mb-0">
-                            <i class="fas fa-list me-2"></i>
-                            Zone Breakdown
-                        </h5>
+        <!-- Settings Tab -->
+        <div class="tab-pane fade" id="settings" role="tabpanel">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-heart me-2"></i>
+                                Heart Rate Parameters
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">Configure your personal heart rate parameters for accurate TRIMP calculations.</p>
+                            <a href="{{ url_for('setup_hr_parameters') }}" class="btn btn-primary">
+                                <i class="fas fa-cog me-2"></i>
+                                Setup HR Parameters
+                            </a>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <div id="zoneBreakdown"></div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-key me-2"></i>
+                                Garmin Credentials
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">Manage your Garmin Connect credentials for data collection.</p>
+                            <a href="{{ url_for('setup_garmin') }}" class="btn btn-primary">
+                                <i class="fas fa-user-cog me-2"></i>
+                                Setup Garmin Credentials
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -117,8 +262,27 @@
 
 {% block scripts %}
 <script>
-let zoneChart = null;
+// Chart instances
+let minutesChart = null;
+let trimpChart = null;
+let weeklyMinutesChart = null;
+let weeklyTrimpChart = null;
 
+// Temperature color scale for presentation buckets
+const bucketColors = [
+    '#1f77b4',  // Blue (90-99)
+    '#7fb3d3',  // Light blue (100-109)
+    '#17becf',  // Cyan (110-119)
+    '#2ca02c',  // Green (120-129)
+    '#ff7f0e',  // Orange (130-139)
+    '#ff6b35',  // Dark orange (140-149)
+    '#d62728',  // Red (150-159)
+    '#8b0000'   // Dark red (160+)
+];
+
+const bucketLabels = ['90-99', '100-109', '110-119', '120-129', '130-139', '140-149', '150-159', '160+'];
+
+// Data collection form
 document.getElementById('collectDataForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -129,7 +293,7 @@ document.getElementById('collectDataForm').addEventListener('submit', function(e
     
     // Show loading
     loading.style.display = 'block';
-    results.style.display = 'none';
+    document.querySelectorAll('.tab-pane').forEach(pane => pane.style.display = 'none');
     noData.style.display = 'none';
     
     fetch('/collect-data', {
@@ -141,7 +305,7 @@ document.getElementById('collectDataForm').addEventListener('submit', function(e
         loading.style.display = 'none';
         
         if (data.success) {
-            displayResults(data);
+            displayDailyResults(data);
         } else {
             alert('Error: ' + data.error);
             noData.style.display = 'block';
@@ -155,53 +319,47 @@ document.getElementById('collectDataForm').addEventListener('submit', function(e
     });
 });
 
-function displayResults(data) {
-    const results = document.getElementById('analysisResults');
+function displayDailyResults(data) {
     const noData = document.getElementById('noDataMessage');
     
-    // Display daily score
-    document.getElementById('dailyScore').textContent = Math.round(data.daily_score);
+    // Display TRIMP score
+    document.getElementById('trimpScore').textContent = Math.round(data.total_trimp);
     
     // Display activity type
     const activityType = document.getElementById('activityType');
     activityType.textContent = formatActivityType(data.activity_type);
     
-    // Create zone chart
-    createZoneChart(data.zone_buckets);
+    // Create charts
+    createMinutesChart(data.presentation_buckets);
+    createTrimpChart(data.presentation_buckets);
     
     // Display zone breakdown
-    displayZoneBreakdown(data.zone_buckets);
+    displayZoneBreakdown(data.presentation_buckets);
     
-    results.style.display = 'block';
+    // Show daily tab
+    document.getElementById('daily').style.display = 'block';
     noData.style.display = 'none';
 }
 
-function createZoneChart(zoneBuckets) {
-    const ctx = document.getElementById('zoneChart').getContext('2d');
+function createMinutesChart(presentationBuckets) {
+    const ctx = document.getElementById('minutesChart').getContext('2d');
     
-    // Destroy existing chart if it exists
-    if (zoneChart) {
-        zoneChart.destroy();
+    if (minutesChart) {
+        minutesChart.destroy();
     }
     
-    const labels = Object.keys(zoneBuckets);
-    const values = Object.values(zoneBuckets);
+    const labels = bucketLabels;
+    const values = labels.map(label => presentationBuckets[label]?.minutes || 0);
     
-    // Define colors for zones
-    const colors = [
-        '#3498db', '#2ecc71', '#f39c12', '#e74c3c', 
-        '#9b59b6', '#1abc9c', '#34495e'
-    ];
-    
-    zoneChart = new Chart(ctx, {
+    minutesChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
             datasets: [{
-                label: 'Time (minutes)',
+                label: 'Minutes',
                 data: values,
-                backgroundColor: colors.slice(0, labels.length),
-                borderColor: colors.slice(0, labels.length),
+                backgroundColor: bucketColors,
+                borderColor: bucketColors,
                 borderWidth: 1
             }]
         },
@@ -239,29 +397,224 @@ function createZoneChart(zoneBuckets) {
     });
 }
 
-function displayZoneBreakdown(zoneBuckets) {
+function createTrimpChart(presentationBuckets) {
+    const ctx = document.getElementById('trimpChart').getContext('2d');
+    
+    if (trimpChart) {
+        trimpChart.destroy();
+    }
+    
+    const labels = bucketLabels;
+    const values = labels.map(label => presentationBuckets[label]?.trimp || 0);
+    
+    trimpChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'TRIMP',
+                data: values,
+                backgroundColor: bucketColors,
+                borderColor: bucketColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'TRIMP'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Heart Rate Zones (BPM)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'TRIMP: ' + context.parsed.y.toFixed(1);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function displayZoneBreakdown(presentationBuckets) {
     const container = document.getElementById('zoneBreakdown');
-    const totalTime = Object.values(zoneBuckets).reduce((a, b) => a + b, 0);
+    const totalMinutes = Object.values(presentationBuckets).reduce((sum, bucket) => sum + bucket.minutes, 0);
+    const totalTrimp = Object.values(presentationBuckets).reduce((sum, bucket) => sum + bucket.trimp, 0);
     
     let html = '';
     
-    Object.entries(zoneBuckets).forEach(([zone, time]) => {
-        const percentage = totalTime > 0 ? (time / totalTime * 100).toFixed(1) : 0;
-        const barWidth = totalTime > 0 ? (time / totalTime * 100) : 0;
+    bucketLabels.forEach((label, index) => {
+        const bucket = presentationBuckets[label] || { minutes: 0, trimp: 0 };
+        const minutesPercentage = totalMinutes > 0 ? (bucket.minutes / totalMinutes * 100).toFixed(1) : 0;
+        const trimpPercentage = totalTrimp > 0 ? (bucket.trimp / totalTrimp * 100).toFixed(1) : 0;
+        const barWidth = totalMinutes > 0 ? (bucket.minutes / totalMinutes * 100) : 0;
         
         html += `
             <div class="mb-3">
                 <div class="d-flex justify-content-between mb-1">
-                    <strong>${zone} BPM</strong>
-                    <span>${time} min (${percentage}%)</span>
+                    <strong style="color: ${bucketColors[index]}">${label} BPM</strong>
+                    <span>${bucket.minutes} min (${minutesPercentage}%) | TRIMP: ${bucket.trimp.toFixed(1)} (${trimpPercentage}%)</span>
                 </div>
-                <div class="zone-bar" style="background: linear-gradient(90deg, #3498db 0%, #2980b9 100%); width: ${barWidth}%;">
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar" style="background-color: ${bucketColors[index]}; width: ${barWidth}%;">
+                        ${bucket.minutes} min
+                    </div>
                 </div>
             </div>
         `;
     });
     
     container.innerHTML = html;
+}
+
+function loadWeeklyData() {
+    const startDate = document.getElementById('weekStartInput').value;
+    if (!startDate) {
+        alert('Please select a week start date');
+        return;
+    }
+    
+    fetch(`/api/weekly-data/${startDate}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.length > 0) {
+                createWeeklyCharts(data);
+            } else {
+                alert('No data available for this week');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while loading weekly data.');
+        });
+}
+
+function createWeeklyCharts(weeklyData) {
+    // Prepare data for stacked charts
+    const dates = weeklyData.map(day => new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
+    
+    // Minutes dataset
+    const minutesDatasets = bucketLabels.map((label, index) => ({
+        label: label,
+        data: weeklyData.map(day => day.presentation_buckets[label]?.minutes || 0),
+        backgroundColor: bucketColors[index],
+        borderColor: bucketColors[index],
+        borderWidth: 1
+    }));
+    
+    // TRIMP dataset
+    const trimpDatasets = bucketLabels.map((label, index) => ({
+        label: label,
+        data: weeklyData.map(day => day.presentation_buckets[label]?.trimp || 0),
+        backgroundColor: bucketColors[index],
+        borderColor: bucketColors[index],
+        borderWidth: 1
+    }));
+    
+    // Create weekly minutes chart
+    const minutesCtx = document.getElementById('weeklyMinutesChart').getContext('2d');
+    if (weeklyMinutesChart) {
+        weeklyMinutesChart.destroy();
+    }
+    
+    weeklyMinutesChart = new Chart(minutesCtx, {
+        type: 'bar',
+        data: {
+            labels: dates,
+            datasets: minutesDatasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    stacked: true,
+                    title: {
+                        display: true,
+                        text: 'Day of Week'
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Minutes'
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.parsed.y + ' minutes';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Create weekly TRIMP chart
+    const trimpCtx = document.getElementById('weeklyTrimpChart').getContext('2d');
+    if (weeklyTrimpChart) {
+        weeklyTrimpChart.destroy();
+    }
+    
+    weeklyTrimpChart = new Chart(trimpCtx, {
+        type: 'bar',
+        data: {
+            labels: dates,
+            datasets: trimpDatasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    stacked: true,
+                    title: {
+                        display: true,
+                        text: 'Day of Week'
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'TRIMP'
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + ' TRIMP';
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 function formatActivityType(type) {
@@ -274,7 +627,16 @@ function formatActivityType(type) {
     return types[type] || type;
 }
 
-// Set today's date as default
-document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    // Set today's date as default
+    document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+    
+    // Set default week start (Monday of current week)
+    const today = new Date();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - today.getDay() + 1);
+    document.getElementById('weekStartInput').value = monday.toISOString().split('T')[0];
+});
 </script>
 {% endblock %} 
