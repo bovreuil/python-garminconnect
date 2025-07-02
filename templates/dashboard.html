@@ -3,640 +3,519 @@
 {% block title %}Dashboard - Garmin Heart Rate Analyzer{% endblock %}
 
 {% block content %}
-<div class="main-container">
-    <div class="row">
-        <div class="col-12">
-            <h1 class="text-center mb-4">
-                <i class="fas fa-heartbeat text-danger me-3"></i>
-                Heart Rate Analysis Dashboard
-            </h1>
-            <p class="text-center text-muted mb-4">Welcome, {{ session.user_name or session.user_email }}!</p>
+<div class="container mt-4">
+    <h1>Garmin Heart Rate Analyzer</h1>
+    <p class="lead">Welcome, {{ session.user_name }}! ({{ session.user_role }})</p>
+    
+    {% if session.user_role == 'admin' %}
+    <!-- Admin Section -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Setup</h5>
+                </div>
+                <div class="card-body">
+                    <a href="{{ url_for('setup_garmin') }}" class="btn btn-primary mb-2">Setup Garmin Credentials</a>
+                    <a href="{{ url_for('setup_hr_parameters') }}" class="btn btn-secondary">Setup HR Parameters</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Data Collection</h5>
+                </div>
+                <div class="card-body">
+                    <form id="collectDataForm">
+                        <div class="mb-3">
+                            <label for="date" class="form-label">Date to collect:</label>
+                            <input type="date" class="form-control" id="date" name="date" value="{{ today }}" required>
+                        </div>
+                        <button type="submit" class="btn btn-success">Collect Data</button>
+                    </form>
+                    <div id="collectStatus" class="mt-2"></div>
+                </div>
+            </div>
         </div>
     </div>
-
-    <!-- Navigation Tabs -->
+    
+    <!-- Jobs Section (Admin Only) -->
     <div class="row mb-4">
         <div class="col-12">
-            <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="daily-tab" data-bs-toggle="tab" data-bs-target="#daily" type="button" role="tab">
-                        <i class="fas fa-calendar-day me-2"></i>Daily View
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="weekly-tab" data-bs-toggle="tab" data-bs-target="#weekly" type="button" role="tab">
-                        <i class="fas fa-calendar-week me-2"></i>Weekly View
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
-                        <i class="fas fa-cog me-2"></i>Settings
-                    </button>
-                </li>
-            </ul>
-        </div>
-    </div>
-
-    <!-- Tab Content -->
-    <div class="tab-content" id="dashboardTabContent">
-        <!-- Daily View Tab -->
-        <div class="tab-pane fade show active" id="daily" role="tabpanel">
-            <!-- Data Collection Section -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-download me-2"></i>
-                                Collect Heart Rate Data
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <form id="collectDataForm" class="row g-3">
-                                <div class="col-md-6">
-                                    <label for="dateInput" class="form-label">Select Date</label>
-                                    <input type="date" class="form-control" id="dateInput" name="date" 
-                                           value="{{ today }}" max="{{ today }}">
-                                </div>
-                                <div class="col-md-6 d-flex align-items-end">
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="fas fa-sync-alt me-2"></i>
-                                        Collect Data
-                                    </button>
-                                </div>
-                            </form>
-                            
-                            <div id="loading" class="loading text-center py-4" style="display: none;">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <p class="mt-2">Collecting heart rate data from Garmin Connect...</p>
-                            </div>
-                        </div>
-                    </div>
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5>Background Jobs</h5>
+                    <button class="btn btn-sm btn-outline-primary" onclick="refreshJobs()">Refresh</button>
                 </div>
-            </div>
-
-            <!-- TRIMP Score -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-success text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-chart-line me-2"></i>
-                                Daily TRIMP Score
-                            </h5>
-                        </div>
-                        <div class="card-body text-center">
-                            <div id="trimpScore" class="score-display">0</div>
-                            <p class="text-muted">Training Impulse (TRIMP) - Exponential model based on heart rate reserve</p>
-                            <div id="activityType" class="badge bg-info fs-6"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Charts Row -->
-            <div class="row mb-4">
-                <!-- Minutes Chart -->
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header bg-info text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-clock me-2"></i>
-                                Time in Heart Rate Zones
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <canvas id="minutesChart" width="400" height="300"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- TRIMP Chart -->
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header bg-warning text-dark">
-                            <h5 class="mb-0">
-                                <i class="fas fa-chart-area me-2"></i>
-                                TRIMP by Heart Rate Zone
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <canvas id="trimpChart" width="400" height="300"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Zone Details -->
-            <div class="row">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-secondary text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-list me-2"></i>
-                                Zone Breakdown
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="zoneBreakdown"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Weekly View Tab -->
-        <div class="tab-pane fade" id="weekly" role="tabpanel">
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-calendar-week me-2"></i>
-                                Weekly Analysis
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label for="weekStartInput" class="form-label">Week Starting</label>
-                                    <input type="date" class="form-control" id="weekStartInput">
-                                </div>
-                                <div class="col-md-6 d-flex align-items-end">
-                                    <button type="button" class="btn btn-primary" onclick="loadWeeklyData()">
-                                        <i class="fas fa-chart-bar me-2"></i>
-                                        Load Week
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Weekly Charts -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-info text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-clock me-2"></i>
-                                Weekly Minutes by Zone
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <canvas id="weeklyMinutesChart" width="800" height="400"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-warning text-dark">
-                            <h5 class="mb-0">
-                                <i class="fas fa-chart-area me-2"></i>
-                                Weekly TRIMP by Zone
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <canvas id="weeklyTrimpChart" width="800" height="400"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Settings Tab -->
-        <div class="tab-pane fade" id="settings" role="tabpanel">
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header bg-secondary text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-heart me-2"></i>
-                                Heart Rate Parameters
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted mb-3">Configure your personal heart rate parameters for accurate TRIMP calculations.</p>
-                            <a href="{{ url_for('setup_hr_parameters') }}" class="btn btn-primary">
-                                <i class="fas fa-cog me-2"></i>
-                                Setup HR Parameters
-                            </a>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header bg-secondary text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-key me-2"></i>
-                                Garmin Credentials
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted mb-3">Manage your Garmin Connect credentials for data collection.</p>
-                            <a href="{{ url_for('setup_garmin') }}" class="btn btn-primary">
-                                <i class="fas fa-user-cog me-2"></i>
-                                Setup Garmin Credentials
-                            </a>
-                        </div>
+                <div class="card-body">
+                    <div id="jobsList">
+                        <p class="text-muted">Loading jobs...</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- No Data Message -->
-    <div id="noDataMessage" class="text-center py-5">
-        <i class="fas fa-chart-area fa-3x text-muted mb-3"></i>
-        <h4 class="text-muted">No Data Available</h4>
-        <p class="text-muted">Select a date and collect heart rate data to see your analysis.</p>
+    {% endif %}
+    
+    <!-- Data Display Section (Both Admin and Viewer) -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Daily View</h5>
+                </div>
+                <div class="card-body">
+                    <form id="dailyDataForm">
+                        <div class="mb-3">
+                            <label for="dailyDate" class="form-label">Select Date:</label>
+                            <input type="date" class="form-control" id="dailyDate" name="date" value="{{ today }}">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Load Data</button>
+                    </form>
+                    <div id="dailyData" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Weekly View</h5>
+                </div>
+                <div class="card-body">
+                    <form id="weeklyDataForm">
+                        <div class="mb-3">
+                            <label for="weeklyStartDate" class="form-label">Start Date:</label>
+                            <input type="date" class="form-control" id="weeklyStartDate" name="start_date" value="{{ today }}">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Load Week</button>
+                    </form>
+                    <div id="weeklyData" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
 <script>
-// Chart instances
-let minutesChart = null;
-let trimpChart = null;
-let weeklyMinutesChart = null;
-let weeklyTrimpChart = null;
+// Global variable for user role
+const userRole = '{{ session.user_role }}';
 
-// Temperature color scale for presentation buckets
-const bucketColors = [
-    '#1f77b4',  // Blue (90-99)
-    '#7fb3d3',  // Light blue (100-109)
-    '#17becf',  // Cyan (110-119)
-    '#2ca02c',  // Green (120-129)
-    '#ff7f0e',  // Orange (130-139)
-    '#ff6b35',  // Dark orange (140-149)
-    '#d62728',  // Red (150-159)
-    '#8b0000'   // Dark red (160+)
-];
-
-const bucketLabels = ['90-99', '100-109', '110-119', '120-129', '130-139', '140-149', '150-159', '160+'];
-
-// Data collection form
-document.getElementById('collectDataForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(this);
-    const loading = document.getElementById('loading');
-    const results = document.getElementById('analysisResults');
-    const noData = document.getElementById('noDataMessage');
-    
-    // Show loading
-    loading.style.display = 'block';
-    document.querySelectorAll('.tab-pane').forEach(pane => pane.style.display = 'none');
-    noData.style.display = 'none';
-    
-    fetch('/collect-data', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        loading.style.display = 'none';
+// Collect Data Form (Admin Only)
+if (userRole === 'admin') {
+    document.getElementById('collectDataForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const statusDiv = document.getElementById('collectStatus');
         
-        if (data.success) {
-            displayDailyResults(data);
-        } else {
-            alert('Error: ' + data.error);
-            noData.style.display = 'block';
+        statusDiv.innerHTML = '<div class="alert alert-info">Starting data collection...</div>';
+        
+        fetch('/collect-data', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                statusDiv.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
+                refreshJobs(); // Refresh jobs list
+            } else {
+                statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        });
+    });
+}
+
+// Load Jobs (Admin Only)
+function refreshJobs() {
+    if (userRole !== 'admin') return;
+    
+    const jobsList = document.getElementById('jobsList');
+    
+    fetch('/api/jobs')
+    .then(response => response.json())
+    .then(jobs => {
+        if (jobs.length === 0) {
+            jobsList.innerHTML = '<p class="text-muted">No jobs found.</p>';
+            return;
         }
+        
+        let html = '<div class="table-responsive"><table class="table table-sm">';
+        html += '<thead><tr><th>Job ID</th><th>Type</th><th>Status</th><th>Date</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+        
+        jobs.forEach(job => {
+            const statusClass = {
+                'pending': 'warning',
+                'running': 'info',
+                'completed': 'success',
+                'failed': 'danger'
+            }[job.status] || 'secondary';
+            
+            html += `
+                <tr>
+                    <td><small>${job.job_id}</small></td>
+                    <td>${job.job_type}</td>
+                    <td><span class="badge bg-${statusClass}">${job.status}</span></td>
+                    <td>${job.target_date || '-'}</td>
+                    <td><small>${new Date(job.created_at).toLocaleString()}</small></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="viewJobDetails('${job.job_id}')">Details</button>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        html += '</tbody></table></div>';
+        jobsList.innerHTML = html;
     })
     .catch(error => {
-        loading.style.display = 'none';
-        console.error('Error:', error);
-        alert('An error occurred while collecting data.');
-        noData.style.display = 'block';
-    });
-});
-
-function displayDailyResults(data) {
-    const noData = document.getElementById('noDataMessage');
-    
-    // Display TRIMP score
-    document.getElementById('trimpScore').textContent = Math.round(data.total_trimp);
-    
-    // Display activity type
-    const activityType = document.getElementById('activityType');
-    activityType.textContent = formatActivityType(data.activity_type);
-    
-    // Create charts
-    createMinutesChart(data.presentation_buckets);
-    createTrimpChart(data.presentation_buckets);
-    
-    // Display zone breakdown
-    displayZoneBreakdown(data.presentation_buckets);
-    
-    // Show daily tab
-    document.getElementById('daily').style.display = 'block';
-    noData.style.display = 'none';
-}
-
-function createMinutesChart(presentationBuckets) {
-    const ctx = document.getElementById('minutesChart').getContext('2d');
-    
-    if (minutesChart) {
-        minutesChart.destroy();
-    }
-    
-    const labels = bucketLabels;
-    const values = labels.map(label => presentationBuckets[label]?.minutes || 0);
-    
-    minutesChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Minutes',
-                data: values,
-                backgroundColor: bucketColors,
-                borderColor: bucketColors,
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Minutes'
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Heart Rate Zones (BPM)'
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.parsed.y + ' minutes';
-                        }
-                    }
-                }
-            }
-        }
+        jobsList.innerHTML = `<div class="alert alert-danger">Error loading jobs: ${error.message}</div>`;
     });
 }
 
-function createTrimpChart(presentationBuckets) {
-    const ctx = document.getElementById('trimpChart').getContext('2d');
+// View Job Details (Admin Only)
+function viewJobDetails(jobId) {
+    if (userRole !== 'admin') return;
     
-    if (trimpChart) {
-        trimpChart.destroy();
-    }
-    
-    const labels = bucketLabels;
-    const values = labels.map(label => presentationBuckets[label]?.trimp || 0);
-    
-    trimpChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'TRIMP',
-                data: values,
-                backgroundColor: bucketColors,
-                borderColor: bucketColors,
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'TRIMP'
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Heart Rate Zones (BPM)'
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return 'TRIMP: ' + context.parsed.y.toFixed(1);
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-function displayZoneBreakdown(presentationBuckets) {
-    const container = document.getElementById('zoneBreakdown');
-    const totalMinutes = Object.values(presentationBuckets).reduce((sum, bucket) => sum + bucket.minutes, 0);
-    const totalTrimp = Object.values(presentationBuckets).reduce((sum, bucket) => sum + bucket.trimp, 0);
-    
-    let html = '';
-    
-    bucketLabels.forEach((label, index) => {
-        const bucket = presentationBuckets[label] || { minutes: 0, trimp: 0 };
-        const minutesPercentage = totalMinutes > 0 ? (bucket.minutes / totalMinutes * 100).toFixed(1) : 0;
-        const trimpPercentage = totalTrimp > 0 ? (bucket.trimp / totalTrimp * 100).toFixed(1) : 0;
-        const barWidth = totalMinutes > 0 ? (bucket.minutes / totalMinutes * 100) : 0;
+    fetch(`/api/jobs/${jobId}`)
+    .then(response => response.json())
+    .then(job => {
+        let details = `
+            <div class="modal fade" id="jobModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Job Details</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <dl class="row">
+                                <dt class="col-sm-3">Job ID:</dt>
+                                <dd class="col-sm-9"><code>${job.job_id}</code></dd>
+                                
+                                <dt class="col-sm-3">Type:</dt>
+                                <dd class="col-sm-9">${job.job_type}</dd>
+                                
+                                <dt class="col-sm-3">Status:</dt>
+                                <dd class="col-sm-9"><span class="badge bg-${job.status === 'completed' ? 'success' : job.status === 'failed' ? 'danger' : 'warning'}">${job.status}</span></dd>
+                                
+                                <dt class="col-sm-3">Target Date:</dt>
+                                <dd class="col-sm-9">${job.target_date || '-'}</dd>
+                                
+                                <dt class="col-sm-3">Created:</dt>
+                                <dd class="col-sm-9">${new Date(job.created_at).toLocaleString()}</dd>
+                                
+                                <dt class="col-sm-3">Updated:</dt>
+                                <dd class="col-sm-9">${new Date(job.updated_at).toLocaleString()}</dd>
+                            </dl>
+        `;
         
-        html += `
-            <div class="mb-3">
-                <div class="d-flex justify-content-between mb-1">
-                    <strong style="color: ${bucketColors[index]}">${label} BPM</strong>
-                    <span>${bucket.minutes} min (${minutesPercentage}%) | TRIMP: ${bucket.trimp.toFixed(1)} (${trimpPercentage}%)</span>
-                </div>
-                <div class="progress" style="height: 20px;">
-                    <div class="progress-bar" style="background-color: ${bucketColors[index]}; width: ${barWidth}%;">
-                        ${bucket.minutes} min
+        if (job.result) {
+            details += `
+                <h6>Result:</h6>
+                <pre class="bg-light p-2 rounded"><code>${JSON.stringify(job.result, null, 2)}</code></pre>
+            `;
+        }
+        
+        if (job.error_message) {
+            details += `
+                <h6>Error:</h6>
+                <div class="alert alert-danger">${job.error_message}</div>
+            `;
+        }
+        
+        details += `
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
                     </div>
                 </div>
             </div>
         `;
+        
+        // Remove existing modal if any
+        const existingModal = document.getElementById('jobModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add new modal and show it
+        document.body.insertAdjacentHTML('beforeend', details);
+        const modal = new bootstrap.Modal(document.getElementById('jobModal'));
+        modal.show();
+    })
+    .catch(error => {
+        alert(`Error loading job details: ${error.message}`);
     });
+}
+
+// Load initial data
+document.addEventListener('DOMContentLoaded', function() {
+    if (userRole === 'admin') {
+        refreshJobs();
+        
+        // Auto-refresh jobs every 10 seconds (Admin Only)
+        setInterval(refreshJobs, 10000);
+    }
+    
+    // Daily Data Form
+    document.getElementById('dailyDataForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const date = document.getElementById('dailyDate').value;
+        const dailyDataDiv = document.getElementById('dailyData');
+        
+        dailyDataDiv.innerHTML = '<div class="alert alert-info">Loading data...</div>';
+        
+        fetch(`/api/data/${date}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            displayDailyData(data, dailyDataDiv);
+        })
+        .catch(error => {
+            dailyDataDiv.innerHTML = `<div class="alert alert-danger">Error loading data: ${error.message}</div>`;
+        });
+    });
+    
+    // Weekly Data Form
+    document.getElementById('weeklyDataForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const startDate = document.getElementById('weeklyStartDate').value;
+        const weeklyDataDiv = document.getElementById('weeklyData');
+        
+        weeklyDataDiv.innerHTML = '<div class="alert alert-info">Loading weekly data...</div>';
+        
+        fetch(`/api/weekly-data/${startDate}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            displayWeeklyData(data, weeklyDataDiv);
+        })
+        .catch(error => {
+            weeklyDataDiv.innerHTML = `<div class="alert alert-danger">Error loading weekly data: ${error.message}</div>`;
+        });
+    });
+});
+
+// Display Daily Data
+function displayDailyData(data, container) {
+    const presentationBuckets = data.presentation_buckets;
+    const totalTrimp = data.total_trimp;
+    const dailyScore = data.daily_score;
+    const activityType = data.activity_type;
+    
+    let html = `
+        <div class="row">
+            <div class="col-12">
+                <h6>Summary for ${data.date}</h6>
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body text-center">
+                                <h5>${totalTrimp.toFixed(1)}</h5>
+                                <small>Total TRIMP</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center">
+                                <h5>${dailyScore.toFixed(0)}</h5>
+                                <small>Daily Score</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body text-center">
+                                <h5>${activityType.replace('_', ' ').toUpperCase()}</h5>
+                                <small>Activity Type</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-12">
+                <h6>Heart Rate Zones</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Zone</th>
+                                <th>Minutes</th>
+                                <th>TRIMP</th>
+                                <th>% of Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+    `;
+    
+    Object.entries(presentationBuckets).forEach(([zone, data]) => {
+        const percentage = totalTrimp > 0 ? ((data.trimp / totalTrimp) * 100).toFixed(1) : '0.0';
+        html += `
+            <tr>
+                <td><strong>${zone}</strong></td>
+                <td>${data.minutes}</td>
+                <td>${data.trimp.toFixed(1)}</td>
+                <td>${percentage}%</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
     
     container.innerHTML = html;
 }
 
-function loadWeeklyData() {
-    const startDate = document.getElementById('weekStartInput').value;
-    if (!startDate) {
-        alert('Please select a week start date');
+// Display Weekly Data
+function displayWeeklyData(data, container) {
+    if (data.length === 0) {
+        container.innerHTML = '<div class="alert alert-warning">No data found for this week.</div>';
         return;
     }
     
-    fetch(`/api/weekly-data/${startDate}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.length > 0) {
-                createWeeklyCharts(data);
-            } else {
-                alert('No data available for this week');
+    let html = `
+        <h6>Weekly Summary</h6>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>TRIMP</th>
+                        <th>Score</th>
+                        <th>Activity Type</th>
+                        <th>Minutes Active</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    data.forEach(day => {
+        const totalMinutes = Object.values(day.presentation_buckets).reduce((sum, bucket) => sum + bucket.minutes, 0);
+        html += `
+            <tr>
+                <td>${day.date}</td>
+                <td>${day.total_trimp.toFixed(1)}</td>
+                <td>${day.daily_score.toFixed(0)}</td>
+                <td><span class="badge bg-secondary">${day.activity_type.replace('_', ' ')}</span></td>
+                <td>${totalMinutes}</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <h6>Weekly TRIMP Trend</h6>
+                <canvas id="weeklyTrimpChart" width="400" height="200"></canvas>
+            </div>
+            <div class="col-md-6">
+                <h6>Zone Distribution (Average)</h6>
+                <canvas id="weeklyZoneChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+    
+    // Create charts if Chart.js is available
+    if (typeof Chart !== 'undefined') {
+        createWeeklyCharts(data);
+    }
+}
+
+// Create weekly charts
+function createWeeklyCharts(data) {
+    // TRIMP Trend Chart
+    const trimpCtx = document.getElementById('weeklyTrimpChart');
+    if (trimpCtx) {
+        new Chart(trimpCtx, {
+            type: 'line',
+            data: {
+                labels: data.map(day => day.date),
+                datasets: [{
+                    label: 'TRIMP',
+                    data: data.map(day => day.total_trimp),
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while loading weekly data.');
         });
-}
-
-function createWeeklyCharts(weeklyData) {
-    // Prepare data for stacked charts
-    const dates = weeklyData.map(day => new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
-    
-    // Minutes dataset
-    const minutesDatasets = bucketLabels.map((label, index) => ({
-        label: label,
-        data: weeklyData.map(day => day.presentation_buckets[label]?.minutes || 0),
-        backgroundColor: bucketColors[index],
-        borderColor: bucketColors[index],
-        borderWidth: 1
-    }));
-    
-    // TRIMP dataset
-    const trimpDatasets = bucketLabels.map((label, index) => ({
-        label: label,
-        data: weeklyData.map(day => day.presentation_buckets[label]?.trimp || 0),
-        backgroundColor: bucketColors[index],
-        borderColor: bucketColors[index],
-        borderWidth: 1
-    }));
-    
-    // Create weekly minutes chart
-    const minutesCtx = document.getElementById('weeklyMinutesChart').getContext('2d');
-    if (weeklyMinutesChart) {
-        weeklyMinutesChart.destroy();
     }
     
-    weeklyMinutesChart = new Chart(minutesCtx, {
-        type: 'bar',
-        data: {
-            labels: dates,
-            datasets: minutesDatasets
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    stacked: true,
-                    title: {
-                        display: true,
-                        text: 'Day of Week'
-                    }
-                },
-                y: {
-                    stacked: true,
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Minutes'
-                    }
-                }
+    // Zone Distribution Chart
+    const zoneCtx = document.getElementById('weeklyZoneChart');
+    if (zoneCtx) {
+        // Calculate average zone distribution
+        const zoneTotals = {};
+        data.forEach(day => {
+            Object.entries(day.presentation_buckets).forEach(([zone, bucket]) => {
+                zoneTotals[zone] = (zoneTotals[zone] || 0) + bucket.minutes;
+            });
+        });
+        
+        const avgMinutes = Object.fromEntries(
+            Object.entries(zoneTotals).map(([zone, total]) => [zone, total / data.length])
+        );
+        
+        new Chart(zoneCtx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(avgMinutes),
+                datasets: [{
+                    data: Object.values(avgMinutes),
+                    backgroundColor: [
+                        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+                        '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'
+                    ]
+                }]
             },
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.label + ': ' + context.parsed.y + ' minutes';
-                        }
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
                     }
                 }
             }
-        }
-    });
-    
-    // Create weekly TRIMP chart
-    const trimpCtx = document.getElementById('weeklyTrimpChart').getContext('2d');
-    if (weeklyTrimpChart) {
-        weeklyTrimpChart.destroy();
+        });
     }
-    
-    weeklyTrimpChart = new Chart(trimpCtx, {
-        type: 'bar',
-        data: {
-            labels: dates,
-            datasets: trimpDatasets
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    stacked: true,
-                    title: {
-                        display: true,
-                        text: 'Day of Week'
-                    }
-                },
-                y: {
-                    stacked: true,
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'TRIMP'
-                    }
-                }
-            },
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + ' TRIMP';
-                        }
-                    }
-                }
-            }
-        }
-    });
 }
-
-function formatActivityType(type) {
-    const types = {
-        'long_low_intensity': 'Long Low-Intensity Activity',
-        'short_high_intensity': 'Short High-Intensity Activity',
-        'mixed': 'Mixed Activity',
-        'no_activity': 'No Activity'
-    };
-    return types[type] || type;
-}
-
-// Initialize
-document.addEventListener('DOMContentLoaded', function() {
-    // Set today's date as default
-    document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
-    
-    // Set default week start (Monday of current week)
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - today.getDay() + 1);
-    document.getElementById('weekStartInput').value = monday.toISOString().split('T')[0];
-});
 </script>
 {% endblock %} 

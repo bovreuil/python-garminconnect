@@ -16,12 +16,34 @@ from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
 import sqlite3
+from rq import Queue
+from redis import Redis
+import garminconnect
+
+# Import database functions
+from database import (
+    get_db_connection, 
+    encrypt_password, 
+    decrypt_password, 
+    get_user_hr_parameters, 
+    update_job_status
+)
+
+# Import job functions
+from jobs import collect_garmin_data_job
+
+# Import models
+from models import HeartRateAnalyzer, TRIMPCalculator
 
 # Load environment variables
 load_dotenv('env.local')
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
+
+# Redis and RQ setup
+redis_conn = Redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379'))
+queue = Queue(connection=redis_conn)
 
 # Google OAuth configuration
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_ID', '')
@@ -56,69 +78,51 @@ cipher_suite = Fernet(ENCRYPTION_KEY)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def get_db_connection():
-    """Create a SQLite database connection."""
-    conn = sqlite3.connect('garmin_hr.db')
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def encrypt_password(password: str) -> str:
-    """Encrypt a password using Fernet."""
-    return cipher_suite.encrypt(password.encode()).decode()
-
-def decrypt_password(encrypted_password: str) -> str:
-    """Decrypt a password using Fernet."""
-    return cipher_suite.decrypt(encrypted_password.encode()).decode()
-
 def init_database():
-    """Initialize the SQLite database with required tables."""
+    """Initialize the database with required tables."""
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Create users table
+    # Users table (simplified for admin/viewer roles)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email VARCHAR(255) UNIQUE NOT NULL,
+            email VARCHAR(255) UNIQUE,
             name VARCHAR(255),
             google_id VARCHAR(255) UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            role VARCHAR(50),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     
-    # Create garmin_credentials table
+    # Garmin credentials (single set for the system)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS garmin_credentials (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
             email VARCHAR(255) NOT NULL,
-            password_encrypted VARCHAR(255) NOT NULL,
+            password_encrypted TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     
-    # Create user_hr_parameters table for personal HR settings
+    # Heart rate parameters (single set for the system)
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS user_hr_parameters (
+        CREATE TABLE IF NOT EXISTS hr_parameters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER UNIQUE,
-            resting_hr INTEGER NOT NULL DEFAULT 48,
-            max_hr INTEGER NOT NULL DEFAULT 167,
+            resting_hr INTEGER DEFAULT 48,
+            max_hr INTEGER DEFAULT 167,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     
-    # Create heart_rate_data table with TRIMP support
+    # Heart rate data (no user_id needed - single user system)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS heart_rate_data (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            date DATE NOT NULL,
-            heart_rate_values TEXT,
+            date DATE UNIQUE,
             individual_hr_buckets TEXT,
             presentation_buckets TEXT,
             trimp_data TEXT,
@@ -126,252 +130,82 @@ def init_database():
             daily_score REAL,
             activity_type VARCHAR(50),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id),
-            UNIQUE(user_id, date)
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
+    """)
+    
+    # Background jobs (no user_id needed - single user system)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS background_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id VARCHAR(255) UNIQUE,
+            job_type VARCHAR(100),
+            target_date DATE,
+            start_date DATE,
+            end_date DATE,
+            status VARCHAR(50),
+            result TEXT,
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Ensure we have default HR parameters
+    cur.execute("""
+        INSERT OR IGNORE INTO hr_parameters (id, resting_hr, max_hr)
+        VALUES (1, 48, 167)
     """)
     
     conn.commit()
     cur.close()
     conn.close()
 
-class TRIMPCalculator:
-    """Class to calculate TRIMP (Training Impulse) using exponential model."""
-    
-    def __init__(self, resting_hr: int = 48, max_hr: int = 167):
-        """
-        Initialize TRIMP calculator with personal HR parameters.
-        
-        Args:
-            resting_hr: Resting heart rate in BPM
-            max_hr: Maximum heart rate in BPM
-        """
-        self.resting_hr = resting_hr
-        self.max_hr = max_hr
-        self.hr_reserve = max_hr - resting_hr
-        
-        # Presentation buckets (10 BPM each) for charts
-        self.presentation_buckets = [
-            (90, 99), (100, 109), (110, 119), (120, 129),
-            (130, 139), (140, 149), (150, 159), (160, 999)
-        ]
-        
-        # Color temperature scale for presentation buckets
-        self.bucket_colors = [
-            '#1f77b4',  # Blue (90-99)
-            '#7fb3d3',  # Light blue (100-109)
-            '#17becf',  # Cyan (110-119)
-            '#2ca02c',  # Green (120-129)
-            '#ff7f0e',  # Orange (130-139)
-            '#ff6b35',  # Dark orange (140-149)
-            '#d62728',  # Red (150-159)
-            '#8b0000'   # Dark red (160+)
-        ]
-    
-    def calculate_hr_reserve_ratio(self, hr: int) -> float:
-        """Calculate heart rate reserve ratio for a given HR."""
-        if hr <= self.resting_hr:
-            return 0.0
-        return (hr - self.resting_hr) / self.hr_reserve
-    
-    def calculate_trimp_for_hr(self, hr: int, minutes: int) -> float:
-        """
-        Calculate TRIMP for a specific heart rate and time duration.
-        
-        Args:
-            hr: Heart rate in BPM
-            minutes: Time spent at this HR in minutes
-            
-        Returns:
-            TRIMP value for this HR/duration combination
-        """
-        if hr < 90:  # Below exercise threshold
-            return 0.0
-        
-        hr_reserve_ratio = self.calculate_hr_reserve_ratio(hr)
-        y = 1.92 * hr_reserve_ratio
-        trimp = minutes * hr_reserve_ratio * 0.64 * (math.exp(y))
-        
-        return trimp
-    
-    def bucket_heart_rates(self, heart_rate_data: Dict) -> Dict:
-        """
-        Bucket heart rate values into individual buckets and calculate TRIMP.
-        
-        Returns:
-            Dict with individual buckets, presentation buckets, and TRIMP data
-        """
-        if not heart_rate_data or 'heartRateValues' not in heart_rate_data:
-            return {
-                'individual_buckets': {},
-                'presentation_buckets': {},
-                'trimp_data': {},
-                'total_trimp': 0.0
-            }
-        
-        # Initialize buckets
-        individual_buckets = {}  # 90, 91, 92, etc.
-        presentation_buckets = {  # 90-99, 100-109, etc.
-            '90-99': {'minutes': 0, 'trimp': 0.0},
-            '100-109': {'minutes': 0, 'trimp': 0.0},
-            '110-119': {'minutes': 0, 'trimp': 0.0},
-            '120-129': {'minutes': 0, 'trimp': 0.0},
-            '130-139': {'minutes': 0, 'trimp': 0.0},
-            '140-149': {'minutes': 0, 'trimp': 0.0},
-            '150-159': {'minutes': 0, 'trimp': 0.0},
-            '160+': {'minutes': 0, 'trimp': 0.0}
-        }
-        trimp_data = {}
-        total_trimp = 0.0
-        
-        heart_rate_values = heart_rate_data['heartRateValues']
-        
-        for hr_value in heart_rate_values:
-            # Handle both list and dict formats
-            if isinstance(hr_value, list):
-                # Format: [timestamp, value]
-                timestamp, hr = hr_value
-            else:
-                # Format: {"value": x, "timestamp": y}
-                hr = hr_value.get('value')
-            
-            if hr is not None and hr >= 90:  # Only count HR >= 90
-                # Individual bucket
-                individual_buckets[hr] = individual_buckets.get(hr, 0) + 1
-                
-                # Calculate TRIMP for this HR
-                trimp = self.calculate_trimp_for_hr(hr, 1)  # 1 minute intervals
-                trimp_data[hr] = trimp_data.get(hr, 0.0) + trimp
-                total_trimp += trimp
-                
-                # Presentation bucket
-                for i, (min_hr, max_hr) in enumerate(self.presentation_buckets):
-                    if min_hr <= hr <= max_hr:
-                        bucket_name = f"{min_hr}-{max_hr if max_hr != 999 else '999'}"
-                        if bucket_name == "160-999":
-                            bucket_name = "160+"
-                        presentation_buckets[bucket_name]['minutes'] += 1
-                        presentation_buckets[bucket_name]['trimp'] += trimp
-                        break
-        
-        return {
-            'individual_buckets': individual_buckets,
-            'presentation_buckets': presentation_buckets,
-            'trimp_data': trimp_data,
-            'total_trimp': total_trimp
-        }
-
-class HeartRateAnalyzer:
-    """Class to analyze heart rate data using TRIMP calculations."""
-    
-    def __init__(self, resting_hr: int = 48, max_hr: int = 167):
-        """
-        Initialize with personal HR parameters.
-        
-        Args:
-            resting_hr: Resting heart rate in BPM
-            max_hr: Maximum heart rate in BPM
-        """
-        self.trimp_calculator = TRIMPCalculator(resting_hr, max_hr)
-    
-    def analyze_heart_rate_data(self, heart_rate_data: Dict) -> Dict:
-        """
-        Analyze heart rate data and return comprehensive results.
-        
-        Returns:
-            Dict with buckets, TRIMP data, and analysis results
-        """
-        # Get TRIMP calculations
-        trimp_results = self.trimp_calculator.bucket_heart_rates(heart_rate_data)
-        
-        # Calculate activity type based on TRIMP distribution
-        presentation_buckets = trimp_results['presentation_buckets']
-        activity_type = self._determine_activity_type(presentation_buckets)
-        
-        # Calculate legacy daily score (keeping for compatibility)
-        daily_score = self._calculate_legacy_score(presentation_buckets)
-        
-        return {
-            'individual_hr_buckets': trimp_results['individual_buckets'],
-            'presentation_buckets': trimp_results['presentation_buckets'],
-            'trimp_data': trimp_results['trimp_data'],
-            'total_trimp': trimp_results['total_trimp'],
-            'daily_score': daily_score,
-            'activity_type': activity_type
-        }
-    
-    def _determine_activity_type(self, presentation_buckets: Dict) -> str:
-        """Determine activity type based on TRIMP distribution."""
-        low_intensity_trimp = (
-            presentation_buckets['90-99']['trimp'] +
-            presentation_buckets['100-109']['trimp'] +
-            presentation_buckets['110-119']['trimp']
-        )
-        high_intensity_trimp = (
-            presentation_buckets['130-139']['trimp'] +
-            presentation_buckets['140-149']['trimp'] +
-            presentation_buckets['150-159']['trimp'] +
-            presentation_buckets['160+']['trimp']
-        )
-        
-        if low_intensity_trimp > high_intensity_trimp * 2:
-            return "long_low_intensity"
-        elif high_intensity_trimp > low_intensity_trimp * 2:
-            return "short_high_intensity"
-        else:
-            return "mixed"
-    
-    def _calculate_legacy_score(self, presentation_buckets: Dict) -> float:
-        """Calculate legacy daily score for backward compatibility."""
-        total_minutes = sum(bucket['minutes'] for bucket in presentation_buckets.values())
-        if total_minutes == 0:
-            return 0.0
-        
-        # Weighted score based on time in each zone
-        zone_weights = {
-            "90-99": 1.0, "100-109": 1.5, "110-119": 2.0, "120-129": 2.5,
-            "130-139": 3.0, "140-149": 3.5, "150-159": 4.0, "160+": 4.5
-        }
-        
-        total_score = 0
-        for zone, data in presentation_buckets.items():
-            weight = zone_weights.get(zone, 1.0)
-            total_score += (data['minutes'] / total_minutes) * weight * 100
-        
-        return total_score
-
-def get_user_hr_parameters(user_id: int) -> Tuple[int, int]:
-    """Get user's HR parameters (resting_hr, max_hr)."""
+def ensure_user_hr_parameters(resting_hr: int, max_hr: int):
+    """Ensure user has HR parameters set in database."""
     conn = get_db_connection()
     cur = conn.cursor()
     
     cur.execute("""
-        SELECT resting_hr, max_hr FROM user_hr_parameters 
-        WHERE user_id = ?
-    """, (user_id,))
+        INSERT OR REPLACE INTO hr_parameters (resting_hr, max_hr, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+    """, (resting_hr, max_hr))
     
+    cur.close()
+    conn.close()
+
+def get_user_hr_parameters():
+    """Get HR parameters for the system."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT resting_hr, max_hr FROM hr_parameters LIMIT 1")
     result = cur.fetchone()
     cur.close()
     conn.close()
     
     if result:
         return result['resting_hr'], result['max_hr']
-    else:
-        # Default values for Pete
-        return 48, 167
+    return 48, 167  # Default values
 
-def ensure_user_hr_parameters(user_id: int, resting_hr: int = 48, max_hr: int = 167):
-    """Ensure user has HR parameters set in database."""
+def create_background_job(job_type: str, target_date: Optional[str] = None, start_date: Optional[str] = None, end_date: Optional[str] = None) -> str:
+    """Create a background job record and return the job ID."""
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute("""
-        INSERT OR REPLACE INTO user_hr_parameters (user_id, resting_hr, max_hr, updated_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-    """, (user_id, resting_hr, max_hr))
+    # Generate a unique job ID
+    job_id = f"{job_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
+    cur.execute("""
+        INSERT INTO background_jobs (job_id, job_type, target_date, start_date, end_date, status)
+        VALUES (?, ?, ?, ?, ?, 'pending')
+    """, (job_id, job_type, target_date, start_date, end_date))
+    
+    conn.commit()
     cur.close()
     conn.close()
+    
+    return job_id
 
 # Routes
 @app.route('/')
@@ -402,131 +236,150 @@ def logout_google():
 
 @app.route('/auth/callback')
 def auth_callback():
-    """Handle Google OAuth callback."""
-    token = oauth.google.authorize_access_token()
+    """Handle OAuth callback from Google."""
+    app.logger.info("auth_callback: Starting OAuth callback")
     
-    # Get user info from the token response
-    resp = oauth.google.get('https://www.googleapis.com/oauth2/v1/userinfo')
-    userinfo = resp.json()
-    
-    user_email = userinfo.get('email')
-    user_name = userinfo.get('name', user_email)
-    user_id = userinfo.get('id')
-
-    # Restrict to allowed users
-    if user_email not in ALLOWED_USERS:
-        flash('Access denied. Your email is not authorized to use this application.', 'error')
-        return redirect(url_for('logout'))
-
-    # Store user in database
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT OR IGNORE INTO users (email, name, google_id)
-        VALUES (?, ?, ?)
-    """, (user_email, user_name, user_id))
-    cur.execute("SELECT id FROM users WHERE google_id = ?", (user_id,))
-    user = cur.fetchone()
-    cur.close()
-    conn.close()
-
-    session['user_id'] = user['id']
-    session['user_email'] = user_email
-    session['user_name'] = user_name
-    flash('Successfully logged in!', 'success')
-    return redirect(url_for('index'))
+    try:
+        token = oauth.google.authorize_access_token()
+        app.logger.info("auth_callback: Got access token")
+        
+        # Get user info from Google's userinfo endpoint
+        resp = oauth.google.get('https://www.googleapis.com/oauth2/v2/userinfo')
+        userinfo = resp.json()
+        app.logger.info(f"auth_callback: Got userinfo: {userinfo}")
+        
+        email = userinfo.get('email')
+        name = userinfo.get('name', 'Unknown')
+        google_id = userinfo.get('id')
+        
+        app.logger.info(f"auth_callback: User email: {email}, name: {name}, id: {google_id}")
+        
+        # Simplified user model - only two users
+        if email == 'peter.buckney@gmail.com':
+            user_role = 'admin'
+            app.logger.info("auth_callback: User peter.buckney@gmail.com is authorized as admin")
+        else:
+            # For now, allow any other user as viewer (you can restrict this later)
+            user_role = 'viewer'
+            app.logger.info(f"auth_callback: User {email} is authorized as viewer")
+        
+        # Insert or update user in database
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        app.logger.info("auth_callback: Inserting user into database")
+        cur.execute("""
+            INSERT OR REPLACE INTO users (email, name, google_id, role, created_at, updated_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (email, name, google_id, user_role))
+        
+        conn.commit()
+        app.logger.info("auth_callback: User inserted/updated in database")
+        
+        # Get the user ID
+        cur.execute("SELECT id FROM users WHERE email = ?", (email,))
+        user = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if user:
+            app.logger.info(f"auth_callback: Found user in database with id: {user['id']}")
+            session['user_id'] = user['id']
+            session['user_email'] = email
+            session['user_name'] = name
+            session['user_role'] = user_role
+            app.logger.info(f"auth_callback: Session set - user_id: {user['id']}, email: {email}, role: {user_role}")
+        else:
+            app.logger.error("auth_callback: Failed to retrieve user from database")
+            flash('Authentication failed', 'error')
+            return redirect(url_for('login'))
+        
+        app.logger.info("auth_callback: Redirecting to index")
+        return redirect(url_for('index'))
+        
+    except Exception as e:
+        app.logger.error(f"auth_callback: Error during OAuth callback: {str(e)}")
+        flash('Authentication failed', 'error')
+        return redirect(url_for('login'))
 
 @app.route('/setup-garmin', methods=['GET', 'POST'])
 def setup_garmin():
     """Setup Garmin credentials."""
     if 'user_id' not in session:
+        logger.warning("setup_garmin: No user_id in session")
         return redirect(url_for('login'))
+    
+    logger.info(f"setup_garmin: User {session['user_id']} accessing setup page")
     
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
         
+        logger.info(f"setup_garmin: Saving credentials for user {session['user_id']}, email: {email}")
+        
         # Store credentials
         conn = get_db_connection()
         cur = conn.cursor()
         
-        cur.execute("""
-            INSERT OR REPLACE INTO garmin_credentials (user_id, email, password_encrypted, updated_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        """, (session['user_id'], email, encrypt_password(password)))
+        try:
+            encrypted_password = encrypt_password(password)
+            logger.info(f"setup_garmin: Password encrypted successfully")
+            
+            cur.execute("""
+                INSERT OR REPLACE INTO garmin_credentials (email, password_encrypted, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            """, (email, encrypted_password))
+            
+            conn.commit()
+            logger.info(f"setup_garmin: Credentials saved to database successfully")
+            
+            # Verify the save worked
+            cur.execute("SELECT * FROM garmin_credentials WHERE email = ?", (email,))
+            saved_creds = cur.fetchone()
+            if saved_creds:
+                logger.info(f"setup_garmin: Verified credentials saved - email: {saved_creds['email']}")
+            else:
+                logger.error(f"setup_garmin: Credentials not found after save!")
+            
+        except Exception as e:
+            logger.error(f"setup_garmin: Error saving credentials: {str(e)}")
+            flash(f'Error saving credentials: {str(e)}', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('setup_garmin'))
         
         cur.close()
         conn.close()
         
         flash('Garmin credentials saved successfully!', 'success')
+        logger.info(f"setup_garmin: Redirecting to dashboard")
         return redirect(url_for('index'))
     
     return render_template('setup_garmin.html')
 
 @app.route('/collect-data', methods=['POST'])
 def collect_data():
-    """Collect heart rate data for a specific date."""
+    """Start a background job to collect Garmin data."""
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
+    # Only admin can collect data
+    if session.get('user_role') != 'admin':
+        return jsonify({'error': 'Insufficient permissions'}), 403
+    
     target_date = request.form.get('date', date.today().isoformat())
     
-    # For now, return sample data for testing
-    # In production, this would fetch from Garmin Connect
-    sample_data = {
-        'heartRateValues': [
-            [1000, 90],   # 1 minute at 90 BPM
-            [2000, 100],  # 1 minute at 100 BPM
-            [3000, 110],  # 1 minute at 110 BPM
-            [4000, 120],  # 1 minute at 120 BPM
-            [5000, 130],  # 1 minute at 130 BPM
-            [6000, 140],  # 1 minute at 140 BPM
-            [7000, 150],  # 1 minute at 150 BPM
-            [8000, 160],  # 1 minute at 160 BPM
-            [9000, 129],  # 1 minute at 129 BPM
-            [10000, 129], # Another minute at 129 BPM
-        ]
-    }
+    # Create background job
+    job_id = create_background_job('collect_data', target_date=target_date)
     
-    # Get user's HR parameters
-    resting_hr, max_hr = get_user_hr_parameters(session['user_id'])
-    
-    # Analyze data
-    analyzer = HeartRateAnalyzer(resting_hr, max_hr)
-    analysis_results = analyzer.analyze_heart_rate_data(sample_data)
-    
-    # Store in database
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute("""
-        INSERT OR REPLACE INTO heart_rate_data 
-        (user_id, date, heart_rate_values, individual_hr_buckets, presentation_buckets, trimp_data, total_trimp, daily_score, activity_type, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    """, (
-        session['user_id'], 
-        target_date, 
-        json.dumps(sample_data),
-        json.dumps(analysis_results['individual_hr_buckets']),
-        json.dumps(analysis_results['presentation_buckets']),
-        json.dumps(analysis_results['trimp_data']),
-        analysis_results['total_trimp'],
-        analysis_results['daily_score'],
-        analysis_results['activity_type']
-    ))
-    
-    cur.close()
-    conn.close()
+    # Queue the job
+    job = queue.enqueue(collect_garmin_data_job, target_date, job_id)
     
     return jsonify({
         'success': True,
-        'date': target_date,
-        'individual_hr_buckets': analysis_results['individual_hr_buckets'],
-        'presentation_buckets': analysis_results['presentation_buckets'],
-        'trimp_data': analysis_results['trimp_data'],
-        'total_trimp': analysis_results['total_trimp'],
-        'daily_score': analysis_results['daily_score'],
-        'activity_type': analysis_results['activity_type']
+        'job_id': job_id,
+        'message': f'Data collection job started for {target_date}',
+        'status': 'pending'
     })
 
 @app.route('/api/data/<date>')
@@ -540,8 +393,8 @@ def get_data(date):
     
     cur.execute("""
         SELECT * FROM heart_rate_data 
-        WHERE user_id = ? AND date = ?
-    """, (session['user_id'], date))
+        WHERE date = ?
+    """, (date,))
     
     data = cur.fetchone()
     cur.close()
@@ -578,9 +431,9 @@ def get_weekly_data(start_date):
     cur.execute("""
         SELECT date, presentation_buckets, total_trimp, daily_score, activity_type
         FROM heart_rate_data 
-        WHERE user_id = ? AND date >= ? AND date <= ?
+        WHERE date >= ? AND date <= ?
         ORDER BY date
-    """, (session['user_id'], start, end))
+    """, (start, end))
     
     data = cur.fetchall()
     cur.close()
@@ -601,20 +454,24 @@ def get_weekly_data(start_date):
 
 @app.route('/api/hr-parameters', methods=['GET', 'POST'])
 def hr_parameters():
-    """Get or update user's HR parameters."""
+    """Get or update HR parameters."""
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Only admin can update parameters
+    if request.method == 'POST' and session.get('user_role') != 'admin':
+        return jsonify({'error': 'Insufficient permissions'}), 403
     
     if request.method == 'POST':
         data = request.get_json()
         resting_hr = data.get('resting_hr', 48)
         max_hr = data.get('max_hr', 167)
         
-        ensure_user_hr_parameters(session['user_id'], resting_hr, max_hr)
+        ensure_user_hr_parameters(resting_hr, max_hr)
         return jsonify({'success': True, 'resting_hr': resting_hr, 'max_hr': max_hr})
     
     else:  # GET
-        resting_hr, max_hr = get_user_hr_parameters(session['user_id'])
+        resting_hr, max_hr = get_user_hr_parameters()
         return jsonify({'resting_hr': resting_hr, 'max_hr': max_hr})
 
 @app.route('/setup-hr-parameters', methods=['GET', 'POST'])
@@ -623,17 +480,96 @@ def setup_hr_parameters():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
+    # Only admin can update parameters
+    if request.method == 'POST' and session.get('user_role') != 'admin':
+        flash('Only admin can update HR parameters', 'error')
+        return redirect(url_for('index'))
+    
     if request.method == 'POST':
         resting_hr = int(request.form.get('resting_hr', 48))
         max_hr = int(request.form.get('max_hr', 167))
         
-        ensure_user_hr_parameters(session['user_id'], resting_hr, max_hr)
+        ensure_user_hr_parameters(resting_hr, max_hr)
         flash('HR parameters updated successfully!', 'success')
         return redirect(url_for('index'))
     
     # GET request - show current values
-    resting_hr, max_hr = get_user_hr_parameters(session['user_id'])
+    resting_hr, max_hr = get_user_hr_parameters()
     return render_template('setup_hr_parameters.html', resting_hr=resting_hr, max_hr=max_hr)
+
+@app.route('/api/jobs')
+def get_jobs():
+    """Get background jobs."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT job_id, job_type, status, target_date, start_date, end_date, 
+               result, error_message, created_at, updated_at
+        FROM background_jobs 
+        ORDER BY created_at DESC
+        LIMIT 20
+    """)
+    
+    jobs = []
+    for row in cur.fetchall():
+        job = {
+            'job_id': row['job_id'],
+            'job_type': row['job_type'],
+            'status': row['status'],
+            'target_date': row['target_date'],
+            'start_date': row['start_date'],
+            'end_date': row['end_date'],
+            'result': json.loads(row['result']) if row['result'] else None,
+            'error_message': row['error_message'],
+            'created_at': row['created_at'],
+            'updated_at': row['updated_at']
+        }
+        jobs.append(job)
+    
+    cur.close()
+    conn.close()
+    
+    return jsonify(jobs)
+
+@app.route('/api/jobs/<job_id>')
+def get_job_status(job_id):
+    """Get status of a specific job."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT job_id, job_type, status, target_date, start_date, end_date, 
+               result, error_message, created_at, updated_at
+        FROM background_jobs 
+        WHERE job_id = ?
+    """, (job_id,))
+    
+    job = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    return jsonify({
+        'job_id': job['job_id'],
+        'job_type': job['job_type'],
+        'status': job['status'],
+        'target_date': job['target_date'],
+        'start_date': job['start_date'],
+        'end_date': job['end_date'],
+        'result': json.loads(job['result']) if job['result'] else None,
+        'error_message': job['error_message'],
+        'created_at': job['created_at'],
+        'updated_at': job['updated_at']
+    })
 
 if __name__ == '__main__':
     init_database()
