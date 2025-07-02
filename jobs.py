@@ -88,14 +88,61 @@ def collect_garmin_data_job(target_date: str, job_id: str):
         logger.info(f"collect_garmin_data_job: Fetching heart rate data for {target_date}")
         heart_rate_data = api.get_heart_rates(target_date)
         
-        if not heart_rate_data or 'heartRateValues' not in heart_rate_data:
-            error_msg = f"No heart rate data found for {target_date}"
+        logger.info(f"collect_garmin_data_job: Raw heart rate data: {heart_rate_data}")
+        
+        # Check if we got valid data
+        if not heart_rate_data:
+            error_msg = f"No heart rate data returned from Garmin for {target_date}"
             logger.warning(f"collect_garmin_data_job: {error_msg}")
             cur.execute("""
                 UPDATE background_jobs 
                 SET status = 'completed', result = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE job_id = ?
-            """, (json.dumps({'message': error_msg}), job_id))
+            """, (json.dumps({'message': error_msg, 'data_found': False}), job_id))
+            conn.commit()
+            cur.close()
+            conn.close()
+            return
+        
+        # Check if heartRateValues exists and has data
+        if 'heartRateValues' not in heart_rate_data:
+            error_msg = f"Heart rate data missing 'heartRateValues' for {target_date}"
+            logger.warning(f"collect_garmin_data_job: {error_msg}")
+            cur.execute("""
+                UPDATE background_jobs 
+                SET status = 'completed', result = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE job_id = ?
+            """, (json.dumps({'message': error_msg, 'data_found': False}), job_id))
+            conn.commit()
+            cur.close()
+            conn.close()
+            return
+        
+        heart_rate_values = heart_rate_data['heartRateValues']
+        logger.info(f"collect_garmin_data_job: Heart rate values: {heart_rate_values}")
+        
+        if not heart_rate_values or len(heart_rate_values) == 0:
+            error_msg = f"No heart rate values found for {target_date}"
+            logger.warning(f"collect_garmin_data_job: {error_msg}")
+            cur.execute("""
+                UPDATE background_jobs 
+                SET status = 'completed', result = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE job_id = ?
+            """, (json.dumps({'message': error_msg, 'data_found': False}), job_id))
+            conn.commit()
+            cur.close()
+            conn.close()
+            return
+        
+        # Check for None values in heart rate data
+        if any(value is None for value in heart_rate_values):
+            error_msg = f"Heart rate data contains None values for {target_date} - no valid data"
+            logger.warning(f"collect_garmin_data_job: {error_msg}")
+            cur.execute("""
+                UPDATE background_jobs 
+                SET status = 'completed', result = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE job_id = ?
+            """, (json.dumps({'message': error_msg, 'data_found': False}), job_id))
             conn.commit()
             cur.close()
             conn.close()
@@ -152,16 +199,36 @@ def collect_garmin_data_job(target_date: str, job_id: str):
         error_msg = f"Error collecting data: {str(e)}"
         logger.error(f"collect_garmin_data_job: {error_msg}")
         
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE background_jobs 
-                SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE job_id = ?
-            """, (error_msg, job_id))
-            conn.commit()
-            cur.close()
-            conn.close()
-        except Exception as db_error:
-            logger.error(f"collect_garmin_data_job: Failed to update job status: {str(db_error)}") 
+        # Check if this is a rate limit error
+        if "429" in str(e) or "Too Many Requests" in str(e):
+            error_msg = f"Rate limited by Garmin API for {target_date}. Please try again later."
+            logger.warning(f"collect_garmin_data_job: {error_msg}")
+            # Mark as failed but with a specific message
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE background_jobs 
+                    SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE job_id = ?
+                """, (error_msg, job_id))
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as db_error:
+                logger.error(f"collect_garmin_data_job: Failed to update job status: {str(db_error)}")
+        else:
+            # Regular error handling
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE background_jobs 
+                    SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE job_id = ?
+                """, (error_msg, job_id))
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as db_error:
+                logger.error(f"collect_garmin_data_job: Failed to update job status: {str(db_error)}") 

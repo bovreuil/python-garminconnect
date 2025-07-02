@@ -19,6 +19,8 @@ import sqlite3
 from rq import Queue
 from redis import Redis
 import garminconnect
+import random
+import time
 
 # Import database functions
 from database import (
@@ -193,8 +195,10 @@ def create_background_job(job_type: str, target_date: Optional[str] = None, star
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Generate a unique job ID
-    job_id = f"{job_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    # Generate a unique job ID with microseconds and random component
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # Include milliseconds
+    random_suffix = random.randint(1000, 9999)
+    job_id = f"{job_type}_{timestamp}_{random_suffix}"
     
     cur.execute("""
         INSERT INTO background_jobs (job_id, job_type, target_date, start_date, end_date, status)
@@ -357,6 +361,19 @@ def setup_garmin():
     
     return render_template('setup_garmin.html')
 
+@app.route('/admin')
+def admin():
+    """Admin panel page."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        flash('Access denied. Admin privileges required.', 'error')
+        return redirect(url_for('index'))
+    
+    return render_template('admin.html', today=date.today().isoformat())
+
 @app.route('/collect-data', methods=['POST'])
 def collect_data():
     """Start a background job to collect Garmin data."""
@@ -367,20 +384,64 @@ def collect_data():
     if session.get('user_role') != 'admin':
         return jsonify({'error': 'Insufficient permissions'}), 403
     
-    target_date = request.form.get('date', date.today().isoformat())
+    start_date = request.form.get('start_date', date.today().isoformat())
+    end_date = request.form.get('end_date', start_date)
     
-    # Create background job
-    job_id = create_background_job('collect_data', target_date=target_date)
+    logger.info(f"collect_data: start_date={start_date}, end_date={end_date}")
     
-    # Queue the job
-    job = queue.enqueue(collect_garmin_data_job, target_date, job_id)
-    
-    return jsonify({
-        'success': True,
-        'job_id': job_id,
-        'message': f'Data collection job started for {target_date}',
-        'status': 'pending'
-    })
+    # Determine if this is single date or range based on dates
+    if start_date == end_date:
+        # Single date - create one job
+        job_id = create_background_job('collect_data', target_date=start_date)
+        job = queue.enqueue(collect_garmin_data_job, start_date, job_id)
+        
+        logger.info(f"collect_data: Created single job {job_id} for {start_date}")
+        
+        return jsonify({
+            'success': True,
+            'job_id': job_id,
+            'message': f'Data collection job started for {start_date}',
+            'status': 'pending'
+        })
+    else:
+        # Date range - create parallel jobs for each date
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            logger.info(f"collect_data: Processing date range from {start} to {end}")
+            
+            if (end - start).days > 30:  # Limit to 30 days
+                return jsonify({'error': 'Date range too large. Maximum 30 days allowed.'}), 400
+            
+            job_ids = []
+            current_date = start
+            job_count = 0
+            
+            while current_date <= end:
+                job_id = create_background_job('collect_data', target_date=current_date.isoformat())
+                job = queue.enqueue(collect_garmin_data_job, current_date.isoformat(), job_id)
+                job_ids.append(job_id)
+                logger.info(f"collect_data: Created job {job_id} for {current_date.isoformat()}")
+                current_date += timedelta(days=1)
+                job_count += 1
+                
+                # Add a small delay between job creation to prevent rate limiting
+                if job_count % 3 == 0:  # Every 3 jobs
+                    time.sleep(0.5)  # 500ms delay
+            
+            logger.info(f"collect_data: Created {len(job_ids)} jobs total")
+            
+            return jsonify({
+                'success': True,
+                'job_ids': job_ids,
+                'message': f'Started {len(job_ids)} data collection jobs from {start_date} to {end_date}',
+                'status': 'pending'
+            })
+            
+        except ValueError as e:
+            logger.error(f"collect_data: ValueError: {e}")
+            return jsonify({'error': 'Invalid date format'}), 400
 
 @app.route('/api/data/<date>')
 def get_data(date):
