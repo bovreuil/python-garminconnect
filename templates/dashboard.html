@@ -3,258 +3,306 @@
 {% block title %}Dashboard - Garmin Heart Rate Analyzer{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Garmin Heart Rate Analyzer</h1>
-        <div>
-            {% if session.user_role == 'admin' %}
-            <a href="{{ url_for('admin') }}" class="btn btn-outline-primary">Admin Panel</a>
-            {% endif %}
-        </div>
-    </div>
-    
-    <p class="lead">Welcome, {{ session.user_name }}! ({{ session.user_role }})</p>
-    
-    <!-- Data Display Section (Both Admin and Viewer) -->
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Daily View</h5>
-                </div>
-                <div class="card-body">
-                    <form id="dailyDataForm">
-                        <div class="mb-3">
-                            <label for="dailyDate" class="form-label">Select Date:</label>
-                            <input type="date" class="form-control" id="dailyDate" name="date" value="{{ today }}">
-                        </div>
-                        <button type="submit" class="btn btn-primary">Load Data</button>
-                    </form>
-                    <div id="dailyData" class="mt-3"></div>
-                </div>
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Dashboard</h1>
+            <div>
+                <label for="dateSelector" class="form-label me-2">Select Date:</label>
+                <input type="date" id="dateSelector" class="form-control d-inline-block" style="width: auto;" value="{{ today }}">
             </div>
         </div>
         
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Weekly View</h5>
+        <p class="text-muted mb-4">Welcome, {{ session.user_name }}! ({{ session.user_role }})</p>
+    </div>
+</div>
+
+<!-- Daily Data Section -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Daily Heart Rate Zones</h5>
+            </div>
+            <div class="card-body">
+                <div id="dailyChartContainer" class="chart-container">
+                    <canvas id="dailyChart"></canvas>
                 </div>
-                <div class="card-body">
-                    <form id="weeklyDataForm">
-                        <div class="mb-3">
-                            <label for="weeklyStartDate" class="form-label">Start Date:</label>
-                            <input type="date" class="form-control" id="weeklyStartDate" name="start_date" value="{{ today }}">
-                        </div>
-                        <button type="submit" class="btn btn-primary">Load Week</button>
-                    </form>
-                    <div id="weeklyData" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Daily Summary</h5>
+            </div>
+            <div class="card-body">
+                <div id="dailySummary">
+                    <p class="text-muted">Select a date to view data</p>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<script>
-// Daily Data Form
-document.getElementById('dailyDataForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const date = document.getElementById('dailyDate').value;
-    const dataDiv = document.getElementById('dailyData');
-    
-    dataDiv.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p>Loading data...</p></div>';
-    
-    fetch(`/api/data/${date}`)
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('No data found for this date');
-        }
-        return response.json();
-    })
-    .then(data => {
-        // Create charts for the data
-        createDailyCharts(data, dataDiv);
-    })
-    .catch(error => {
-        dataDiv.innerHTML = `<div class="alert alert-warning">${error.message}</div>`;
-    });
-});
-
-// Weekly Data Form
-document.getElementById('weeklyDataForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const startDate = document.getElementById('weeklyStartDate').value;
-    const dataDiv = document.getElementById('weeklyData');
-    
-    dataDiv.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p>Loading data...</p></div>';
-    
-    fetch(`/api/weekly-data/${startDate}`)
-    .then(response => response.json())
-    .then(data => {
-        createWeeklyCharts(data, dataDiv);
-    })
-    .catch(error => {
-        dataDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
-    });
-});
-
-// Create daily charts
-function createDailyCharts(data, container) {
-    const presentationBuckets = data.presentation_buckets;
-    const trimpData = data.trimp_data;
-    
-    let html = `
-        <div class="row">
-            <div class="col-12 mb-3">
-                <div class="alert alert-info">
-                    <strong>Summary:</strong> TRIMP: ${data.total_trimp.toFixed(2)}, 
-                    Score: ${data.daily_score.toFixed(1)}, 
-                    Activity: ${data.activity_type.replace('_', ' ')}
+<!-- Weekly Data Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Weekly Overview</h5>
+            </div>
+            <div class="card-body">
+                <div id="weeklyChartContainer" class="chart-container">
+                    <canvas id="weeklyChart"></canvas>
                 </div>
             </div>
         </div>
-        <div class="row">
-            <div class="col-md-6">
-                <canvas id="dailyTimeChart"></canvas>
-            </div>
-            <div class="col-md-6">
-                <canvas id="dailyTRIMPChart"></canvas>
-            </div>
-        </div>`;
+    </div>
+</div>
+
+<!-- Loading Indicator -->
+<div id="loading" class="loading">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-2">Loading data...</p>
+</div>
+
+<script>
+// Chart.js configuration
+Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+Chart.defaults.font.size = 12;
+Chart.defaults.color = '#2c3e50';
+
+// Zone colors
+const zoneColors = {
+    'Zone 1': '#28a745',
+    'Zone 2': '#ffc107', 
+    'Zone 3': '#fd7e14',
+    'Zone 4': '#dc3545',
+    'Zone 5': '#6f42c1'
+};
+
+let dailyChart = null;
+let weeklyChart = null;
+
+// Date selector change handler
+document.getElementById('dateSelector').addEventListener('change', function() {
+    const selectedDate = this.value;
+    loadDailyData(selectedDate);
+    loadWeeklyData(selectedDate);
+});
+
+// Load daily data
+function loadDailyData(date) {
+    showLoading();
     
-    container.innerHTML = html;
-    
-    // Time spent chart
-    const timeCtx = document.getElementById('dailyTimeChart').getContext('2d');
-    new Chart(timeCtx, {
-        type: 'bar',
-        data: {
-            labels: Object.keys(presentationBuckets),
-            datasets: [{
-                label: 'Minutes',
-                data: Object.values(presentationBuckets).map(bucket => bucket.minutes),
-                backgroundColor: [
-                    '#1f77b4', '#7fb3d3', '#17becf', '#2ca02c',
-                    '#ff7f0e', '#ff6b35', '#d62728', '#8b0000'
-                ]
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Time Spent in HR Zones (minutes)'
-                }
+    fetch(`/api/data/${date}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('No data available for this date');
             }
-        }
-    });
-    
-    // TRIMP chart
-    const trimpCtx = document.getElementById('dailyTRIMPChart').getContext('2d');
-    new Chart(trimpCtx, {
-        type: 'bar',
-        data: {
-            labels: Object.keys(presentationBuckets),
-            datasets: [{
-                label: 'TRIMP',
-                data: Object.values(presentationBuckets).map(bucket => bucket.trimp),
-                backgroundColor: [
-                    '#1f77b4', '#7fb3d3', '#17becf', '#2ca02c',
-                    '#ff7f0e', '#ff6b35', '#d62728', '#8b0000'
-                ]
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'TRIMP by HR Zone'
-                }
-            }
-        }
-    });
+            return response.json();
+        })
+        .then(data => {
+            updateDailyChart(data);
+            updateDailySummary(data);
+            hideLoading();
+        })
+        .catch(error => {
+            console.error('Error loading daily data:', error);
+            document.getElementById('dailySummary').innerHTML = `
+                <div class="alert alert-info">
+                    <p class="mb-0">${error.message}</p>
+                </div>
+            `;
+            hideLoading();
+        });
 }
 
-// Create weekly charts
-function createWeeklyCharts(data, container) {
-    if (data.length === 0) {
-        container.innerHTML = '<div class="alert alert-warning">No data found for this week.</div>';
-        return;
+// Load weekly data
+function loadWeeklyData(startDate) {
+    fetch(`/api/weekly-data/${startDate}`)
+        .then(response => response.json())
+        .then(data => {
+            updateWeeklyChart(data);
+        })
+        .catch(error => {
+            console.error('Error loading weekly data:', error);
+        });
+}
+
+// Update daily chart
+function updateDailyChart(data) {
+    const ctx = document.getElementById('dailyChart').getContext('2d');
+    
+    if (dailyChart) {
+        dailyChart.destroy();
     }
     
-    const dates = data.map(d => d.date);
-    const trimpValues = data.map(d => d.total_trimp);
-    const scores = data.map(d => d.daily_score);
+    const chartData = {
+        labels: Object.keys(data.presentation_buckets),
+        datasets: [{
+            data: Object.values(data.presentation_buckets),
+            backgroundColor: Object.keys(data.presentation_buckets).map(zone => zoneColors[zone] || '#6c757d'),
+            borderWidth: 1,
+            borderColor: '#ffffff'
+        }]
+    };
     
-    let html = `
-        <div class="row">
-            <div class="col-md-6">
-                <canvas id="weeklyTRIMPChart"></canvas>
-            </div>
-            <div class="col-md-6">
-                <canvas id="weeklyScoreChart"></canvas>
-            </div>
-        </div>`;
-    
-    container.innerHTML = html;
-    
-    // Weekly TRIMP chart
-    const trimpCtx = document.getElementById('weeklyTRIMPChart').getContext('2d');
-    new Chart(trimpCtx, {
-        type: 'line',
-        data: {
-            labels: dates,
-            datasets: [{
-                label: 'Daily TRIMP',
-                data: trimpValues,
-                borderColor: '#1f77b4',
-                backgroundColor: 'rgba(31, 119, 180, 0.1)',
-                tension: 0.1
-            }]
-        },
+    dailyChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: chartData,
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
-                title: {
-                    display: true,
-                    text: 'Weekly TRIMP Trend'
-                }
-            }
-        }
-    });
-    
-    // Weekly Score chart
-    const scoreCtx = document.getElementById('weeklyScoreChart').getContext('2d');
-    new Chart(scoreCtx, {
-        type: 'line',
-        data: {
-            labels: dates,
-            datasets: [{
-                label: 'Daily Score',
-                data: scores,
-                borderColor: '#2ca02c',
-                backgroundColor: 'rgba(44, 160, 44, 0.1)',
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Weekly Score Trend'
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 20,
+                        usePointStyle: true
+                    }
                 }
             }
         }
     });
 }
 
-// Auto-load today's data on page load
+// Update weekly chart
+function updateWeeklyChart(data) {
+    const ctx = document.getElementById('weeklyChart').getContext('2d');
+    
+    if (weeklyChart) {
+        weeklyChart.destroy();
+    }
+    
+    const labels = data.map(item => {
+        const date = new Date(item.date);
+        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    });
+    
+    const trimpData = data.map(item => item.total_trimp || 0);
+    const scoreData = data.map(item => item.daily_score || 0);
+    
+    weeklyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'TRIMP Score',
+                data: trimpData,
+                borderColor: '#3498db',
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                tension: 0.4,
+                yAxisID: 'y'
+            }, {
+                label: 'Daily Score',
+                data: scoreData,
+                borderColor: '#e74c3c',
+                backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                tension: 0.4,
+                yAxisID: 'y1'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'TRIMP Score'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Daily Score'
+                    },
+                    grid: {
+                        drawOnChartArea: false,
+                    },
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            }
+        }
+    });
+}
+
+// Update daily summary
+function updateDailySummary(data) {
+    const summary = document.getElementById('dailySummary');
+    
+    summary.innerHTML = `
+        <div class="row">
+            <div class="col-6">
+                <div class="text-center">
+                    <div class="score-display">${data.total_trimp.toFixed(1)}</div>
+                    <p class="text-muted">Total TRIMP</p>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="text-center">
+                    <div class="score-display">${data.daily_score.toFixed(1)}</div>
+                    <p class="text-muted">Daily Score</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <h6>Heart Rate Zones</h6>
+            ${Object.entries(data.presentation_buckets).map(([zone, value]) => `
+                <div class="zone-bar" style="background: linear-gradient(90deg, ${zoneColors[zone] || '#6c757d'} ${value}%, transparent ${value}%)">
+                    <span class="zone-label">${zone}</span>
+                    <span class="zone-value">${value}%</span>
+                </div>
+            `).join('')}
+        </div>
+        
+        <div class="mt-3">
+            <small class="text-muted">Activity Type: ${data.activity_type || 'Unknown'}</small>
+        </div>
+    `;
+}
+
+// Show/hide loading
+function showLoading() {
+    document.getElementById('loading').style.display = 'block';
+}
+
+function hideLoading() {
+    document.getElementById('loading').style.display = 'none';
+}
+
+// Load initial data
 document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('dailyDataForm').dispatchEvent(new Event('submit'));
-    document.getElementById('weeklyDataForm').dispatchEvent(new Event('submit'));
+    const today = document.getElementById('dateSelector').value;
+    loadDailyData(today);
+    loadWeeklyData(today);
 });
 </script>
 {% endblock %} 

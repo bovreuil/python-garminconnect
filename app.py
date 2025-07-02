@@ -230,7 +230,6 @@ def login():
 def logout():
     """Logout user."""
     session.clear()
-    flash('You have been logged out from this application.', 'info')
     return render_template('logout.html')
 
 @app.route('/logout-google')
@@ -295,7 +294,6 @@ def auth_callback():
             app.logger.info(f"auth_callback: Session set - user_id: {user['id']}, email: {email}, role: {user_role}")
         else:
             app.logger.error("auth_callback: Failed to retrieve user from database")
-            flash('Authentication failed', 'error')
             return redirect(url_for('login'))
         
         app.logger.info("auth_callback: Redirecting to index")
@@ -303,7 +301,6 @@ def auth_callback():
         
     except Exception as e:
         app.logger.error(f"auth_callback: Error during OAuth callback: {str(e)}")
-        flash('Authentication failed', 'error')
         return redirect(url_for('login'))
 
 @app.route('/setup-garmin', methods=['GET', 'POST'])
