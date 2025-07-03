@@ -529,7 +529,7 @@ function showSingleDateView(date, dayData) {
             let zoneHtml = '<div class="table-responsive"><table class="table table-sm">';
             zoneHtml += '<thead><tr><th>Zone</th><th>Minutes</th><th>TRIMP</th><th>%</th></tr></thead><tbody>';
             
-            const sortedZones = zoneOrder.filter(zone => dayData.presentation_buckets[zone]);
+            const sortedZones = zoneOrder.filter(zone => dayData.presentation_buckets[zone]).reverse();
             let totalMinutes = 0;
             let totalTrimp = 0;
             
