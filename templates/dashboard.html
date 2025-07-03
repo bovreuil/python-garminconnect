@@ -653,17 +653,21 @@ function createHeartRateChart(date, dayData) {
     console.log('Raw HR data length:', hrData.length);
     console.log('First few data points:', hrData.slice(0, 5));
     
-    // Create evenly spaced 24-hour labels (every 1 minute for high resolution)
+    // Create evenly spaced 24-hour timeline (every 1 minute for high resolution)
     const labels = [];
+    const data = [];
+    
+    // Get the date from the selected date
+    const selectedDate = new Date(dayData.date);
+    
     for (let hour = 0; hour < 24; hour++) {
         for (let minute = 0; minute < 60; minute += 1) {
-            const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-            labels.push(timeStr);
+            const timestamp = new Date(selectedDate);
+            timestamp.setHours(hour, minute, 0, 0);
+            labels.push(timestamp);
+            data.push(null);
         }
     }
-    
-    // Initialize data array with null values
-    const data = new Array(labels.length).fill(null);
     
     // Sort data by timestamp
     const sortedData = hrData.sort((a, b) => {
@@ -691,20 +695,18 @@ function createHeartRateChart(date, dayData) {
         // Skip null values
         if (hr === null || hr === undefined) return;
         
-        // Convert timestamp to time string
+        // Convert timestamp to Date object
         const date = new Date(timestamp);
-        const timeStr = date.toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            hour12: false 
-        });
         
         // Find the exact index in our labels array (1-minute precision)
         const hour = date.getHours();
         const minute = date.getMinutes();
-        const exactTimeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
         
-        const index = labels.indexOf(exactTimeStr);
+        // Create a timestamp for comparison (same date, specific hour/minute)
+        const comparisonTimestamp = new Date(selectedDate);
+        comparisonTimestamp.setHours(hour, minute, 0, 0);
+        
+        const index = labels.findIndex(label => label.getTime() === comparisonTimestamp.getTime());
         if (index !== -1) {
             data[index] = hr;
         }
@@ -737,12 +739,12 @@ function createHeartRateChart(date, dayData) {
         hrChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: filteredLabels, // Use only actual data points for the line
+                labels: labels, // Use full 24-hour timeline for consistent x-axis
                 datasets: [
                     // Single background dataset with gradient
                     {
                         label: 'Background',
-                        data: filteredLabels.map(() => 160), // Full height background
+                        data: labels.map(label => ({ x: label, y: 160 })), // Full height background for 24-hour timeline
                         borderColor: 'transparent',
                         backgroundColor: function(context) {
                             const chart = context.chart;
@@ -786,7 +788,7 @@ function createHeartRateChart(date, dayData) {
                     // Heart rate line on top
                     {
                         label: 'Heart Rate (BPM)',
-                        data: filteredData, // Use only actual heart rate data points
+                        data: filteredLabels.map((label, index) => ({ x: label, y: filteredData[index] })), // Use filtered data with timestamps
                         borderColor: '#e74c3c',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
@@ -831,23 +833,23 @@ function createHeartRateChart(date, dayData) {
                 },
                 scales: {
                     x: {
+                        type: 'time',
+                        time: {
+                            unit: 'hour',
+                            displayFormats: {
+                                hour: 'HH:mm'
+                            }
+                        },
                         title: {
                             display: true,
                             text: 'Time'
                         },
-                        min: '00:00',
-                        max: '23:59',
-
+                        min: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 0, 0, 0),
+                        max: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 23, 59, 0),
                         ticks: {
-                            maxTicksLimit: 12,
                             maxRotation: 0,
-                            callback: function(value, index, values) {
-                                // Only show labels for 2-hour intervals (00:00, 02:00, 04:00, etc.)
-                                const label = this.getLabelForValue(value);
-                                const hour = parseInt(label.split(':')[0]);
-                                const minute = parseInt(label.split(':')[1]);
-                                return hour % 2 === 0 && minute === 0 ? label : '';
-                            }
+                            stepSize: 2,
+                            source: 'auto'
                         }
                     },
                     y: {
