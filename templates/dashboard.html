@@ -651,8 +651,17 @@ function createHeartRateChart(date, dayData) {
     console.log('Raw HR data length:', hrData.length);
     console.log('First few data points:', hrData.slice(0, 5));
     
+    // Create evenly spaced 24-hour labels (every 1 minute for high resolution)
     const labels = [];
-    const data = [];
+    for (let hour = 0; hour < 24; hour++) {
+        for (let minute = 0; minute < 60; minute += 1) {
+            const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+            labels.push(timeStr);
+        }
+    }
+    
+    // Initialize data array with null values
+    const data = new Array(labels.length).fill(null);
     
     // Sort data by timestamp
     const sortedData = hrData.sort((a, b) => {
@@ -663,7 +672,7 @@ function createHeartRateChart(date, dayData) {
     
     console.log('Sorted data length:', sortedData.length);
     
-    // Convert timestamps to time labels and extract heart rate values
+    // Map heart rate data to the 24-hour timeline
     sortedData.forEach(point => {
         let timestamp, hr;
         
@@ -688,8 +697,15 @@ function createHeartRateChart(date, dayData) {
             hour12: false 
         });
         
-        labels.push(timeStr);
-        data.push(hr);
+        // Find the exact index in our labels array (1-minute precision)
+        const hour = date.getHours();
+        const minute = date.getMinutes();
+        const exactTimeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        
+        const index = labels.indexOf(exactTimeStr);
+        if (index !== -1) {
+            data[index] = hr;
+        }
     });
     
     console.log('Processed labels length:', labels.length);
@@ -697,18 +713,34 @@ function createHeartRateChart(date, dayData) {
     console.log('First few labels:', labels.slice(0, 5));
     console.log('First few data points:', data.slice(0, 5));
     
+    // Filter out null values to keep only actual heart rate data
+    const filteredLabels = [];
+    const filteredData = [];
+    
+    for (let i = 0; i < labels.length; i++) {
+        if (data[i] !== null) {
+            filteredLabels.push(labels[i]);
+            filteredData.push(data[i]);
+        }
+    }
+    
+    console.log('Filtered labels length:', filteredLabels.length);
+    console.log('Filtered data length:', filteredData.length);
+    console.log('First few filtered labels:', filteredLabels.slice(0, 5));
+    console.log('First few filtered data points:', filteredData.slice(0, 5));
+    
     // Small delay to ensure DOM is ready
     setTimeout(() => {
         // Create the chart
         hrChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: labels,
+                labels: filteredLabels, // Use only actual data points for the line
                 datasets: [
                     // Single background dataset with gradient
                     {
                         label: 'Background',
-                        data: labels.map(() => 160), // Full height background
+                        data: filteredLabels.map(() => 160), // Full height background
                         borderColor: 'transparent',
                         backgroundColor: function(context) {
                             const chart = context.chart;
@@ -750,7 +782,7 @@ function createHeartRateChart(date, dayData) {
                     // Heart rate line on top
                     {
                         label: 'Heart Rate (BPM)',
-                        data: data,
+                        data: filteredData, // Use only actual heart rate data points
                         borderColor: '#e74c3c',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
@@ -795,14 +827,18 @@ function createHeartRateChart(date, dayData) {
                             display: true,
                             text: 'Time'
                         },
+                        min: '00:00',
+                        max: '23:59',
+
                         ticks: {
                             maxTicksLimit: 12,
                             maxRotation: 0,
                             callback: function(value, index, values) {
-                                // Only show labels for 2-hour intervals
+                                // Only show labels for 2-hour intervals (00:00, 02:00, 04:00, etc.)
                                 const label = this.getLabelForValue(value);
                                 const hour = parseInt(label.split(':')[0]);
-                                return hour % 2 === 0 ? label : '';
+                                const minute = parseInt(label.split(':')[1]);
+                                return hour % 2 === 0 && minute === 0 ? label : '';
                             }
                         }
                     },
