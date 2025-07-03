@@ -147,3 +147,4 @@ dmypy.json
 
 # Ignore folder for local testing
 ignore/
+.rules
