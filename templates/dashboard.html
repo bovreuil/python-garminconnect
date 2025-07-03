@@ -173,6 +173,9 @@ function calculateTwoWeekPeriod(today) {
 function navigateWeek(direction) {
     if (!currentStartDate || !currentEndDate) return;
     
+    // Close single date view when navigating
+    closeSingleDateView();
+    
     const newStartDate = new Date(currentStartDate);
     newStartDate.setDate(currentStartDate.getDate() + (direction * 7));
     
@@ -184,6 +187,9 @@ function navigateWeek(direction) {
 
 // Go to today's two-week period
 function goToToday() {
+    // Close single date view when going to today
+    closeSingleDateView();
+    
     const today = new Date();
     const { startDate, endDate } = calculateTwoWeekPeriod(today);
     loadTwoWeekData(startDate, endDate);
