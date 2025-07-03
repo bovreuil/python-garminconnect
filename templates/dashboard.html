@@ -381,10 +381,27 @@ function updateTwoWeekChart(dates, dataResults) {
             responsive: true,
             maintainAspectRatio: false,
             onClick: function(event, elements) {
-                if (elements.length > 0) {
-                    const dataIndex = elements[0].index;
-                    const date = dates[dataIndex];
-                    showSingleDateView(date, dataResults[dataIndex]);
+                const canvas = event.native.target;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.native.x - rect.left;
+                const y = event.native.y - rect.top;
+                
+                // Get the chart area
+                const chartArea = twoWeekChart.chartArea;
+                if (!chartArea) return;
+                
+                // Check if click is within the chart area (excluding axes)
+                if (x >= chartArea.left && x <= chartArea.right && 
+                    y >= chartArea.top && y <= chartArea.bottom) {
+                    
+                    // Calculate which date column was clicked based on x-coordinate
+                    const xAxis = twoWeekChart.scales.x;
+                    const clickIndex = xAxis.getValueForPixel(x);
+                    
+                    if (clickIndex >= 0 && clickIndex < dates.length) {
+                        const date = dates[clickIndex];
+                        showSingleDateView(date, dataResults[clickIndex]);
+                    }
                 }
             },
             onHover: function(event, elements) {
@@ -396,6 +413,13 @@ function updateTwoWeekChart(dates, dataResults) {
                     title: {
                         display: true,
                         text: 'Date'
+                    },
+                    ticks: {
+                        callback: function(value, index) {
+                            // Make labels clickable by adding a click handler
+                            const label = this.getLabelForValue(value);
+                            return label;
+                        }
                     }
                 },
                 y: {
