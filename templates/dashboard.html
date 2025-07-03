@@ -145,6 +145,7 @@ let currentStartDate = null;
 let currentEndDate = null;
 let currentMetric = 'trimp'; // 'trimp' or 'minutes'
 let currentDataResults = []; // Store the current data results for click handling
+let selectedDate = null; // Track the currently selected date for single date view
 
 // Initialize the dashboard
 document.addEventListener('DOMContentLoaded', function() {
@@ -219,24 +220,10 @@ function switchMetric(metric) {
         loadTwoWeekData(currentStartDate, currentEndDate);
     }
     
-    // Update activities chart if it exists
-    if (activitiesChart) {
-        // Get the current date from the single date view
-        const singleDateSection = document.getElementById('singleDateSection');
-        if (singleDateSection.style.display !== 'none') {
-            // Find the date from the title
-            const titleElement = document.getElementById('selectedDateTitle');
-            if (titleElement) {
-                const titleText = titleElement.textContent;
-                // Extract date from title (e.g., "Monday, July 2, 2025")
-                const dateMatch = titleText.match(/(\w+), (\w+ \d+, \d{4})/);
-                if (dateMatch) {
-                    const dateStr = dateMatch[2];
-                    const date = new Date(dateStr);
-                    loadActivitiesForDate(date);
-                }
-            }
-        }
+    // Update activities chart if single date view is open and we have a selected date
+    const singleDateSection = document.getElementById('singleDateSection');
+    if (singleDateSection.style.display !== 'none' && selectedDate) {
+        loadActivitiesForDate(selectedDate);
     }
 }
 
@@ -509,6 +496,8 @@ function hideLoading() {
 
 // Show single date view
 function showSingleDateView(date, dayData) {
+    selectedDate = date; // Store the selected date globally
+    
     const dateStr = date.toLocaleDateString('en-US', { 
         weekday: 'long', 
         year: 'numeric', 
@@ -621,6 +610,7 @@ function showSingleDateView(date, dayData) {
 // Close single date view
 function closeSingleDateView() {
     document.getElementById('singleDateSection').style.display = 'none';
+    selectedDate = null; // Clear the selected date
     
     // Destroy activities chart if it exists
     if (activitiesChart) {
@@ -664,6 +654,13 @@ function createActivitiesChart(activities) {
     if (!activities || activities.length === 0) {
         // No activities - show empty chart with message
         chartContainer.style.height = '100px'; // Small height for empty state
+        
+        // Clear any existing overlay
+        const existingOverlay = chartContainer.querySelector('.no-activities-overlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+        
         activitiesChart = new Chart(ctx, {
             type: 'bar',
             data: {
@@ -692,9 +689,24 @@ function createActivitiesChart(activities) {
             }
         });
         
-        // Add a message overlay
-        chartContainer.innerHTML = '<div class="d-flex align-items-center justify-content-center h-100"><p class="text-muted">No activities for this date</p></div>';
+        // Add a message overlay without destroying the canvas
+        const overlay = document.createElement('div');
+        overlay.className = 'no-activities-overlay d-flex align-items-center justify-content-center h-100';
+        overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.right = '0';
+        overlay.style.bottom = '0';
+        overlay.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+        overlay.innerHTML = '<p class="text-muted">No activities for this date</p>';
+        chartContainer.appendChild(overlay);
         return;
+    }
+    
+    // Clear any existing overlay
+    const existingOverlay = chartContainer.querySelector('.no-activities-overlay');
+    if (existingOverlay) {
+        existingOverlay.remove();
     }
     
     // Calculate dynamic height based on number of activities
