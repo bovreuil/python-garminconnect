@@ -22,7 +22,7 @@ def test_trimp_calculations():
     print()
     
     # Test individual HR calculations
-    test_hrs = [90, 100, 110, 120, 130, 140, 150, 160, 129]
+    test_hrs = [80, 90, 100, 110, 120, 130, 140, 150, 160, 129]
     print("=== Individual HR TRIMP Calculations (1 minute) ===")
     for hr in test_hrs:
         trimp = calculator.calculate_trimp_for_hr(hr, 1)
@@ -34,6 +34,7 @@ def test_trimp_calculations():
     # Test with sample heart rate data
     sample_data = {
         'heartRateValues': [
+            [500, 80],    # 1 minute at 80 BPM
             [1000, 90],   # 1 minute at 90 BPM
             [2000, 100],  # 1 minute at 100 BPM
             [3000, 110],  # 1 minute at 110 BPM

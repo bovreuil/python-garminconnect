@@ -104,6 +104,7 @@ Chart.defaults.color = '#2c3e50';
 
 // Zone colors - temperature scale from cool to hot
 const zoneColors = {
+    '80-89': '#002040',    // Midnight
     '90-99': '#004080',    // Night sky blue
     '100-109': '#006d5b',  // Deep teal
     '110-119': '#28a745',  // Green
@@ -116,6 +117,7 @@ const zoneColors = {
 
 // Zone order for stacking (bottom to top)
 const zoneOrder = [
+    '80-89',
     '90-99',
     '100-109', 
     '110-119',
@@ -768,8 +770,10 @@ function createHeartRateChart(date, dayData) {
                             gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
                             gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
                             gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
-                            gradient.addColorStop(7/12, '#000000'); // 90-99 Black
-                            gradient.addColorStop(1, '#000000'); // Below 90 Black
+                            gradient.addColorStop(7/12, '#002040'); // 80-89 Midnight
+                            gradient.addColorStop(2/3, '#002040'); // 80-89 Midnight
+                            gradient.addColorStop(2/3, '#000000'); // 80-89 Black
+                            gradient.addColorStop(1, '#000000'); // Below 80 Black
                             
                             return gradient;
                         },

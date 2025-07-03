@@ -106,7 +106,7 @@ TRIMP = minutes × HR_reserve_ratio × 0.64 × e^(1.92 × HR_reserve_ratio)
 
 Where:
 - `HR_reserve_ratio = (HR - resting_HR) / (max_HR - resting_HR)`
-- Only HR ≥ 90 BPM is counted (exercise threshold)
+- Only HR ≥ 80 BPM is counted (exercise threshold)
 
 ## Heart Rate Zones
 
@@ -115,6 +115,7 @@ Used for precise TRIMP calculations: 90, 91, 92, ..., 160+
 
 ### Presentation Buckets (10 BPM each)
 Used for charts and visualization:
+- **80-89**: Midnight (very low intensity)
 - **90-99**: Blue (low intensity)
 - **100-109**: Light blue
 - **110-119**: Cyan

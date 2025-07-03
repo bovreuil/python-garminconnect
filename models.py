@@ -30,12 +30,13 @@ class TRIMPCalculator:
         
         # Presentation buckets (10 BPM each) for charts
         self.presentation_buckets = [
-            (90, 99), (100, 109), (110, 119), (120, 129),
+            (80, 89), (90, 99), (100, 109), (110, 119), (120, 129),
             (130, 139), (140, 149), (150, 159), (160, 999)
         ]
         
         # Color temperature scale for presentation buckets
         self.bucket_colors = [
+            '#002040',  # Midnight (80-89)
             '#1f77b4',  # Blue (90-99)
             '#7fb3d3',  # Light blue (100-109)
             '#17becf',  # Cyan (110-119)
@@ -63,7 +64,7 @@ class TRIMPCalculator:
         Returns:
             TRIMP value for this HR/duration combination
         """
-        if hr < 90:  # Below exercise threshold
+        if hr < 80:  # Below exercise threshold
             return 0.0
         
         hr_reserve_ratio = self.calculate_hr_reserve_ratio(hr)
@@ -88,8 +89,9 @@ class TRIMPCalculator:
             }
         
         # Initialize buckets
-        individual_buckets = {}  # 90, 91, 92, etc.
-        presentation_buckets = {  # 90-99, 100-109, etc.
+        individual_buckets = {}  # 80, 81, 82, etc.
+        presentation_buckets = {  # 80-89, 90-99, 100-109, etc.
+            '80-89': {'minutes': 0, 'trimp': 0.0},
             '90-99': {'minutes': 0, 'trimp': 0.0},
             '100-109': {'minutes': 0, 'trimp': 0.0},
             '110-119': {'minutes': 0, 'trimp': 0.0},
@@ -113,7 +115,7 @@ class TRIMPCalculator:
                 # Format: {"value": x, "timestamp": y}
                 hr = hr_value.get('value')
             
-            if hr is not None and hr >= 90:  # Only count HR >= 90
+            if hr is not None and hr >= 80:  # Only count HR >= 80
                 # Individual bucket
                 individual_buckets[hr] = individual_buckets.get(hr, 0) + 1
                 
@@ -181,6 +183,7 @@ class HeartRateAnalyzer:
     def _determine_activity_type(self, presentation_buckets: Dict) -> str:
         """Determine activity type based on TRIMP distribution."""
         low_intensity_trimp = (
+            presentation_buckets['80-89']['trimp'] +
             presentation_buckets['90-99']['trimp'] +
             presentation_buckets['100-109']['trimp'] +
             presentation_buckets['110-119']['trimp']
@@ -207,7 +210,7 @@ class HeartRateAnalyzer:
         
         # Weighted score based on time in each zone
         zone_weights = {
-            "90-99": 1.0, "100-109": 1.5, "110-119": 2.0, "120-129": 2.5,
+            "80-89": 0.5, "90-99": 1.0, "100-109": 1.5, "110-119": 2.0, "120-129": 2.5,
             "130-139": 3.0, "140-149": 3.5, "150-159": 4.0, "160+": 4.5
         }
         
