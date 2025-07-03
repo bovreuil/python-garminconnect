@@ -66,17 +66,7 @@
                     </div>
                 </div>
                 
-                <!-- Activities Chart -->
                 <div class="row mb-4">
-                    <div class="col-12">
-                        <h6>Activities</h6>
-                        <div class="chart-container" style="height: 400px;">
-                            <canvas id="activitiesChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="row">
                     <div class="col-md-6">
                         <h6 id="selectedDateTitle">Date Details</h6>
                         <div id="dateDetails">
@@ -87,6 +77,16 @@
                         <h6>Heart Rate Zones</h6>
                         <div id="zoneBreakdown">
                             <p class="text-muted">Zone breakdown will appear here</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Activities Chart -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6>Activities</h6>
+                        <div class="chart-container" id="activitiesChartContainer" style="height: 400px;">
+                            <canvas id="activitiesChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -654,6 +654,7 @@ function loadActivitiesForDate(date) {
 // Create horizontal bar chart for activities
 function createActivitiesChart(activities) {
     const ctx = document.getElementById('activitiesChart').getContext('2d');
+    const chartContainer = document.getElementById('activitiesChartContainer');
     
     // Destroy existing chart if it exists
     if (activitiesChart) {
@@ -662,6 +663,7 @@ function createActivitiesChart(activities) {
     
     if (!activities || activities.length === 0) {
         // No activities - show empty chart with message
+        chartContainer.style.height = '100px'; // Small height for empty state
         activitiesChart = new Chart(ctx, {
             type: 'bar',
             data: {
@@ -691,21 +693,28 @@ function createActivitiesChart(activities) {
         });
         
         // Add a message overlay
-        const chartContainer = ctx.canvas.parentElement;
         chartContainer.innerHTML = '<div class="d-flex align-items-center justify-content-center h-100"><p class="text-muted">No activities for this date</p></div>';
         return;
     }
     
+    // Calculate dynamic height based on number of activities
+    // Each bar should be about 50px thick, plus some padding for labels and spacing
+    const barHeight = 80; // Increased from 50 to give more space per bar
+    const padding = 40; // Increased padding for better spacing
+    const legendHeight = 50; // Increased legend space
+    const totalHeight = (activities.length * barHeight) + padding + legendHeight;
+    
+    // Set minimum and maximum heights
+    const minHeight = 200; // Increased minimum height
+    const maxHeight = 800; // Increased maximum height
+    const dynamicHeight = Math.max(minHeight, Math.min(maxHeight, totalHeight));
+    
+    // Update the container height
+    chartContainer.style.height = dynamicHeight + 'px';
+    
     // Prepare data for horizontal stacked bar chart
     const labels = activities.map(activity => {
-        const startTime = new Date(activity.start_time_local);
-        const timeStr = startTime.toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            hour12: false 
-        });
-        const duration = Math.round(activity.duration_seconds / 60);
-        return `${timeStr} - ${activity.activity_name} (${duration}min)`;
+        return activity.activity_name;
     });
     
     // Create datasets for each zone (horizontal bars)
@@ -764,6 +773,9 @@ function createActivitiesChart(activities) {
                             }
                         }
                     }
+                },
+                datalabels: {
+                    display: false
                 }
             },
             scales: {
@@ -776,6 +788,12 @@ function createActivitiesChart(activities) {
                 },
                 y: {
                     stacked: true
+                }
+            },
+            elements: {
+                bar: {
+                    borderWidth: 1,
+                    borderColor: '#ffffff'
                 }
             }
         }
