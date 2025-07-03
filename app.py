@@ -499,7 +499,8 @@ def get_activities(date):
     cur.execute("""
         SELECT activity_id, activity_name, activity_type, start_time_local,
                duration_seconds, distance_meters, elevation_gain, average_hr, max_hr,
-               individual_hr_buckets, presentation_buckets, trimp_data, total_trimp
+               individual_hr_buckets, presentation_buckets, trimp_data, total_trimp,
+               raw_activity_data
         FROM activities 
         WHERE date = ?
         ORDER BY start_time_local ASC
@@ -512,6 +513,76 @@ def get_activities(date):
     if activities:
         activities_list = []
         for activity in activities:
+            # Parse raw activity data to extract HR data
+            raw_hr_data = []
+            if activity['raw_activity_data']:
+                try:
+                    raw_activity_data = json.loads(activity['raw_activity_data'])
+                    print(f"Raw activity data keys for {activity['activity_id']}: {list(raw_activity_data.keys()) if isinstance(raw_activity_data, dict) else 'Not a dict'}")
+                    print(f"Raw activity data type: {type(raw_activity_data)}")
+                    print(f"Raw activity data sample: {str(raw_activity_data)[:500]}...")
+                    
+                    # Extract HR data from the raw activity data using the same method as TRIMP calculation
+                    if 'activityDetailMetrics' in raw_activity_data:
+                        activity_metrics = raw_activity_data['activityDetailMetrics']
+                        if activity_metrics:
+                            print(f"Found activityDetailMetrics with {len(activity_metrics)} entries")
+                            
+                            # Find HR and timestamp positions (using the same method as TRIMP calculation)
+                            position_data = {}
+                            for entry in activity_metrics:
+                                if 'metrics' in entry:
+                                    metrics = entry['metrics']
+                                    for pos, value in enumerate(metrics):
+                                        if pos not in position_data:
+                                            position_data[pos] = []
+                                        if value is not None:
+                                            position_data[pos].append(value)
+                            
+                            # Find HR position (values in 48-167 range, excluding GPS)
+                            hr_candidates = []
+                            for pos, values in position_data.items():
+                                if values and min(values) >= 48 and max(values) <= 167:
+                                    if not (min(values) >= 51.4 and max(values) <= 51.5):  # Exclude GPS
+                                        unique_count = len(set(values))
+                                        if unique_count > 5:
+                                            hr_candidates.append((pos, unique_count, min(values), max(values)))
+                            
+                            # Find timestamp position
+                            ts_candidates = []
+                            for pos, values in position_data.items():
+                                if values and min(values) > 1000000000000:
+                                    unique_count = len(set(values))
+                                    if unique_count > 100:
+                                        ts_candidates.append((pos, unique_count, min(values), max(values)))
+                            
+                            if hr_candidates and ts_candidates:
+                                hr_pos = hr_candidates[0][0]
+                                ts_pos = ts_candidates[0][0]
+                                print(f"HR position: {hr_pos}, Timestamp position: {ts_pos}")
+                                
+                                # Extract HR time series
+                                for entry in activity_metrics:
+                                    if 'metrics' in entry and len(entry['metrics']) > max(hr_pos, ts_pos):
+                                        metrics = entry['metrics']
+                                        timestamp = metrics[ts_pos]
+                                        hr_value = metrics[hr_pos]
+                                        
+                                        if timestamp is not None and hr_value is not None:
+                                            raw_hr_data.append([timestamp, int(hr_value)])
+                                
+                                print(f"Extracted {len(raw_hr_data)} HR data points from activityDetailMetrics")
+                            else:
+                                print("Could not find HR and timestamp positions")
+                        else:
+                            print("activityDetailMetrics is empty")
+                    else:
+                        print(f"No 'activityDetailMetrics' key found in raw activity data")
+                except Exception as e:
+                    print(f"Error parsing raw activity data: {e}")
+            else:
+                print(f"No raw_activity_data for activity {activity['activity_id']}")
+            
             activities_list.append({
                 'activity_id': activity['activity_id'],
                 'activity_name': activity['activity_name'],
@@ -525,7 +596,8 @@ def get_activities(date):
                 'individual_hr_buckets': json.loads(activity['individual_hr_buckets']) if activity['individual_hr_buckets'] else {},
                 'presentation_buckets': json.loads(activity['presentation_buckets']) if activity['presentation_buckets'] else {},
                 'trimp_data': json.loads(activity['trimp_data']) if activity['trimp_data'] else {},
-                'total_trimp': activity['total_trimp']
+                'total_trimp': activity['total_trimp'],
+                'raw_hr_data': raw_hr_data
             })
         
         return jsonify(activities_list)
