@@ -814,7 +814,11 @@ function createHeartRateChart(date, dayData) {
                                 return `Time: ${context[0].label}`;
                             },
                             label: function(context) {
-                                return `Heart Rate: ${context.parsed.y} BPM`;
+                                // Only show tooltip for heart rate data, not background
+                                if (context.dataset.label === 'Heart Rate (BPM)') {
+                                    return `Heart Rate: ${context.parsed.y} BPM`;
+                                }
+                                return null; // Hide background dataset from tooltip
                             }
                         }
                     },
