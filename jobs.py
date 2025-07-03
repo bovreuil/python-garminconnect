@@ -156,12 +156,28 @@ def collect_garmin_data_job(target_date: str, job_id: str):
         logger.info(f"collect_garmin_data_job: Analyzing heart rate data")
         analysis_result = analyzer.analyze_heart_rate_data(heart_rate_data)
         
+        # Debug raw heart rate data
+        raw_hr_data = heart_rate_data['heartRateValues']
+        logger.info(f"collect_garmin_data_job: Raw HR data type: {type(raw_hr_data)}")
+        logger.info(f"collect_garmin_data_job: Raw HR data length: {len(raw_hr_data) if raw_hr_data else 0}")
+        if raw_hr_data and len(raw_hr_data) > 0:
+            logger.info(f"collect_garmin_data_job: First few HR data points: {raw_hr_data[:3]}")
+        
+        # Serialize raw data to JSON
+        raw_hr_json = json.dumps(raw_hr_data)
+        logger.info(f"collect_garmin_data_job: Raw HR JSON length: {len(raw_hr_json)}")
+        logger.info(f"collect_garmin_data_job: Raw HR JSON first 100 chars: {raw_hr_json[:100]}")
+        
         # Save to database
+        # First, try to delete any existing record for this date
+        cur.execute("DELETE FROM heart_rate_data WHERE date = ?", (target_date,))
+        
+        # Then insert the new record
         cur.execute("""
-            INSERT OR REPLACE INTO heart_rate_data 
+            INSERT INTO heart_rate_data 
             (date, individual_hr_buckets, presentation_buckets, trimp_data, 
-             total_trimp, daily_score, activity_type, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             total_trimp, daily_score, activity_type, raw_hr_data, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """, (
             target_date,
             json.dumps(analysis_result['individual_hr_buckets']),
@@ -169,7 +185,8 @@ def collect_garmin_data_job(target_date: str, job_id: str):
             json.dumps(analysis_result['trimp_data']),
             analysis_result['total_trimp'],
             analysis_result['daily_score'],
-            analysis_result['activity_type']
+            analysis_result['activity_type'],
+            raw_hr_json
         ))
         
         conn.commit()

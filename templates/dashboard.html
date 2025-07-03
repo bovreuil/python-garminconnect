@@ -45,6 +45,46 @@
     </div>
 </div>
 
+<!-- Single Date View Section -->
+<div class="row mt-4" id="singleDateSection" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Single Date View</h5>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="closeSingleDate">
+                    <span>×</span>
+                </button>
+            </div>
+            <div class="card-body">
+                <!-- 24-Hour Heart Rate Chart -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6>24-Hour Heart Rate</h6>
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="hrChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 id="selectedDateTitle">Date Details</h6>
+                        <div id="dateDetails">
+                            <p class="text-muted">Click on a column above to view details</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Heart Rate Zones</h6>
+                        <div id="zoneBreakdown">
+                            <p class="text-muted">Zone breakdown will appear here</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Loading Indicator -->
 <div id="loading" class="loading">
     <div class="spinner-border text-primary" role="status">
@@ -87,9 +127,11 @@ const zoneOrder = [
 ];
 
 let twoWeekChart = null;
+let hrChart = null;
 let currentStartDate = null;
 let currentEndDate = null;
 let currentMetric = 'trimp'; // 'trimp' or 'minutes'
+let currentDataResults = []; // Store the current data results for click handling
 
 // Initialize the dashboard
 document.addEventListener('DOMContentLoaded', function() {
@@ -99,6 +141,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('todayBtn').addEventListener('click', goToToday);
     document.getElementById('trimpBtn').addEventListener('click', () => switchMetric('trimp'));
     document.getElementById('minutesBtn').addEventListener('click', () => switchMetric('minutes'));
+    document.getElementById('closeSingleDate').addEventListener('click', closeSingleDateView);
     
     // Start with today's view
     goToToday();
@@ -177,6 +220,7 @@ function loadTwoWeekData(startDate, endDate) {
     // Load data for all dates
     Promise.all(dates.map(date => loadDateData(date)))
         .then(results => {
+            currentDataResults = results; // Store for click handling
             updateTwoWeekChart(dates, results);
             hideLoading();
         })
@@ -190,13 +234,24 @@ function loadTwoWeekData(startDate, endDate) {
 function loadDateData(date) {
     const dateStr = date.toISOString().split('T')[0];
     
+    console.log(`Loading data for ${dateStr}`);
+    
     return fetch(`/api/data/${dateStr}`)
         .then(response => {
+            console.log(`Response for ${dateStr}:`, response.status, response.ok);
             if (!response.ok) {
                 // Return null for dates with no data
                 return null;
             }
             return response.json();
+        })
+        .then(data => {
+            if (data) {
+                console.log(`Data for ${dateStr}:`, data.total_trimp, data.presentation_buckets ? Object.keys(data.presentation_buckets) : 'no buckets');
+            } else {
+                console.log(`No data for ${dateStr}`);
+            }
+            return data;
         })
         .catch(error => {
             console.error(`Error loading data for ${dateStr}:`, error);
@@ -299,6 +354,16 @@ function updateTwoWeekChart(dates, dataResults) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: function(event, elements) {
+                if (elements.length > 0) {
+                    const dataIndex = elements[0].index;
+                    const date = dates[dataIndex];
+                    showSingleDateView(date, dataResults[dataIndex]);
+                }
+            },
+            onHover: function(event, elements) {
+                event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+            },
             scales: {
                 x: {
                     stacked: true,
@@ -401,6 +466,369 @@ function showLoading() {
 
 function hideLoading() {
     document.getElementById('loading').style.display = 'none';
+}
+
+// Show single date view
+function showSingleDateView(date, dayData) {
+    const dateStr = date.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    });
+    
+    document.getElementById('selectedDateTitle').textContent = dateStr;
+    
+    if (!dayData) {
+        document.getElementById('dateDetails').innerHTML = '<p class="text-muted">No data available for this date</p>';
+        document.getElementById('zoneBreakdown').innerHTML = '<p class="text-muted">No zone data available</p>';
+        // Clear heart rate chart
+        if (hrChart) {
+            hrChart.destroy();
+            hrChart = null;
+        }
+    } else {
+        // Create 24-hour heart rate chart
+        createHeartRateChart(date, dayData);
+        
+        // Display date details
+        let detailsHtml = '<div class="row">';
+        
+        if (dayData.total_trimp !== undefined) {
+            detailsHtml += `
+                <div class="col-6">
+                    <div class="text-center p-3 bg-light rounded">
+                        <h4 class="text-primary mb-1">${dayData.total_trimp.toFixed(1)}</h4>
+                        <small class="text-muted">Total TRIMP</small>
+                    </div>
+                </div>
+            `;
+        }
+        
+        if (dayData.presentation_buckets) {
+            let totalMinutes = 0;
+            Object.values(dayData.presentation_buckets).forEach(bucket => {
+                totalMinutes += bucket.minutes || 0;
+            });
+            
+            detailsHtml += `
+                <div class="col-6">
+                    <div class="text-center p-3 bg-light rounded">
+                        <h4 class="text-success mb-1">${totalMinutes.toFixed(0)}</h4>
+                        <small class="text-muted">Total Minutes</small>
+                    </div>
+                </div>
+            `;
+        }
+        
+        detailsHtml += '</div>';
+        document.getElementById('dateDetails').innerHTML = detailsHtml;
+        
+        // Display zone breakdown
+        if (dayData.presentation_buckets) {
+            let zoneHtml = '<div class="table-responsive"><table class="table table-sm">';
+            zoneHtml += '<thead><tr><th>Zone</th><th>Minutes</th><th>TRIMP</th><th>%</th></tr></thead><tbody>';
+            
+            const sortedZones = zoneOrder.filter(zone => dayData.presentation_buckets[zone]);
+            let totalMinutes = 0;
+            let totalTrimp = 0;
+            
+            // Calculate totals first
+            sortedZones.forEach(zone => {
+                const bucket = dayData.presentation_buckets[zone];
+                totalMinutes += bucket.minutes || 0;
+                totalTrimp += bucket.trimp || 0;
+            });
+            
+            // Display each zone
+            sortedZones.forEach(zone => {
+                const bucket = dayData.presentation_buckets[zone];
+                const minutes = bucket.minutes || 0;
+                const trimp = bucket.trimp || 0;
+                const percentage = totalMinutes > 0 ? ((minutes / totalMinutes) * 100).toFixed(1) : '0.0';
+                
+                zoneHtml += `
+                    <tr>
+                        <td>
+                            <span class="badge" style="background-color: ${zoneColors[zone]}; color: white;">${zone}</span>
+                        </td>
+                        <td>${minutes.toFixed(0)}</td>
+                        <td>${trimp.toFixed(1)}</td>
+                        <td>${percentage}%</td>
+                    </tr>
+                `;
+            });
+            
+            zoneHtml += '</tbody></table></div>';
+            document.getElementById('zoneBreakdown').innerHTML = zoneHtml;
+        } else {
+            document.getElementById('zoneBreakdown').innerHTML = '<p class="text-muted">No zone data available</p>';
+        }
+    }
+    
+    // Show the section
+    document.getElementById('singleDateSection').style.display = 'block';
+    
+    // Scroll to the section
+    document.getElementById('singleDateSection').scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+    });
+}
+
+// Close single date view
+function closeSingleDateView() {
+    document.getElementById('singleDateSection').style.display = 'none';
+}
+
+// Create 24-hour heart rate chart
+function createHeartRateChart(date, dayData) {
+    console.log('Creating heart rate chart for date:', date);
+    console.log('Day data:', dayData);
+    
+    const chartElement = document.getElementById('hrChart');
+    const chartContainer = chartElement.parentElement;
+    
+    console.log('Chart element:', chartElement);
+    console.log('Chart container:', chartContainer);
+    console.log('Chart container dimensions:', chartContainer.offsetWidth, 'x', chartContainer.offsetHeight);
+    console.log('Chart element dimensions:', chartElement.offsetWidth, 'x', chartElement.offsetHeight);
+    
+    const ctx = chartElement.getContext('2d');
+    console.log('Chart context:', ctx);
+    
+    // Destroy existing chart if it exists
+    if (hrChart) {
+        hrChart.destroy();
+    }
+    
+    // Check if we have raw heart rate data
+    if (!dayData.raw_hr_data || !Array.isArray(dayData.raw_hr_data) || dayData.raw_hr_data.length === 0) {
+        console.log('No raw heart rate data available');
+        // No raw data available - show message
+        hrChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Heart Rate',
+                    data: [],
+                    borderColor: '#e74c3c',
+                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                    borderWidth: 2,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        enabled: false
+                    }
+                },
+                scales: {
+                    x: {
+                        display: false
+                    },
+                    y: {
+                        display: false
+                    }
+                }
+            }
+        });
+        
+        // Add a message overlay
+        chartContainer.innerHTML = '<div class="d-flex align-items-center justify-content-center h-100"><p class="text-muted">No heart rate time-series data available</p></div>';
+        return;
+    }
+    
+    // Process raw heart rate data
+    const hrData = dayData.raw_hr_data;
+    console.log('Raw HR data length:', hrData.length);
+    console.log('First few data points:', hrData.slice(0, 5));
+    
+    const labels = [];
+    const data = [];
+    
+    // Sort data by timestamp
+    const sortedData = hrData.sort((a, b) => {
+        const timestampA = Array.isArray(a) ? a[0] : a.timestamp;
+        const timestampB = Array.isArray(b) ? b[0] : b.timestamp;
+        return timestampA - timestampB;
+    });
+    
+    console.log('Sorted data length:', sortedData.length);
+    
+    // Convert timestamps to time labels and extract heart rate values
+    sortedData.forEach(point => {
+        let timestamp, hr;
+        
+        if (Array.isArray(point)) {
+            // Format: [timestamp, value]
+            timestamp = point[0];
+            hr = point[1];
+        } else {
+            // Format: {"value": x, "timestamp": y}
+            timestamp = point.timestamp;
+            hr = point.value;
+        }
+        
+        // Skip null values
+        if (hr === null || hr === undefined) return;
+        
+        // Convert timestamp to time string
+        const date = new Date(timestamp);
+        const timeStr = date.toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: false 
+        });
+        
+        labels.push(timeStr);
+        data.push(hr);
+    });
+    
+    console.log('Processed labels length:', labels.length);
+    console.log('Processed data length:', data.length);
+    console.log('First few labels:', labels.slice(0, 5));
+    console.log('First few data points:', data.slice(0, 5));
+    
+    // Small delay to ensure DOM is ready
+    setTimeout(() => {
+        // Create the chart
+        hrChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    // Single background dataset with gradient
+                    {
+                        label: 'Background',
+                        data: labels.map(() => 160), // Full height background
+                        borderColor: 'transparent',
+                        backgroundColor: function(context) {
+                            const chart = context.chart;
+                            const {ctx, chartArea} = chart;
+                            
+                            if (!chartArea) {
+                                return 'transparent';
+                            }
+                            
+                            // Create gradient
+                            const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                            
+                            // Add color stops for each zone
+                            gradient.addColorStop(0, '#e74c3c'); // 160+ Red
+                            gradient.addColorStop(1/12, '#e74c3c'); // 150-159 Red
+                            gradient.addColorStop(1/12, '#fd7e14'); // 150-159 Orange
+                            gradient.addColorStop(1/6, '#fd7e14'); // 140-149 Orange
+                            gradient.addColorStop(1/6, '#ffc107'); // 140-149 Yellow
+                            gradient.addColorStop(3/12, '#ffc107'); // 130-139 Yellow
+                            gradient.addColorStop(3/12, '#9acd32'); // 130-139 Yellow-green
+                            gradient.addColorStop(1/3, '#9acd32'); // 120-129 Yellow-green
+                            gradient.addColorStop(1/3, '#28a745'); // 120-129 Green
+                            gradient.addColorStop(5/12, '#28a745'); // 110-119 Green
+                            gradient.addColorStop(5/12, '#006d5b'); // 110-119 Deep teal
+                            gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
+                            gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
+                            gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
+                            gradient.addColorStop(7/12, '#000000'); // 90-99 Black
+                            gradient.addColorStop(1, '#000000'); // Below 90 Black
+                            
+                            return gradient;
+                        },
+                        borderWidth: 0,
+                        fill: true,
+                        tension: 0,
+                        pointRadius: 0,
+                        order: 1
+                    },
+                    // Heart rate line on top
+                    {
+                        label: 'Heart Rate (BPM)',
+                        data: data,
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: '#e74c3c',
+                        order: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            title: function(context) {
+                                return `Time: ${context[0].label}`;
+                            },
+                            label: function(context) {
+                                return `Heart Rate: ${context.parsed.y} BPM`;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        display: false,
+                        formatter: function() {
+                            return ''; // Return empty string to ensure no labels
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        },
+                        ticks: {
+                            maxTicksLimit: 12,
+                            maxRotation: 0,
+                            callback: function(value, index, values) {
+                                // Only show labels for 2-hour intervals
+                                const label = this.getLabelForValue(value);
+                                const hour = parseInt(label.split(':')[0]);
+                                return hour % 2 === 0 ? label : '';
+                            }
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Heart Rate (BPM)'
+                        },
+                        min: 40,
+                        max: 160,
+                        ticks: {
+                            stepSize: 20
+                        }
+                    }
+                },
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                }
+            }
+        });
+        
+        console.log('Chart created successfully:', hrChart);
+        console.log('Chart dimensions after creation:', chartElement.offsetWidth, 'x', chartElement.offsetHeight);
+    }, 100);
 }
 </script>
 {% endblock %} 

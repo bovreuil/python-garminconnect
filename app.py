@@ -131,6 +131,7 @@ def init_database():
             total_trimp REAL,
             daily_score REAL,
             activity_type VARCHAR(50),
+            raw_hr_data TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -449,10 +450,24 @@ def get_data(date):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute("""
-        SELECT * FROM heart_rate_data 
-        WHERE date = ?
-    """, (date,))
+    # First, check if raw_hr_data column exists
+    cur.execute("PRAGMA table_info(heart_rate_data)")
+    columns = [col[1] for col in cur.fetchall()]
+    has_raw_hr_data = 'raw_hr_data' in columns
+    
+    if has_raw_hr_data:
+        cur.execute("""
+            SELECT * FROM heart_rate_data 
+            WHERE date = ?
+        """, (date,))
+    else:
+        # Fallback to old schema
+        cur.execute("""
+            SELECT id, date, individual_hr_buckets, presentation_buckets, trimp_data, 
+                   total_trimp, daily_score, activity_type, heart_rate_values as raw_hr_data
+            FROM heart_rate_data 
+            WHERE date = ?
+        """, (date,))
     
     data = cur.fetchone()
     cur.close()
@@ -468,7 +483,8 @@ def get_data(date):
         'trimp_data': json.loads(data['trimp_data']),
         'total_trimp': data['total_trimp'],
         'daily_score': data['daily_score'],
-        'activity_type': data['activity_type']
+        'activity_type': data['activity_type'],
+        'raw_hr_data': json.loads(data['raw_hr_data']) if data['raw_hr_data'] else None
     })
 
 @app.route('/api/weekly-data/<start_date>')
