@@ -487,6 +487,51 @@ def get_data(date):
         'raw_hr_data': json.loads(data['raw_hr_data']) if data['raw_hr_data'] else None
     })
 
+@app.route('/api/activities/<date>')
+def get_activities(date):
+    """Get activities for a specific date."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT activity_id, activity_name, activity_type, start_time_local,
+               duration_seconds, distance_meters, elevation_gain, average_hr, max_hr,
+               individual_hr_buckets, presentation_buckets, trimp_data, total_trimp
+        FROM activities 
+        WHERE date = ?
+        ORDER BY start_time_local ASC
+    """, (date,))
+    
+    activities = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    if activities:
+        activities_list = []
+        for activity in activities:
+            activities_list.append({
+                'activity_id': activity['activity_id'],
+                'activity_name': activity['activity_name'],
+                'activity_type': activity['activity_type'],
+                'start_time_local': activity['start_time_local'],
+                'duration_seconds': activity['duration_seconds'],
+                'distance_meters': activity['distance_meters'],
+                'elevation_gain': activity['elevation_gain'],
+                'average_hr': activity['average_hr'],
+                'max_hr': activity['max_hr'],
+                'individual_hr_buckets': json.loads(activity['individual_hr_buckets']) if activity['individual_hr_buckets'] else {},
+                'presentation_buckets': json.loads(activity['presentation_buckets']) if activity['presentation_buckets'] else {},
+                'trimp_data': json.loads(activity['trimp_data']) if activity['trimp_data'] else {},
+                'total_trimp': activity['total_trimp']
+            })
+        
+        return jsonify(activities_list)
+    else:
+        return jsonify([])
+
 @app.route('/api/weekly-data/<start_date>')
 def get_weekly_data(start_date):
     """Get heart rate data for a week starting from start_date."""

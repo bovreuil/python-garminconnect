@@ -53,7 +53,7 @@ class TRIMPCalculator:
             return 0.0
         return (hr - self.resting_hr) / self.hr_reserve
     
-    def calculate_trimp_for_hr(self, hr: int, minutes: int) -> float:
+    def calculate_trimp_for_hr(self, hr: int, minutes: float) -> float:
         """
         Calculate TRIMP for a specific heart rate and time duration.
         
@@ -106,7 +106,10 @@ class TRIMPCalculator:
         
         heart_rate_values = heart_rate_data['heartRateValues']
         
-        for hr_value in heart_rate_values:
+        # Sort by timestamp to ensure proper time calculation
+        heart_rate_values.sort(key=lambda x: x[0] if isinstance(x, list) else x.get('timestamp', 0))
+        
+        for i, hr_value in enumerate(heart_rate_values):
             # Handle both list and dict formats
             if isinstance(hr_value, list):
                 # Format: [timestamp, value]
@@ -114,23 +117,45 @@ class TRIMPCalculator:
             else:
                 # Format: {"value": x, "timestamp": y}
                 hr = hr_value.get('value')
+                timestamp = hr_value.get('timestamp', 0)
             
             if hr is not None and hr >= 80:  # Only count HR >= 80
-                # Individual bucket
+                # Calculate time duration for this sample
+                if i == 0:
+                    # For the first sample, assume the same interval as the next sample
+                    if len(heart_rate_values) > 1:
+                        next_timestamp = heart_rate_values[1][0] if isinstance(heart_rate_values[1], list) else heart_rate_values[1].get('timestamp', 0)
+                        time_interval_seconds = (next_timestamp - timestamp) / 1000
+                    else:
+                        time_interval_seconds = 60  # Default to 1 minute if only one sample
+                elif i == len(heart_rate_values) - 1:
+                    # For the last sample, use the same interval as the previous sample
+                    prev_timestamp = heart_rate_values[i-1][0] if isinstance(heart_rate_values[i-1], list) else heart_rate_values[i-1].get('timestamp', 0)
+                    time_interval_seconds = (timestamp - prev_timestamp) / 1000
+                else:
+                    # For middle samples, use the average of the intervals to previous and next samples
+                    prev_timestamp = heart_rate_values[i-1][0] if isinstance(heart_rate_values[i-1], list) else heart_rate_values[i-1].get('timestamp', 0)
+                    next_timestamp = heart_rate_values[i+1][0] if isinstance(heart_rate_values[i+1], list) else heart_rate_values[i+1].get('timestamp', 0)
+                    time_interval_seconds = ((timestamp - prev_timestamp) + (next_timestamp - timestamp)) / 2000
+                
+                # Convert to minutes
+                time_interval_minutes = time_interval_seconds / 60
+                
+                # Individual bucket (count occurrences, not time)
                 individual_buckets[hr] = individual_buckets.get(hr, 0) + 1
                 
-                # Calculate TRIMP for this HR
-                trimp = self.calculate_trimp_for_hr(hr, 1)  # 1 minute intervals
+                # Calculate TRIMP for this HR and time duration
+                trimp = self.calculate_trimp_for_hr(hr, time_interval_minutes)
                 trimp_data[hr] = trimp_data.get(hr, 0.0) + trimp
                 total_trimp += trimp
                 
                 # Presentation bucket
-                for i, (min_hr, max_hr) in enumerate(self.presentation_buckets):
+                for j, (min_hr, max_hr) in enumerate(self.presentation_buckets):
                     if min_hr <= hr <= max_hr:
                         bucket_name = f"{min_hr}-{max_hr if max_hr != 999 else '999'}"
                         if bucket_name == "160-999":
                             bucket_name = "160+"
-                        presentation_buckets[bucket_name]['minutes'] += 1
+                        presentation_buckets[bucket_name]['minutes'] += time_interval_minutes
                         presentation_buckets[bucket_name]['trimp'] += trimp
                         break
         
