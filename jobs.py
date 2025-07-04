@@ -81,7 +81,7 @@ def detect_hr_and_timestamp_positions_advanced(activity_metrics: List[Dict], tar
         logger.warning("detect_hr_and_timestamp_positions_advanced: No valid timestamp candidates found")
         return None, None, 0.0
     
-    logger.info(f"detect_hr_and_timestamp_positions_advanced: Found {len(ts_candidates)} timestamp candidates")
+    logger.debug(f"detect_hr_and_timestamp_positions_advanced: Found {len(ts_candidates)} timestamp candidates")
     
     # 3. For each timestamp candidate, find HR candidates and calculate correlation
     best_correlation = 0.0
@@ -89,7 +89,7 @@ def detect_hr_and_timestamp_positions_advanced(activity_metrics: List[Dict], tar
     best_ts_pos = None
     
     for ts_pos, unique_count, min_ts, max_ts in ts_candidates:
-        logger.info(f"detect_hr_and_timestamp_positions_advanced: Checking timestamp position {ts_pos}")
+        logger.debug(f"detect_hr_and_timestamp_positions_advanced: Checking timestamp position {ts_pos}")
         
         # Find HR candidates in 48-167 range
         hr_candidates = []
@@ -102,17 +102,17 @@ def detect_hr_and_timestamp_positions_advanced(activity_metrics: List[Dict], tar
                         hr_candidates.append((pos, unique_count, min(values), max(values)))
         
         if not hr_candidates:
-            logger.info(f"detect_hr_and_timestamp_positions_advanced: No HR candidates for timestamp position {ts_pos}")
+            logger.debug(f"detect_hr_and_timestamp_positions_advanced: No HR candidates for timestamp position {ts_pos}")
             continue
         
-        logger.info(f"detect_hr_and_timestamp_positions_advanced: Found {len(hr_candidates)} HR candidates for timestamp position {ts_pos}")
+        logger.debug(f"detect_hr_and_timestamp_positions_advanced: Found {len(hr_candidates)} HR candidates for timestamp position {ts_pos}")
         
         # For each HR candidate, calculate correlation with daily HR pattern
         for hr_pos, unique_count, min_hr, max_hr in hr_candidates:
             correlation = calculate_hr_correlation(activity_metrics, ts_pos, hr_pos, 
                                                 activity_start_time, activity_duration, daily_hr_data)
             
-            logger.info(f"detect_hr_and_timestamp_positions_advanced: HR pos {hr_pos}, TS pos {ts_pos}, correlation: {correlation:.3f}")
+            logger.debug(f"detect_hr_and_timestamp_positions_advanced: HR pos {hr_pos}, TS pos {ts_pos}, correlation: {correlation:.3f}")
             
             if correlation > best_correlation:
                 best_correlation = correlation
@@ -284,7 +284,7 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
     if not activity_metrics:
         return None, None
     
-    logger.info(f"detect_hr_and_timestamp_positions (fallback): Starting detection with {len(activity_metrics)} metric entries")
+    logger.debug(f"detect_hr_and_timestamp_positions (fallback): Starting detection with {len(activity_metrics)} metric entries")
     
     # Collect all values for each position
     position_data = {}
@@ -297,7 +297,7 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
                 if value is not None:
                     position_data[pos].append(value)
     
-    logger.info(f"detect_hr_and_timestamp_positions (fallback): Collected data for {len(position_data)} positions")
+    logger.debug(f"detect_hr_and_timestamp_positions (fallback): Collected data for {len(position_data)} positions")
     
     # Find heart rate position (values in 48-167 range, should be integers)
     hr_candidates = []

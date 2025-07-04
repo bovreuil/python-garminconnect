@@ -148,3 +148,6 @@ dmypy.json
 # Ignore folder for local testing
 ignore/
 .rules
+
+# Test files and analysis scripts
+test_files_backup/
