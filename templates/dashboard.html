@@ -958,14 +958,49 @@ function createActivitiesChart(activities) {
             responsive: true,
             maintainAspectRatio: false,
             onClick: function(event, elements) {
-                if (elements.length > 0) {
-                    const dataIndex = elements[0].index;
-                    const activity = activities[dataIndex];
-                    showSingleActivityView(activity);
+                const canvas = event.native.target;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.native.x - rect.left;
+                const y = event.native.y - rect.top;
+                
+                // Get the chart area
+                const chartArea = activitiesChart.chartArea;
+                if (!chartArea) return;
+                
+                // Check if click is within the chart area (excluding axes)
+                if (x >= chartArea.left && x <= chartArea.right && 
+                    y >= chartArea.top && y <= chartArea.bottom) {
+                    
+                    // Calculate which activity row was clicked based on y-coordinate
+                    const yAxis = activitiesChart.scales.y;
+                    const clickIndex = yAxis.getValueForPixel(y);
+                    
+                    if (clickIndex >= 0 && clickIndex < activities.length) {
+                        const activity = activities[clickIndex];
+                        showSingleActivityView(activity);
+                    }
                 }
             },
             onHover: function(event, elements) {
-                event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                const canvas = event.native.target;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.native.x - rect.left;
+                const y = event.native.y - rect.top;
+                
+                // Get the chart area
+                const chartArea = activitiesChart.chartArea;
+                if (!chartArea) {
+                    event.native.target.style.cursor = 'default';
+                    return;
+                }
+                
+                // Check if hover is within the chart area (excluding axes)
+                if (x >= chartArea.left && x <= chartArea.right && 
+                    y >= chartArea.top && y <= chartArea.bottom) {
+                    event.native.target.style.cursor = 'pointer';
+                } else {
+                    event.native.target.style.cursor = 'default';
+                }
             },
             plugins: {
                 legend: {
