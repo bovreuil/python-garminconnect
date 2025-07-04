@@ -256,20 +256,38 @@ def collect_garmin_data_job(target_date: str, job_id: str):
             logger.warning(f"collect_garmin_data_job: Failed to collect activities: {activity_error}")
             activity_collection_success = False
         
-        # If no daily HR data was found but we have activities, try to construct daily data from activities
-        if not has_daily_hr_data and activity_collection_success:
-            logger.info(f"collect_garmin_data_job: No daily HR data found, attempting to construct from activities")
-            try:
-                construct_daily_data_from_activities(target_date, conn, cur)
-            except Exception as construction_error:
-                logger.warning(f"collect_garmin_data_job: Failed to construct daily data from activities: {construction_error}")
-        elif has_daily_hr_data and activity_collection_success:
-            # If we have daily HR data and activities, merge activity HR into daily data
-            logger.info(f"collect_garmin_data_job: Daily HR data found, merging activity HR data")
-            try:
-                merge_activity_hr_into_daily(target_date, conn, cur)
-            except Exception as merge_error:
-                logger.warning(f"collect_garmin_data_job: Failed to merge activity HR into daily data: {merge_error}")
+        # Build the final HR time series for the day
+        logger.info(f"collect_garmin_data_job: Building final HR time series for {target_date}")
+        final_hr_series = build_daily_hr_timeseries(target_date, conn, cur)
+        
+        if final_hr_series:
+            logger.info(f"collect_garmin_data_job: Built HR time series with {len(final_hr_series)} points")
+            
+            # Calculate TRIMP from the final HR time series
+            trimp_results = calculate_trimp_from_timeseries(final_hr_series)
+            
+            # Update or insert daily data
+            cur.execute("DELETE FROM daily_data WHERE date = ?", (target_date,))
+            cur.execute("""
+                INSERT INTO daily_data 
+                (date, heart_rate_series, trimp_data, total_trimp, daily_score, activity_type)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                str(target_date),
+                json.dumps(final_hr_series),
+                json.dumps({
+                    'presentation_buckets': trimp_results['presentation_buckets'],
+                    'total_trimp': trimp_results['total_trimp']
+                }),
+                float(trimp_results['total_trimp']),
+                0.0,  # daily_score - could be calculated separately
+                'mixed'  # activity_type - could be determined from activities
+            ))
+            
+            conn.commit()
+            logger.info(f"collect_garmin_data_job: Updated daily data with {len(final_hr_series)} HR points, TRIMP: {trimp_results['total_trimp']}")
+        else:
+            logger.info(f"collect_garmin_data_job: No HR time series could be built for {target_date}")
         
         # Update job status based on whether activity collection succeeded
         if activity_collection_success:
@@ -469,14 +487,14 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                         
                         logger.info(f"collect_activities_for_date: Checked {hr_values_checked} HR values, filtered {hr_values_filtered}, extracted {len(hr_series)}")
                         
-                        # Calculate TRIMP for activity
+                        # Calculate TRIMP for activity using the new function
                         if hr_series:
-                            total_trimp, trimp_breakdown = calculate_trimp(hr_series)
+                            trimp_results = calculate_trimp_from_timeseries(hr_series)
                             trimp_data = {
-                                'presentation_buckets': trimp_breakdown,
-                                'total_trimp': total_trimp
+                                'presentation_buckets': trimp_results['presentation_buckets'],
+                                'total_trimp': trimp_results['total_trimp']
                             }
-                            logger.info(f"collect_activities_for_date: Calculated TRIMP for activity {activity_id}: {total_trimp}")
+                            logger.info(f"collect_activities_for_date: Calculated TRIMP for activity {activity_id}: {trimp_results['total_trimp']}")
                     else:
                         logger.warning(f"collect_activities_for_date: Could not find HR and timestamp positions for activity {activity_id}")
                 else:
@@ -503,7 +521,7 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                 int(max_hr) if max_hr else None, 
                 json.dumps(hr_series), 
                 json.dumps(trimp_data), 
-                float(total_trimp)
+                float(trimp_results['total_trimp'])
             ))
             
             logger.info(f"collect_activities_for_date: Stored activity {activity_id} in new schema")
@@ -515,163 +533,11 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
         logger.error(f"collect_activities_for_date: Error collecting activities for {target_date}: {e}")
         raise 
 
-def calculate_trimp(hr_series):
-    """
-    Calculate TRIMP from heart rate series data.
-    
-    Args:
-        hr_series: List of [timestamp, heart_rate] pairs
-        
-    Returns:
-        Tuple of (total_trimp, trimp_breakdown)
-    """
-    if not hr_series or len(hr_series) < 2:
-        return 0.0, {}
-    
-    # Get HR parameters
-    resting_hr, max_hr = get_user_hr_parameters()
-    
-    # Calculate TRIMP using the same logic as before
-    total_trimp = 0.0
-    trimp_by_zone = {}
-    
-    # Skip the first reading since it has no previous timestamp
-    for i in range(1, len(hr_series)):
-        current_ts, current_hr = hr_series[i]
-        prev_ts, prev_hr = hr_series[i-1]
-        
-        # Skip if any values are None
-        if current_ts is None or current_hr is None or prev_ts is None or prev_hr is None:
-            continue
-        
-        # Skip readings if the gap from the previous reading is greater than 300 seconds (5 minutes)
-        time_diff = (current_ts - prev_ts) / 1000  # Convert from milliseconds to seconds
-        if time_diff > 300:
-            continue
-        
-        # Calculate time interval in minutes
-        interval_minutes = time_diff / 60
-        
-        # Calculate TRIMP for this interval
-        hr_reserve = (current_hr - resting_hr) / (max_hr - resting_hr)
-        trimp_value = interval_minutes * hr_reserve * 0.64 * math.exp(1.92 * hr_reserve)
-        
-        total_trimp += trimp_value
-        
-        # Categorize by HR zone
-        zone = categorize_hr_zone(current_hr, resting_hr, max_hr)
-        if zone not in trimp_by_zone:
-            trimp_by_zone[zone] = {'minutes': 0, 'trimp': 0}
-        
-        trimp_by_zone[zone]['minutes'] += interval_minutes
-        trimp_by_zone[zone]['trimp'] += trimp_value
-    
-    return total_trimp, trimp_by_zone
 
-def categorize_hr_zone(hr, resting_hr, max_hr):
-    """Categorize heart rate into zones."""
-    if hr < 80:
-        return 'Below 80'
-    elif hr < 90:
-        return '80-89'
-    elif hr < 100:
-        return '90-99'
-    elif hr < 110:
-        return '100-109'
-    elif hr < 120:
-        return '110-119'
-    elif hr < 130:
-        return '120-129'
-    elif hr < 140:
-        return '130-139'
-    elif hr < 150:
-        return '140-149'
-    elif hr < 160:
-        return '150-159'
-    else:
-        return '160+'
 
-def merge_activity_hr_into_daily(target_date, conn, cur):
-    """
-    Merge activity HR data into daily HR data.
-    
-    Args:
-        target_date: Date to process
-        conn: Database connection
-        cur: Database cursor
-    """
-    logger.info(f"merge_activity_hr_into_daily: Starting merge for {target_date}")
-    
-    # Get daily HR data
-    cur.execute("SELECT heart_rate_series FROM daily_data WHERE date = ?", (target_date,))
-    daily_result = cur.fetchone()
-    
-    if not daily_result or not daily_result['heart_rate_series']:
-        logger.info(f"merge_activity_hr_into_daily: No daily HR data found for {target_date}")
-        return
-    
-    daily_hr_series = json.loads(daily_result['heart_rate_series'])
-    logger.info(f"merge_activity_hr_into_daily: Found {len(daily_hr_series)} daily HR points")
-    
-    # Get all activities for this date
-    cur.execute("""
-        SELECT activity_id, heart_rate_series, start_time_local, duration_seconds
-        FROM activity_data 
-        WHERE date = ? AND heart_rate_series IS NOT NULL
-        ORDER BY start_time_local
-    """, (target_date,))
-    
-    activities = cur.fetchall()
-    logger.info(f"merge_activity_hr_into_daily: Found {len(activities)} activities with HR data")
-    
-    # Process each activity
-    for activity in activities:
-        activity_id = activity['activity_id']
-        activity_hr_series = json.loads(activity['heart_rate_series'])
-        start_time = activity['start_time_local']
-        duration = activity['duration_seconds']
-        
-        if not activity_hr_series:
-            continue
-        
-        logger.info(f"merge_activity_hr_into_daily: Processing activity {activity_id} with {len(activity_hr_series)} HR points")
-        
-        # Find continuous segments in activity HR data
-        segments = find_continuous_segments(activity_hr_series)
-        logger.info(f"merge_activity_hr_into_daily: Found {len(segments)} continuous segments")
-        
-        # Replace daily HR data with activity HR data for each segment
-        for segment in segments:
-            segment_start = segment[0][0]  # First timestamp in segment
-            segment_end = segment[-1][0]   # Last timestamp in segment
-            
-            # Remove daily HR points that fall within this segment
-            daily_hr_series = [point for point in daily_hr_series 
-                             if point[0] < segment_start or point[0] > segment_end]
-            
-            # Add activity HR points for this segment
-            daily_hr_series.extend(segment)
-            
-            logger.info(f"merge_activity_hr_into_daily: Replaced daily HR data from {segment_start} to {segment_end}")
-        
-        # Sort daily HR series by timestamp
-        daily_hr_series.sort(key=lambda x: x[0])
-    
-    # Calculate daily TRIMP from merged data
-    total_trimp, trimp_breakdown = calculate_trimp(daily_hr_series)
-    trimp_data = {
-        'presentation_buckets': trimp_breakdown,
-        'total_trimp': total_trimp
-    }
-    
-    # Update daily data
-    cur.execute("""
-        UPDATE daily_data 
-        SET heart_rate_series = ?, trimp_data = ?, total_trimp = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE date = ?
-    """, (json.dumps(daily_hr_series), json.dumps(trimp_data), total_trimp, target_date))
-    
-    logger.info(f"merge_activity_hr_into_daily: Updated daily data with {len(daily_hr_series)} HR points, TRIMP: {total_trimp}")
+
+
+
 
 def find_continuous_segments(hr_series):
     """
@@ -712,16 +578,32 @@ def find_continuous_segments(hr_series):
     
     return segments 
 
-def construct_daily_data_from_activities(target_date, conn, cur):
+
+
+def build_daily_hr_timeseries(target_date, conn, cur):
     """
-    Construct daily HR data from activities when no daily HR data exists.
+    Build the daily HR time series by combining daily HR data and activity HR data.
     
     Args:
         target_date: Date to process
         conn: Database connection
         cur: Database cursor
+        
+    Returns:
+        List of [timestamp, heart_rate] pairs for the day
     """
-    logger.info(f"construct_daily_data_from_activities: Starting construction for {target_date}")
+    logger.info(f"build_daily_hr_timeseries: Building HR time series for {target_date}")
+    
+    # Get daily HR data
+    cur.execute("SELECT heart_rate_series FROM daily_data WHERE date = ?", (target_date,))
+    daily_result = cur.fetchone()
+    
+    daily_hr_series = []
+    if daily_result and daily_result['heart_rate_series']:
+        daily_hr_series = json.loads(daily_result['heart_rate_series'])
+        logger.info(f"build_daily_hr_timeseries: Found {len(daily_hr_series)} daily HR points")
+    else:
+        logger.info(f"build_daily_hr_timeseries: No daily HR data found for {target_date}")
     
     # Get all activities for this date
     cur.execute("""
@@ -732,71 +614,109 @@ def construct_daily_data_from_activities(target_date, conn, cur):
     """, (target_date,))
     
     activities = cur.fetchall()
-    logger.info(f"construct_daily_data_from_activities: Found {len(activities)} activities with HR data")
+    logger.info(f"build_daily_hr_timeseries: Found {len(activities)} activities with HR data")
     
-    if not activities:
-        logger.info(f"construct_daily_data_from_activities: No activities with HR data found for {target_date}")
-        return
+    # If no daily HR data and no activities, return empty
+    if not daily_hr_series and not activities:
+        logger.info(f"build_daily_hr_timeseries: No HR data available for {target_date}")
+        return []
     
-    # Collect all HR data from activities
-    all_hr_series = []
-    total_duration_seconds = 0
-    
-    for activity in activities:
-        activity_id = activity['activity_id']
-        activity_hr_series = json.loads(activity['heart_rate_series'])
-        duration_seconds = activity['duration_seconds']
+    # If no daily HR data but we have activities, construct from activities only
+    if not daily_hr_series and activities:
+        logger.info(f"build_daily_hr_timeseries: Constructing from activities only")
+        all_hr_series = []
         
-        if not activity_hr_series:
-            continue
+        for activity in activities:
+            activity_hr_series = json.loads(activity['heart_rate_series'])
+            if activity_hr_series:
+                # Find continuous segments in activity HR data
+                segments = find_continuous_segments(activity_hr_series)
+                logger.info(f"build_daily_hr_timeseries: Activity {activity['activity_id']} has {len(segments)} segments")
+                
+                # Add all segments to the daily HR series
+                for segment in segments:
+                    all_hr_series.extend(segment)
         
-        logger.info(f"construct_daily_data_from_activities: Processing activity {activity_id} with {len(activity_hr_series)} HR points")
-        
-        # Add activity duration to total
-        if duration_seconds:
-            total_duration_seconds += duration_seconds
-        
-        # Find continuous segments in activity HR data
-        segments = find_continuous_segments(activity_hr_series)
-        logger.info(f"construct_daily_data_from_activities: Found {len(segments)} continuous segments")
-        
-        # Add all segments to the daily HR series
-        for segment in segments:
-            all_hr_series.extend(segment)
+        if all_hr_series:
+            all_hr_series.sort(key=lambda x: x[0])
+            logger.info(f"build_daily_hr_timeseries: Constructed {len(all_hr_series)} HR points from activities")
+            return all_hr_series
+        else:
+            logger.info(f"build_daily_hr_timeseries: No HR data collected from activities")
+            return []
     
-    if not all_hr_series:
-        logger.info(f"construct_daily_data_from_activities: No HR data collected from activities for {target_date}")
-        return
+    # If we have daily HR data, merge with activity data
+    if daily_hr_series:
+        logger.info(f"build_daily_hr_timeseries: Merging daily HR data with activity data")
+        
+        # Process each activity
+        for activity in activities:
+            activity_id = activity['activity_id']
+            activity_hr_series = json.loads(activity['heart_rate_series'])
+            
+            if not activity_hr_series:
+                continue
+            
+            logger.info(f"build_daily_hr_timeseries: Processing activity {activity_id} with {len(activity_hr_series)} HR points")
+            
+            # Find continuous segments in activity HR data
+            segments = find_continuous_segments(activity_hr_series)
+            logger.info(f"build_daily_hr_timeseries: Found {len(segments)} continuous segments")
+            
+            # Replace daily HR data with activity HR data for each segment
+            for segment in segments:
+                segment_start = segment[0][0]  # First timestamp in segment
+                segment_end = segment[-1][0]   # Last timestamp in segment
+                
+                # Remove daily HR points that fall within this segment
+                daily_hr_series = [point for point in daily_hr_series 
+                                 if point[0] < segment_start or point[0] > segment_end]
+                
+                # Add activity HR points for this segment
+                daily_hr_series.extend(segment)
+                
+                logger.info(f"build_daily_hr_timeseries: Replaced daily HR data from {segment_start} to {segment_end}")
+            
+            # Sort daily HR series by timestamp
+            daily_hr_series.sort(key=lambda x: x[0])
+        
+        logger.info(f"build_daily_hr_timeseries: Final HR time series has {len(daily_hr_series)} points")
+        return daily_hr_series
     
-    # Sort by timestamp
-    all_hr_series.sort(key=lambda x: x[0])
-    logger.info(f"construct_daily_data_from_activities: Collected {len(all_hr_series)} total HR points")
+    return []
+
+def calculate_trimp_from_timeseries(hr_series):
+    """
+    Calculate TRIMP from heart rate series data.
     
-    # Get HR parameters for analysis
+    Args:
+        hr_series: List of [timestamp, heart_rate] pairs
+        
+    Returns:
+        Dict with presentation_buckets and total_trimp
+    """
+    if not hr_series or len(hr_series) < 2:
+        return {
+            'presentation_buckets': {},
+            'total_trimp': 0.0
+        }
+    
+    # Get HR parameters
     resting_hr, max_hr = get_user_hr_parameters()
-    analyzer = HeartRateAnalyzer(resting_hr, max_hr)
     
-    # Create a heart_rate_data structure for analysis
+    # Use the existing TRIMPCalculator which has the correct presentation bucket logic
+    from models import TRIMPCalculator
+    calculator = TRIMPCalculator(resting_hr, max_hr)
+    
+    # Convert to the format expected by TRIMPCalculator
     heart_rate_data = {
-        'heartRateValues': all_hr_series
+        'heartRateValues': hr_series
     }
     
-    # Analyze the constructed data
-    analysis_results = analyzer.analyze_heart_rate_data(heart_rate_data)
+    # Calculate TRIMP using the existing logic
+    results = calculator.bucket_heart_rates(heart_rate_data)
     
-    # Store in daily_data table
-    cur.execute("""
-        INSERT INTO daily_data 
-        (date, heart_rate_series, trimp_data, total_trimp, daily_score, activity_type)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        str(target_date),
-        json.dumps(all_hr_series),
-        json.dumps(analysis_results['trimp_data']),
-        float(analysis_results['total_trimp']),
-        float(analysis_results['daily_score']),
-        str(analysis_results['activity_type'])
-    ))
-    
-    conn.commit()
-    logger.info(f"construct_daily_data_from_activities: Created daily data with {len(all_hr_series)} HR points, TRIMP: {analysis_results['total_trimp']}, Duration: {total_duration_seconds/60:.1f} minutes") 
+    return {
+        'presentation_buckets': results['presentation_buckets'],
+        'total_trimp': results['total_trimp']
+    } 

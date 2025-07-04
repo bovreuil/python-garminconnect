@@ -465,6 +465,10 @@ def get_data(date):
         heart_rate_series = json.loads(data['heart_rate_series']) if data['heart_rate_series'] else []
         trimp_data = json.loads(data['trimp_data']) if data['trimp_data'] else {}
         
+        # Debug logging
+        print(f"API DEBUG: trimp_data keys: {list(trimp_data.keys())}")
+        print(f"API DEBUG: trimp_data has presentation_buckets: {'presentation_buckets' in trimp_data}")
+        
         return jsonify({
             'date': date,
             'heart_rate_values': heart_rate_series,
