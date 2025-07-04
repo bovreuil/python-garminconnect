@@ -39,7 +39,6 @@ from models import HeartRateAnalyzer, TRIMPCalculator
 
 # Import configuration
 from config import SERVER_CONFIG, API_CONFIG
-from database import get_user_hr_parameters
 
 # Load environment variables
 load_dotenv('env.local')
@@ -184,19 +183,7 @@ def ensure_user_hr_parameters(resting_hr: int, max_hr: int):
     cur.close()
     conn.close()
 
-def get_user_hr_parameters():
-    """Get HR parameters for the system."""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute("SELECT resting_hr, max_hr FROM hr_parameters LIMIT 1")
-    result = cur.fetchone()
-    cur.close()
-    conn.close()
-    
-    if result:
-        return result['resting_hr'], result['max_hr']
-    return 48, 167  # Default values
+
 
 def create_background_job(job_type: str, target_date: Optional[str] = None, start_date: Optional[str] = None, end_date: Optional[str] = None) -> str:
     """Create a background job record and return the job ID."""

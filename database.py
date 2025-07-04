@@ -7,13 +7,19 @@ import sqlite3
 from cryptography.fernet import Fernet
 import os
 from dotenv import load_dotenv
+import logging
 
 # Load environment variables
 load_dotenv('env.local')
 
 # Encryption key for passwords
-ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', Fernet.generate_key())
-cipher_suite = Fernet(ENCRYPTION_KEY)
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
+if ENCRYPTION_KEY:
+    cipher_suite = Fernet(ENCRYPTION_KEY.encode())
+else:
+    cipher_suite = Fernet(Fernet.generate_key())
+
+logger = logging.getLogger(__name__)
 
 def get_db_connection():
     """Create a SQLite database connection."""
@@ -56,10 +62,12 @@ def get_user_hr_parameters():
     conn.close()
     
     if result:
+        logger.info(f"get_user_hr_parameters: Found HR parameters - resting: {result['resting_hr']}, max: {result['max_hr']}")
         return result['resting_hr'], result['max_hr']
     else:
+        logger.warning(f"get_user_hr_parameters: No HR parameters found in database, using defaults")
         # Default values for Pete
-        return 48, 167 
+        return 48, 167
 
 def init_database():
     """Initialize the database with all required tables."""

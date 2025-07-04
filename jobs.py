@@ -26,261 +26,9 @@ from config import TIME_CONFIG, API_CONFIG
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def detect_hr_and_timestamp_positions_advanced(activity_metrics: List[Dict], target_date: str, 
-                                              activity_start_time: str, activity_duration: float, 
-                                              daily_hr_data: List[List]) -> Tuple[Optional[int], Optional[int], float]:
-    """
-    Advanced detection using timestamp range validation, HR range validation, and correlation with daily HR data.
-    
-    Args:
-        activity_metrics: List of metric entries from activityDetailMetrics
-        target_date: Date being processed (YYYY-MM-DD)
-        activity_start_time: Activity start time (ISO format)
-        activity_duration: Activity duration in seconds
-        daily_hr_data: Daily HR data as [[timestamp, hr_value], ...]
-        
-    Returns:
-        Tuple of (heart_rate_position, timestamp_position, correlation_score) or (None, None, 0.0)
-    """
-    if not activity_metrics or not daily_hr_data:
-        logger.info("detect_hr_and_timestamp_positions_advanced: No activity metrics or daily HR data")
-        return None, None, 0.0
-    
-    # Get HR parameters from database
-    resting_hr, max_hr = get_user_hr_parameters()
-    
-    # 1. Calculate timestamp range (3-day window centered on target date)
-    target_datetime = datetime.strptime(target_date, "%Y-%m-%d")
-    start_range = target_datetime - timedelta(days=1)  # 2025-07-01 00:00:00
-    end_range = target_datetime + timedelta(days=2)    # 2025-07-04 00:00:00
-    
-    start_timestamp = int(start_range.timestamp() * 1000)
-    end_timestamp = int(end_range.timestamp() * 1000)
-    
-    logger.info(f"detect_hr_and_timestamp_positions_advanced: Looking for timestamps in range {start_timestamp} to {end_timestamp}")
-    
-    # 2. Find timestamp candidates within range
-    ts_candidates = []
-    position_data = {}
-    
-    # Collect all values for each position
-    for entry in activity_metrics:
-        if 'metrics' in entry:
-            metrics = entry['metrics']
-            for pos, value in enumerate(metrics):
-                if pos not in position_data:
-                    position_data[pos] = []
-                if value is not None:
-                    position_data[pos].append(value)
-    
-    # Find timestamp candidates (large numbers in our range with many unique values)
-    for pos, values in position_data.items():
-        if values and min(values) > 1000000000000:  # Timestamps are in milliseconds
-            if start_timestamp <= min(values) <= end_timestamp and start_timestamp <= max(values) <= end_timestamp:
-                unique_count = len(set(values))
-                if unique_count > API_CONFIG['UNIQUE_TIMESTAMP_THRESHOLD']:  # Should have many unique timestamps
-                    ts_candidates.append((pos, unique_count, min(values), max(values)))
-    
-    if not ts_candidates:
-        logger.warning("detect_hr_and_timestamp_positions_advanced: No valid timestamp candidates found")
-        return None, None, 0.0
-    
-    logger.debug(f"detect_hr_and_timestamp_positions_advanced: Found {len(ts_candidates)} timestamp candidates")
-    
-    # 3. For each timestamp candidate, find HR candidates and calculate correlation
-    best_correlation = 0.0
-    best_hr_pos = None
-    best_ts_pos = None
-    
-    for ts_pos, unique_count, min_ts, max_ts in ts_candidates:
-        logger.debug(f"detect_hr_and_timestamp_positions_advanced: Checking timestamp position {ts_pos}")
-        
-        # Find HR candidates in configured range
-        hr_candidates = []
-        for pos, values in position_data.items():
-            if values and min(values) >= resting_hr and max(values) <= max_hr:
-                # Exclude GPS coordinates (values around 51.4-51.5 are likely London latitude)
-                if not (min(values) >= 51.4 and max(values) <= 51.5):
-                    unique_count = len(set(values))
-                    if unique_count > 5:  # Should have many different HR values
-                        hr_candidates.append((pos, unique_count, min(values), max(values)))
-        
-        if not hr_candidates:
-            logger.debug(f"detect_hr_and_timestamp_positions_advanced: No HR candidates for timestamp position {ts_pos}")
-            continue
-        
-        logger.debug(f"detect_hr_and_timestamp_positions_advanced: Found {len(hr_candidates)} HR candidates for timestamp position {ts_pos}")
-        
-        # For each HR candidate, calculate correlation with daily HR pattern
-        for hr_pos, unique_count, min_hr, max_hr in hr_candidates:
-            correlation = calculate_hr_correlation(activity_metrics, ts_pos, hr_pos, 
-                                                activity_start_time, activity_duration, daily_hr_data)
-            
-            logger.debug(f"detect_hr_and_timestamp_positions_advanced: HR pos {hr_pos}, TS pos {ts_pos}, correlation: {correlation:.3f}")
-            
-            if correlation > best_correlation:
-                best_correlation = correlation
-                best_hr_pos = hr_pos
-                best_ts_pos = ts_pos
-    
-    # 4. Check if we found a good match
-    if best_correlation > 0.7:  # Adjustable threshold
-        logger.info(f"detect_hr_and_timestamp_positions_advanced: Found good match - HR pos {best_hr_pos}, TS pos {best_ts_pos}, correlation: {best_correlation:.3f}")
-        return best_hr_pos, best_ts_pos, best_correlation
-    else:
-        logger.warning(f"detect_hr_and_timestamp_positions_advanced: No good correlation found. Best: {best_correlation:.3f}")
-        return None, None, 0.0
-
-def calculate_hr_correlation(activity_metrics: List[Dict], ts_pos: int, hr_pos: int,
-                           activity_start_time: str, activity_duration: float, 
-                           daily_hr_data: List[List]) -> float:
-    """
-    Calculate correlation between activity HR series and daily HR pattern.
-    
-    Args:
-        activity_metrics: Activity metrics data
-        ts_pos: Timestamp position in metrics array
-        hr_pos: Heart rate position in metrics array
-        activity_start_time: Activity start time
-        activity_duration: Activity duration in seconds
-        daily_hr_data: Daily HR data as [[timestamp, hr_value], ...]
-        
-    Returns:
-        Correlation coefficient (0.0 to 1.0)
-    """
-    try:
-        # Get HR parameters from database
-        resting_hr, max_hr = get_user_hr_parameters()
-        
-        # 1. Extract activity HR time series
-        activity_hr_series = []
-        for entry in activity_metrics:
-            if 'metrics' in entry and len(entry['metrics']) > max(ts_pos, hr_pos):
-                metrics = entry['metrics']
-                timestamp = metrics[ts_pos]
-                hr_value = metrics[hr_pos]
-                
-                if timestamp and hr_value and resting_hr <= hr_value <= max_hr:
-                    activity_hr_series.append([timestamp, hr_value])
-        
-        if len(activity_hr_series) < 10:  # Need minimum data points
-            return 0.0
-        
-        # 2. Get activity time window
-        activity_start = datetime.fromisoformat(activity_start_time.replace('Z', '+00:00'))
-        activity_start_ts = int(activity_start.timestamp() * 1000)
-        activity_end_ts = activity_start_ts + int(activity_duration * 1000)
-        
-        # 3. Extract daily HR data for activity time window
-        daily_hr_window = []
-        for timestamp, hr_value in daily_hr_data:
-            if activity_start_ts <= timestamp <= activity_end_ts:
-                daily_hr_window.append([timestamp, hr_value])
-        
-        if len(daily_hr_window) < 5:  # Need minimum daily data points
-            return 0.0
-        
-        # 4. Align the two series for correlation calculation
-        # We'll resample both to the same time points
-        aligned_data = align_hr_series(activity_hr_series, daily_hr_window)
-        
-        if len(aligned_data) < 5:  # Need minimum aligned points
-            return 0.0
-        
-        # 5. Calculate correlation
-        activity_values = [point[0] for point in aligned_data]
-        daily_values = [point[1] for point in aligned_data]
-        
-        # Calculate correlation coefficient manually (Pearson correlation)
-        correlation = calculate_pearson_correlation(activity_values, daily_values)
-        
-        return abs(correlation)  # Use absolute value since we care about magnitude, not direction
-        
-    except Exception as e:
-        logger.error(f"calculate_hr_correlation: Error calculating correlation: {e}")
-        return 0.0
-
-def align_hr_series(activity_hr_series: List[List], daily_hr_window: List[List]) -> List[List]:
-    """
-    Align activity HR series with daily HR window for correlation calculation.
-    
-    Args:
-        activity_hr_series: Activity HR data as [[timestamp, hr_value], ...]
-        daily_hr_window: Daily HR data for activity time window
-        
-    Returns:
-        Aligned data as [[activity_hr, daily_hr], ...]
-    """
-    if not activity_hr_series or not daily_hr_window:
-        return []
-    
-    # Sort both series by timestamp
-    activity_hr_series.sort(key=lambda x: x[0])
-    daily_hr_window.sort(key=lambda x: x[0])
-    
-    # Create a mapping of daily HR data by timestamp
-    daily_hr_map = {}
-    for timestamp, hr_value in daily_hr_window:
-        daily_hr_map[timestamp] = hr_value
-    
-    # Align activity HR with nearest daily HR values
-    aligned_data = []
-    for activity_ts, activity_hr in activity_hr_series:
-        # Find the closest daily HR timestamp
-        closest_ts = min(daily_hr_map.keys(), key=lambda x: abs(x - activity_ts))
-        
-        # Only include if timestamps are within 30 seconds (30000ms)
-        if abs(closest_ts - activity_ts) <= 30000:
-            daily_hr = daily_hr_map[closest_ts]
-            aligned_data.append([activity_hr, daily_hr])
-    
-    return aligned_data
-
-def calculate_pearson_correlation(x_values: List[float], y_values: List[float]) -> float:
-    """
-    Calculate Pearson correlation coefficient between two lists of values.
-    
-    Args:
-        x_values: List of x values
-        y_values: List of y values
-        
-    Returns:
-        Correlation coefficient (-1.0 to 1.0)
-    """
-    if len(x_values) != len(y_values) or len(x_values) < 2:
-        return 0.0
-    
-    try:
-        # Calculate means
-        x_mean = sum(x_values) / len(x_values)
-        y_mean = sum(y_values) / len(y_values)
-        
-        # Calculate numerator (sum of products of deviations)
-        numerator = sum((x - x_mean) * (y - y_mean) for x, y in zip(x_values, y_values))
-        
-        # Calculate denominators (sum of squared deviations)
-        x_denominator = sum((x - x_mean) ** 2 for x in x_values)
-        y_denominator = sum((y - y_mean) ** 2 for y in y_values)
-        
-        # Calculate correlation coefficient
-        if x_denominator == 0 or y_denominator == 0:
-            return 0.0
-        
-        correlation = numerator / (x_denominator * y_denominator) ** 0.5
-        
-        # Handle any NaN or infinite values
-        if not (correlation >= -1.0 and correlation <= 1.0):
-            return 0.0
-        
-        return correlation
-        
-    except Exception as e:
-        logger.error(f"calculate_pearson_correlation: Error calculating correlation: {e}")
-        return 0.0
-
 def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Optional[int], Optional[int]]:
     """
-    Fallback detection using simple range-based approach.
+    Detect HR and timestamp positions in activity metrics data.
     
     Args:
         activity_metrics: List of metric entries from activityDetailMetrics
@@ -293,8 +41,7 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
     
     # Get HR parameters from database
     resting_hr, max_hr = get_user_hr_parameters()
-    
-    logger.debug(f"detect_hr_and_timestamp_positions (fallback): Starting detection with {len(activity_metrics)} metric entries")
+    logger.info(f"detect_hr_and_timestamp_positions: Using HR parameters - resting: {resting_hr}, max: {max_hr}")
     
     # Collect all values for each position
     position_data = {}
@@ -307,33 +54,53 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
                 if value is not None:
                     position_data[pos].append(value)
     
-    logger.debug(f"detect_hr_and_timestamp_positions (fallback): Collected data for {len(position_data)} positions")
+    logger.info(f"detect_hr_and_timestamp_positions: Collected data for {len(position_data)} positions")
     
-    # Find heart rate position (values in configured range, should be integers)
+    # Find HR and timestamp positions
     hr_candidates = []
-    for pos, values in position_data.items():
-        if values and min(values) >= resting_hr and max(values) <= max_hr:
-            # Check if all values are integers (HR data should be discrete)
-            all_integers = all(isinstance(v, (int, float)) and v == int(v) for v in values)
-            if all_integers:
-                unique_count = len(set(values))
-                if unique_count > 5:  # Should have some different heart rate values
-                    hr_candidates.append((pos, unique_count, min(values), max(values)))
-                    logger.info(f"detect_hr_and_timestamp_positions (fallback): HR candidate at position {pos}: "
-                              f"{unique_count} unique values, range {min(values)}-{max(values)}, all integers: {all_integers}")
-            else:
-                logger.info(f"detect_hr_and_timestamp_positions (fallback): Excluded position {pos} as non-integer data: "
-                          f"range {min(values)}-{max(values)}, all integers: {all_integers}")
-    
-    # Find timestamp position (large numbers > 1000000000000, many unique values)
     ts_candidates = []
+    
     for pos, values in position_data.items():
-        if values and min(values) > 1000000000000:  # Timestamps are in milliseconds since epoch
+        if values:
+            min_val = min(values)
+            max_val = max(values)
             unique_count = len(set(values))
-            if unique_count > 100:  # Should have many unique timestamps
-                ts_candidates.append((pos, unique_count, min(values), max(values)))
-                logger.info(f"detect_hr_and_timestamp_positions (fallback): Timestamp candidate at position {pos}: "
-                          f"{unique_count} unique values, range {min(values)}-{max(values)}")
+            sample_values = values[:5] if len(values) >= 5 else values
+            logger.info(f"detect_hr_and_timestamp_positions: Position {pos}: range {min_val}-{max_val}, {unique_count} unique values, sample: {sample_values}")
+            
+            # Check if in HR range using percentiles to avoid outliers
+            if len(values) >= 10:  # Need enough data for percentiles
+                sorted_values = sorted(values)
+                p10_idx = int(0.1 * len(sorted_values))
+                p90_idx = int(0.9 * len(sorted_values))
+                p10_value = sorted_values[p10_idx]
+                p90_value = sorted_values[p90_idx]
+                
+                # Check if percentiles are within HR range
+                if p10_value >= 40 and p90_value <= max_hr:
+                    # Check if all values are positive integers (HR data should be discrete positive integers)
+                    all_positive_integers = all(isinstance(v, (int, float)) and v == int(v) and v > 0 for v in values)
+                    if all_positive_integers:
+                        if unique_count > 5:
+                            hr_candidates.append((pos, unique_count, min_val, max_val))
+                            logger.info(f"detect_hr_and_timestamp_positions: HR candidate at position {pos}: "
+                                      f"{unique_count} unique values, range {min_val}-{max_val}, p10={p10_value}, p90={p90_value}")
+                        else:
+                            logger.info(f"detect_hr_and_timestamp_positions: Position {pos} in HR range but too few unique values: {unique_count}")
+                    else:
+                        logger.info(f"detect_hr_and_timestamp_positions: Position {pos} in HR range but not all positive integers")
+                else:
+                    logger.info(f"detect_hr_and_timestamp_positions: Position {pos} outside HR range: p10={p10_value}, p90={p90_value}")
+            else:
+                logger.info(f"detect_hr_and_timestamp_positions: Position {pos} has insufficient data for percentiles: {len(values)} values")
+            
+            # Check for timestamp candidates (large numbers > 1000000000000, many unique values)
+            if values and min(values) > 1000000000000:
+                unique_count = len(set(values))
+                if unique_count > 100:
+                    ts_candidates.append((pos, unique_count, min(values), max(values)))
+                    logger.info(f"detect_hr_and_timestamp_positions: Timestamp candidate at position {pos}: "
+                              f"{unique_count} unique values")
     
     # Select best candidates
     hr_position = None
@@ -341,35 +108,20 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
         # Sort by number of unique values (descending) and take the first
         hr_candidates.sort(key=lambda x: x[1], reverse=True)
         hr_position = hr_candidates[0][0]
-        logger.info(f"detect_hr_and_timestamp_positions (fallback): Selected HR position {hr_position} "
+        logger.info(f"detect_hr_and_timestamp_positions: Selected HR position {hr_position} "
                    f"({hr_candidates[0][1]} unique values, range {hr_candidates[0][2]}-{hr_candidates[0][3]})")
-        
-        # Log all HR candidates for debugging
-        logger.info(f"detect_hr_and_timestamp_positions (fallback): All HR candidates:")
-        for pos, unique_count, min_val, max_val in hr_candidates:
-            logger.info(f"  Position {pos}: {unique_count} unique values, range {min_val}-{max_val}")
     else:
-        logger.warning(f"detect_hr_and_timestamp_positions (fallback): No HR candidates found!")
-        # Log all positions that were in HR range but excluded
-        for pos, values in position_data.items():
-            if values and min(values) >= resting_hr and max(values) <= max_hr:
-                logger.info(f"detect_hr_and_timestamp_positions (fallback): Position {pos} in HR range but excluded: "
-                          f"range {min(values)}-{max(values)}, unique count {len(set(values))}")
+        logger.warning(f"detect_hr_and_timestamp_positions: No HR candidates found!")
     
     ts_position = None
     if ts_candidates:
         # Sort by number of unique values (descending) and take the first
         ts_candidates.sort(key=lambda x: x[1], reverse=True)
         ts_position = ts_candidates[0][0]
-        logger.info(f"detect_hr_and_timestamp_positions (fallback): Selected timestamp position {ts_position} "
+        logger.info(f"detect_hr_and_timestamp_positions: Selected timestamp position {ts_position} "
                    f"({ts_candidates[0][1]} unique values)")
-        
-        # Log all timestamp candidates for debugging
-        logger.info(f"detect_hr_and_timestamp_positions (fallback): All timestamp candidates:")
-        for pos, unique_count, min_val, max_val in ts_candidates:
-            logger.info(f"  Position {pos}: {unique_count} unique values, range {min_val}-{max_val}")
     else:
-        logger.warning(f"detect_hr_and_timestamp_positions (fallback): No timestamp candidates found!")
+        logger.warning(f"detect_hr_and_timestamp_positions: No timestamp candidates found!")
     
     return hr_position, ts_position
 
@@ -708,53 +460,20 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                 if activity_metrics:
                     logger.info(f"collect_activities_for_date: Found activityDetailMetrics with {len(activity_metrics)} entries")
                     
-                    # Use the same HR extraction logic as the app
-                    position_data = {}
-                    for entry in activity_metrics:
-                        if 'metrics' in entry:
-                            metrics = entry['metrics']
-                            for pos, value in enumerate(metrics):
-                                if pos not in position_data:
-                                    position_data[pos] = []
-                                if value is not None:
-                                    position_data[pos].append(value)
+                    # Use the clean HR detection function
+                    hr_pos, ts_pos = detect_hr_and_timestamp_positions(activity_metrics)
                     
-                    # Find HR and timestamp positions
-                    hr_candidates = []
-                    ts_candidates = []
-                    
-                    # Get HR parameters from database
-                    resting_hr, max_hr = get_user_hr_parameters()
-                    
-                    for pos, values in position_data.items():
-                        if values and min(values) >= resting_hr and max(values) <= max_hr:
-                            # Check if all values are integers
-                            all_integers = all(isinstance(v, (int, float)) and v == int(v) for v in values)
-                            if all_integers:
-                                unique_count = len(set(values))
-                                if unique_count > 5:
-                                    hr_candidates.append((pos, unique_count, min(values), max(values)))
-                                    logger.info(f"collect_activities_for_date: HR candidate at position {pos}: "
-                                              f"{unique_count} unique values, range {min(values)}-{max(values)}")
-                        
-                        if values and min(values) > 1000000000000:
-                            unique_count = len(set(values))
-                            if unique_count > 100:
-                                ts_candidates.append((pos, unique_count, min(values), max(values)))
-                                logger.info(f"collect_activities_for_date: Timestamp candidate at position {pos}: "
-                                          f"{unique_count} unique values")
-                    
-                    if hr_candidates and ts_candidates:
-                        # Sort by unique count (descending) and take the first
-                        hr_candidates.sort(key=lambda x: x[1], reverse=True)
-                        ts_candidates.sort(key=lambda x: x[1], reverse=True)
-                        
-                        hr_pos = hr_candidates[0][0]
-                        ts_pos = ts_candidates[0][0]
-                        
+                    if hr_pos is not None and ts_pos is not None:
                         logger.info(f"collect_activities_for_date: Selected HR position {hr_pos}, Timestamp position {ts_pos}")
                         
                         # Extract HR time series
+                        hr_values_checked = 0
+                        hr_values_filtered = 0
+                        
+                        # Get user's HR parameters for filtering
+                        user_resting_hr, user_max_hr = get_user_hr_parameters()
+                        logger.info(f"collect_activities_for_date: Using max HR {user_max_hr} for filtering")
+                        
                         for entry in activity_metrics:
                             if 'metrics' in entry and len(entry['metrics']) > max(hr_pos, ts_pos):
                                 metrics = entry['metrics']
@@ -762,9 +481,21 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                                 hr_value = metrics[hr_pos]
                                 
                                 if timestamp is not None and hr_value is not None:
+                                    hr_values_checked += 1
+                                    # Log first few HR values for debugging
+                                    if hr_values_checked <= 5:
+                                        logger.info(f"collect_activities_for_date: Sample HR value {hr_values_checked}: {hr_value} (type: {type(hr_value)})")
+                                    
+                                    # Skip HR readings above max HR (likely sensor artifacts)
+                                    if hr_value > user_max_hr:
+                                        if hr_values_checked <= 10:  # Log first 10 filtered values
+                                            logger.info(f"collect_activities_for_date: Filtering HR reading {hr_value} above max HR {user_max_hr}")
+                                        hr_values_filtered += 1
+                                        continue
+                                    
                                     hr_series.append([timestamp, int(hr_value)])
                         
-                        logger.info(f"collect_activities_for_date: Extracted {len(hr_series)} HR data points")
+                        logger.info(f"collect_activities_for_date: Checked {hr_values_checked} HR values, filtered {hr_values_filtered}, extracted {len(hr_series)}")
                         
                         # Calculate TRIMP for activity
                         if hr_series:
