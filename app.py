@@ -850,6 +850,124 @@ def get_job_status(job_id):
         'updated_at': job['updated_at']
     })
 
+@app.route('/api/activity/<activity_id>/notes', methods=['GET', 'POST'])
+def activity_notes(activity_id):
+    """Get or update notes for a specific activity."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            notes = data.get('notes', '').strip()
+            
+            # Update activity notes
+            cur.execute("""
+                UPDATE activity_data 
+                SET notes = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE activity_id = ?
+            """, (notes, activity_id))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Notes saved successfully',
+                'notes': notes
+            })
+            
+        except Exception as e:
+            logger.error(f"Error saving activity notes for {activity_id}: {e}")
+            return jsonify({'error': f'Error saving notes: {str(e)}'}), 500
+    
+    else:  # GET
+        try:
+            # Get current notes
+            cur.execute("SELECT notes FROM activity_data WHERE activity_id = ?", (activity_id,))
+            result = cur.fetchone()
+            
+            cur.close()
+            conn.close()
+            
+            if not result:
+                return jsonify({'error': 'Activity not found'}), 404
+            
+            return jsonify({
+                'success': True,
+                'notes': result['notes'] or ''
+            })
+            
+        except Exception as e:
+            logger.error(f"Error loading activity notes for {activity_id}: {e}")
+            return jsonify({'error': f'Error loading notes: {str(e)}'}), 500
+
+
+@app.route('/api/data/<date>/notes', methods=['GET', 'POST'])
+def daily_notes(date):
+    """Get or update notes for a specific date."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        target_date = datetime.strptime(date, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format'}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            notes = data.get('notes', '').strip()
+            
+            # Update daily notes
+            cur.execute("""
+                UPDATE daily_data 
+                SET notes = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE date = ?
+            """, (notes, target_date))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Notes saved successfully',
+                'notes': notes
+            })
+            
+        except Exception as e:
+            logger.error(f"Error saving daily notes for {date}: {e}")
+            return jsonify({'error': f'Error saving notes: {str(e)}'}), 500
+    
+    else:  # GET
+        try:
+            # Get current notes
+            cur.execute("SELECT notes FROM daily_data WHERE date = ?", (target_date,))
+            result = cur.fetchone()
+            
+            cur.close()
+            conn.close()
+            
+            if not result:
+                return jsonify({'error': 'Daily data not found'}), 404
+            
+            return jsonify({
+                'success': True,
+                'notes': result['notes'] or ''
+            })
+            
+        except Exception as e:
+            logger.error(f"Error loading daily notes for {date}: {e}")
+            return jsonify({'error': f'Error loading notes: {str(e)}'}), 500
+
 if __name__ == '__main__':
     init_database()
     app.run(debug=SERVER_CONFIG['DEBUG'], host=SERVER_CONFIG['HOST'], port=SERVER_CONFIG['DEFAULT_PORT']) 
