@@ -26,102 +26,55 @@ from config import TIME_CONFIG, API_CONFIG
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Optional[int], Optional[int]]:
+def detect_hr_and_timestamp_positions(activity_details: Dict) -> Tuple[Optional[int], Optional[int]]:
     """
-    Detect HR and timestamp positions in activity metrics data.
+    Detect HR and timestamp positions using metricDescriptors from activity details.
     
     Args:
-        activity_metrics: List of metric entries from activityDetailMetrics
+        activity_details: Activity details containing metricDescriptors and activityDetailMetrics
         
     Returns:
         Tuple of (heart_rate_position, timestamp_position) or (None, None) if not found
     """
-    if not activity_metrics:
+    if not activity_details:
         return None, None
     
-    # Get HR parameters from database
-    resting_hr, max_hr = get_user_hr_parameters()
-    logger.info(f"detect_hr_and_timestamp_positions: Using HR parameters - resting: {resting_hr}, max: {max_hr}")
+    # Get metricDescriptors from activity details
+    metric_descriptors = activity_details.get('metricDescriptors', [])
+    if not metric_descriptors:
+        logger.warning("detect_hr_and_timestamp_positions: No metricDescriptors found in activity details")
+        return None, None
     
-    # Collect all values for each position
-    position_data = {}
-    for entry in activity_metrics:
-        if 'metrics' in entry:
-            metrics = entry['metrics']
-            for pos, value in enumerate(metrics):
-                if pos not in position_data:
-                    position_data[pos] = []
-                if value is not None:
-                    position_data[pos].append(value)
+    logger.info(f"detect_hr_and_timestamp_positions: Found {len(metric_descriptors)} metric descriptors")
     
-    logger.info(f"detect_hr_and_timestamp_positions: Collected data for {len(position_data)} positions")
-    
-    # Find HR and timestamp positions
-    hr_candidates = []
-    ts_candidates = []
-    
-    for pos, values in position_data.items():
-        if values:
-            min_val = min(values)
-            max_val = max(values)
-            unique_count = len(set(values))
-            sample_values = values[:5] if len(values) >= 5 else values
-            logger.info(f"detect_hr_and_timestamp_positions: Position {pos}: range {min_val}-{max_val}, {unique_count} unique values, sample: {sample_values}")
-            
-            # Check if in HR range using percentiles to avoid outliers
-            if len(values) >= 10:  # Need enough data for percentiles
-                sorted_values = sorted(values)
-                p10_idx = int(0.1 * len(sorted_values))
-                p90_idx = int(0.9 * len(sorted_values))
-                p10_value = sorted_values[p10_idx]
-                p90_value = sorted_values[p90_idx]
-                
-                # Check if percentiles are within HR range
-                if p10_value >= 40 and p90_value <= max_hr:
-                    # Check if all values are positive integers (HR data should be discrete positive integers)
-                    all_positive_integers = all(isinstance(v, (int, float)) and v == int(v) and v > 0 for v in values)
-                    if all_positive_integers:
-                        if unique_count > 5:
-                            hr_candidates.append((pos, unique_count, min_val, max_val))
-                            logger.info(f"detect_hr_and_timestamp_positions: HR candidate at position {pos}: "
-                                      f"{unique_count} unique values, range {min_val}-{max_val}, p10={p10_value}, p90={p90_value}")
-                        else:
-                            logger.info(f"detect_hr_and_timestamp_positions: Position {pos} in HR range but too few unique values: {unique_count}")
-                    else:
-                        logger.info(f"detect_hr_and_timestamp_positions: Position {pos} in HR range but not all positive integers")
-                else:
-                    logger.info(f"detect_hr_and_timestamp_positions: Position {pos} outside HR range: p10={p10_value}, p90={p90_value}")
-            else:
-                logger.info(f"detect_hr_and_timestamp_positions: Position {pos} has insufficient data for percentiles: {len(values)} values")
-            
-            # Check for timestamp candidates (large numbers > 1000000000000, many unique values)
-            if values and min(values) > 1000000000000:
-                unique_count = len(set(values))
-                if unique_count > 100:
-                    ts_candidates.append((pos, unique_count, min(values), max(values)))
-                    logger.info(f"detect_hr_and_timestamp_positions: Timestamp candidate at position {pos}: "
-                              f"{unique_count} unique values")
-    
-    # Select best candidates
+    # Find HR and timestamp positions using the key
     hr_position = None
-    if hr_candidates:
-        # Sort by number of unique values (descending) and take the first
-        hr_candidates.sort(key=lambda x: x[1], reverse=True)
-        hr_position = hr_candidates[0][0]
-        logger.info(f"detect_hr_and_timestamp_positions: Selected HR position {hr_position} "
-                   f"({hr_candidates[0][1]} unique values, range {hr_candidates[0][2]}-{hr_candidates[0][3]})")
-    else:
-        logger.warning(f"detect_hr_and_timestamp_positions: No HR candidates found!")
-    
     ts_position = None
-    if ts_candidates:
-        # Sort by number of unique values (descending) and take the first
-        ts_candidates.sort(key=lambda x: x[1], reverse=True)
-        ts_position = ts_candidates[0][0]
-        logger.info(f"detect_hr_and_timestamp_positions: Selected timestamp position {ts_position} "
-                   f"({ts_candidates[0][1]} unique values)")
-    else:
-        logger.warning(f"detect_hr_and_timestamp_positions: No timestamp candidates found!")
+    
+    for descriptor in metric_descriptors:
+        metrics_index = descriptor.get('metricsIndex')
+        key = descriptor.get('key')
+        unit = descriptor.get('unit', {})
+        unit_key = unit.get('key', 'unknown')
+        factor = unit.get('factor', 1.0)
+        
+        logger.info(f"detect_hr_and_timestamp_positions: Index {metrics_index}: {key} ({unit_key}, factor={factor})")
+        
+        # Look for heart rate data
+        if key == 'directHeartRate':
+            hr_position = metrics_index
+            logger.info(f"detect_hr_and_timestamp_positions: Found HR at position {hr_position} (unit: {unit_key}, factor: {factor})")
+        
+        # Look for timestamp data
+        elif key == 'directTimestamp':
+            ts_position = metrics_index
+            logger.info(f"detect_hr_and_timestamp_positions: Found timestamp at position {ts_position} (unit: {unit_key}, factor: {factor})")
+    
+    if hr_position is None:
+        logger.warning("detect_hr_and_timestamp_positions: No directHeartRate found in metricDescriptors")
+    
+    if ts_position is None:
+        logger.warning("detect_hr_and_timestamp_positions: No directTimestamp found in metricDescriptors")
     
     return hr_position, ts_position
 
@@ -182,6 +135,12 @@ def collect_garmin_data_job(target_date: str, job_id: str):
         password = fernet.decrypt(creds['password_encrypted'].encode()).decode()
         
         logger.info(f"collect_garmin_data_job: Connecting to Garmin with email {creds['email']}")
+        
+        # Clean up any existing data for this date
+        logger.info(f"collect_garmin_data_job: Cleaning up existing data for {target_date}")
+        cur.execute("DELETE FROM daily_data WHERE date = ?", (target_date,))
+        cur.execute("DELETE FROM activity_data WHERE date = ?", (target_date,))
+        conn.commit()
         
         # Connect to Garmin
         api = Garmin(creds['email'], password)
@@ -267,9 +226,6 @@ def collect_garmin_data_job(target_date: str, job_id: str):
             # Store heart rate data in database
             logger.info(f"collect_garmin_data_job: Storing heart rate data for {target_date}")
             
-            # Delete existing data for this date
-            cur.execute("DELETE FROM daily_data WHERE date = ?", (target_date,))
-            
             # Calculate TRIMP and other metrics
             total_trimp = analysis_results['total_trimp']
             daily_score = analysis_results['daily_score']
@@ -307,6 +263,13 @@ def collect_garmin_data_job(target_date: str, job_id: str):
                 construct_daily_data_from_activities(target_date, conn, cur)
             except Exception as construction_error:
                 logger.warning(f"collect_garmin_data_job: Failed to construct daily data from activities: {construction_error}")
+        elif has_daily_hr_data and activity_collection_success:
+            # If we have daily HR data and activities, merge activity HR into daily data
+            logger.info(f"collect_garmin_data_job: Daily HR data found, merging activity HR data")
+            try:
+                merge_activity_hr_into_daily(target_date, conn, cur)
+            except Exception as merge_error:
+                logger.warning(f"collect_garmin_data_job: Failed to merge activity HR into daily data: {merge_error}")
         
         # Update job status based on whether activity collection succeeded
         if activity_collection_success:
@@ -424,9 +387,6 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
             logger.info(f"collect_activities_for_date: First activity type: {type(activities[0])}")
             logger.info(f"collect_activities_for_date: First activity keys: {list(activities[0].keys()) if isinstance(activities[0], dict) else 'Not a dict'}")
         
-        # Delete existing activity data for this date
-        cur.execute("DELETE FROM activity_data WHERE date = ?", (target_date,))
-        
         # Process each activity
         for activity in activities:
             activity_id = str(activity['activityId'])
@@ -460,11 +420,19 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                 if activity_metrics:
                     logger.info(f"collect_activities_for_date: Found activityDetailMetrics with {len(activity_metrics)} entries")
                     
-                    # Use the clean HR detection function
-                    hr_pos, ts_pos = detect_hr_and_timestamp_positions(activity_metrics)
+                    # Use the clean HR detection function with activity details
+                    hr_pos, ts_pos = detect_hr_and_timestamp_positions(activity_details)
                     
                     if hr_pos is not None and ts_pos is not None:
                         logger.info(f"collect_activities_for_date: Selected HR position {hr_pos}, Timestamp position {ts_pos}")
+                        
+                        # Get the factor for HR values from metricDescriptors
+                        hr_factor = 1.0
+                        for descriptor in activity_details.get('metricDescriptors', []):
+                            if descriptor.get('key') == 'directHeartRate':
+                                hr_factor = descriptor.get('unit', {}).get('factor', 1.0)
+                                logger.info(f"collect_activities_for_date: Using HR factor: {hr_factor}")
+                                break
                         
                         # Extract HR time series
                         hr_values_checked = 0
@@ -482,18 +450,22 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                                 
                                 if timestamp is not None and hr_value is not None:
                                     hr_values_checked += 1
+                                    
+                                    # Apply the factor to get the actual HR value
+                                    actual_hr_value = hr_value * hr_factor
+                                    
                                     # Log first few HR values for debugging
                                     if hr_values_checked <= 5:
-                                        logger.info(f"collect_activities_for_date: Sample HR value {hr_values_checked}: {hr_value} (type: {type(hr_value)})")
+                                        logger.info(f"collect_activities_for_date: Sample HR value {hr_values_checked}: raw={hr_value}, actual={actual_hr_value} (factor={hr_factor})")
                                     
                                     # Skip HR readings above max HR (likely sensor artifacts)
-                                    if hr_value > user_max_hr:
+                                    if actual_hr_value > user_max_hr:
                                         if hr_values_checked <= 10:  # Log first 10 filtered values
-                                            logger.info(f"collect_activities_for_date: Filtering HR reading {hr_value} above max HR {user_max_hr}")
+                                            logger.info(f"collect_activities_for_date: Filtering HR reading {actual_hr_value} above max HR {user_max_hr}")
                                         hr_values_filtered += 1
                                         continue
                                     
-                                    hr_series.append([timestamp, int(hr_value)])
+                                    hr_series.append([timestamp, int(actual_hr_value)])
                         
                         logger.info(f"collect_activities_for_date: Checked {hr_values_checked} HR values, filtered {hr_values_filtered}, extracted {len(hr_series)}")
                         
@@ -535,9 +507,6 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
             ))
             
             logger.info(f"collect_activities_for_date: Stored activity {activity_id} in new schema")
-        
-        # Now merge activity HR data into daily HR data
-        merge_activity_hr_into_daily(target_date, conn, cur)
         
         conn.commit()
         logger.info(f"collect_activities_for_date: Completed collection for {target_date}")
