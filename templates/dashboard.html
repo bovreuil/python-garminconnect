@@ -708,8 +708,11 @@ function showSingleActivityView(activity) {
     // Show the section
     document.getElementById('singleActivitySection').style.display = 'block';
     
-    // Create the activity heart rate chart
-    createActivityHeartRateChart(activity);
+    // Small delay to ensure DOM is fully updated before creating chart
+    setTimeout(() => {
+        // Create the activity heart rate chart
+        createActivityHeartRateChart(activity);
+    }, 50);
     
     // Display activity summary
     let summaryHtml = '<div class="row">';
@@ -801,6 +804,12 @@ function closeSingleActivityView() {
     if (activityHrChart) {
         activityHrChart.destroy();
         activityHrChart = null;
+    }
+    
+    // Clear the chart container to ensure clean state
+    const chartContainer = document.querySelector('#singleActivitySection .chart-container');
+    if (chartContainer) {
+        chartContainer.innerHTML = '<canvas id="activityHrChart"></canvas>';
     }
 }
 
@@ -1399,15 +1408,26 @@ function createHeartRateChart(date, dayData) {
 function createActivityHeartRateChart(activity) {
     console.log('Creating activity heart rate chart for activity:', activity);
     
-    const chartElement = document.getElementById('activityHrChart');
-    if (!chartElement) {
-        console.error('Activity chart element not found');
+    // Ensure the single activity section is visible
+    const singleActivitySection = document.getElementById('singleActivitySection');
+    if (!singleActivitySection || singleActivitySection.style.display === 'none') {
+        console.error('Single activity section is not visible');
         return;
     }
     
-    const chartContainer = chartElement.parentElement;
+    // Ensure we have a clean canvas element
+    const chartContainer = document.querySelector('#singleActivitySection .chart-container');
     if (!chartContainer) {
         console.error('Activity chart container not found');
+        return;
+    }
+    
+    // Clear the container and recreate the canvas
+    chartContainer.innerHTML = '<canvas id="activityHrChart"></canvas>';
+    
+    const chartElement = document.getElementById('activityHrChart');
+    if (!chartElement) {
+        console.error('Activity chart element not found after recreation');
         return;
     }
     
@@ -1424,6 +1444,7 @@ function createActivityHeartRateChart(activity) {
     // Destroy existing chart if it exists
     if (activityHrChart) {
         activityHrChart.destroy();
+        activityHrChart = null;
     }
     
     // Check if we have heart rate values for this activity
@@ -1567,8 +1588,21 @@ function createActivityHeartRateChart(activity) {
     console.log('Activity start time:', startTime);
     console.log('Activity end time:', endTime);
     
-    // Small delay to ensure DOM is ready
+    // Small delay to ensure DOM is ready and chart element is properly set up
     setTimeout(() => {
+        // Re-get the chart element and context after the delay to ensure they're still valid
+        const chartElement = document.getElementById('activityHrChart');
+        if (!chartElement) {
+            console.error('Activity chart element not found after delay');
+            return;
+        }
+        
+        const ctx = chartElement.getContext('2d');
+        if (!ctx) {
+            console.error('Could not get 2D context for activity chart after delay');
+            return;
+        }
+        
         // Create the chart
         activityHrChart = new Chart(ctx, {
             type: 'line',
