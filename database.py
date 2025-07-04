@@ -142,6 +142,7 @@ def init_database():
             max_hr INTEGER NULL,
             heart_rate_series JSON,
             breathing_rate_series JSON,
+            spo2_series JSON,
             trimp_data JSON,
             total_trimp FLOAT,
             notes TEXT,

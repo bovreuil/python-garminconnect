@@ -498,7 +498,7 @@ def get_activities(date):
     cur.execute("""
         SELECT activity_id, activity_name, activity_type, start_time_local, duration_seconds,
                distance_meters, elevation_gain, average_hr, max_hr, heart_rate_series, 
-               breathing_rate_series, trimp_data, total_trimp
+               breathing_rate_series, spo2_series, trimp_data, total_trimp
         FROM activity_data 
         WHERE date = ?
         ORDER BY start_time_local
@@ -513,6 +513,7 @@ def get_activities(date):
         # Convert from new schema format
         heart_rate_series = json.loads(activity['heart_rate_series']) if activity['heart_rate_series'] else []
         breathing_rate_series = json.loads(activity['breathing_rate_series']) if activity['breathing_rate_series'] else []
+        spo2_series = json.loads(activity['spo2_series']) if activity['spo2_series'] else []
         trimp_data = json.loads(activity['trimp_data']) if activity['trimp_data'] else {}
         
         activities_list.append({
@@ -530,10 +531,107 @@ def get_activities(date):
             'trimp_data': trimp_data,
             'total_trimp': activity['total_trimp'],
             'heart_rate_values': heart_rate_series,
-            'breathing_rate_values': breathing_rate_series
+            'breathing_rate_values': breathing_rate_series,
+            'spo2_values': spo2_series
         })
     
     return jsonify(activities_list)
+
+
+@app.route('/api/activity/<activity_id>/spo2', methods=['POST'])
+def save_activity_spo2(activity_id):
+    """Save SpO2 data for a specific activity."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        data = request.get_json()
+        spo2_entries = data.get('spo2_entries', [])
+        
+        # Validate SpO2 entries
+        for entry in spo2_entries:
+            if not isinstance(entry, dict) or 'time_offset' not in entry or 'spo2_value' not in entry:
+                return jsonify({'error': 'Invalid SpO2 entry format'}), 400
+            
+            # Validate time offset format (MM:SS)
+            time_offset = entry['time_offset']
+            if not isinstance(time_offset, str) or ':' not in time_offset:
+                return jsonify({'error': 'Time offset must be in MM:SS format'}), 400
+            
+            # Validate SpO2 value
+            spo2_value = entry['spo2_value']
+            if not isinstance(spo2_value, int) or spo2_value < 0 or spo2_value > 100:
+                return jsonify({'error': 'SpO2 value must be an integer between 0 and 100'}), 400
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Get activity start time and first HR timestamp
+        cur.execute("""
+            SELECT start_time_local, heart_rate_series
+            FROM activity_data 
+            WHERE activity_id = ?
+        """, (activity_id,))
+        
+        activity = cur.fetchone()
+        if not activity:
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'Activity not found'}), 404
+        
+        # We don't need to parse the start_time_local - we'll use the first HR timestamp as the base
+        
+        # Get first HR timestamp to calculate base timestamp
+        heart_rate_series = json.loads(activity['heart_rate_series']) if activity['heart_rate_series'] else []
+        if not heart_rate_series:
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'Activity has no HR data to calculate timestamps'}), 400
+        
+        # Get first HR timestamp
+        first_hr_timestamp = heart_rate_series[0][0] if heart_rate_series and len(heart_rate_series) > 0 else None
+        if not first_hr_timestamp:
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'Cannot determine base timestamp from HR data'}), 400
+        
+        # Convert SpO2 entries to timestamp series
+        spo2_series = []
+        for entry in spo2_entries:
+            time_offset = entry['time_offset']
+            spo2_value = entry['spo2_value']
+            
+            # Parse time offset (MM:SS format)
+            minutes, seconds = map(int, time_offset.split(':'))
+            offset_seconds = minutes * 60 + seconds
+            
+            # Calculate timestamp by adding offset to first HR timestamp
+            spo2_timestamp = first_hr_timestamp + (offset_seconds * 1000)  # Convert to milliseconds
+            
+            spo2_series.append([spo2_timestamp, spo2_value])
+        
+        # Save SpO2 series to database (null if empty)
+        spo2_series_json = json.dumps(spo2_series) if spo2_series else None
+        cur.execute("""
+            UPDATE activity_data 
+            SET spo2_series = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE activity_id = ?
+        """, (spo2_series_json, activity_id))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Saved {len(spo2_series)} SpO2 entries for activity {activity_id}',
+            'spo2_series': spo2_series
+        })
+        
+    except Exception as e:
+        logger.error(f"Error saving SpO2 data for activity {activity_id}: {e}")
+        return jsonify({'error': f'Error saving SpO2 data: {str(e)}'}), 500
+
 
 @app.route('/api/activity/<activity_id>/hr-csv')
 def download_activity_hr_csv(activity_id):

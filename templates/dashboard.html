@@ -101,6 +101,9 @@
                                     <button type="button" class="btn btn-sm btn-outline-primary" id="downloadActivityCsv">
                                         <span>📥 CSV</span>
                                     </button>
+                                    <button type="button" class="btn btn-sm btn-outline-info" id="editSpo2">
+                                        <span>🩸 SpO2</span>
+                                    </button>
                                     <button type="button" class="btn btn-sm btn-outline-secondary" id="closeSingleActivity">
                                         <span>×</span>
                                     </button>
@@ -147,6 +150,37 @@
         <span class="visually-hidden">Loading...</span>
     </div>
     <p class="mt-2">Loading data...</p>
+</div>
+
+<!-- SpO2 Editor Modal -->
+<div class="modal fade" id="spo2Modal" tabindex="-1" aria-labelledby="spo2ModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="spo2ModalLabel">Edit SpO2 Data</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <p class="text-muted">Enter SpO2 readings with time offsets from activity start. Use MM:SS format for time (e.g., 5:30 for 5 minutes 30 seconds).</p>
+                </div>
+                
+                <div id="spo2Entries">
+                    <!-- SpO2 entries will be added here dynamically -->
+                </div>
+                
+                <div class="mb-3">
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="addSpo2Entry">
+                        <span>+ Add Entry</span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveSpo2">Save SpO2 Data</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -206,6 +240,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('closeSingleDate').addEventListener('click', closeSingleDateView);
     document.getElementById('closeSingleActivity').addEventListener('click', closeSingleActivityView);
     document.getElementById('downloadActivityCsv').addEventListener('click', downloadActivityCsv);
+    document.getElementById('editSpo2').addEventListener('click', openSpo2Editor);
+    document.getElementById('addSpo2Entry').addEventListener('click', addSpo2Entry);
+    document.getElementById('saveSpo2').addEventListener('click', saveSpo2Data);
     
     // Start with today's view
     goToToday();
@@ -838,6 +875,140 @@ function downloadActivityCsv() {
     document.body.removeChild(link);
 }
 
+// SpO2 Editor Functions
+let spo2Entries = [];
+
+function openSpo2Editor() {
+    if (!selectedActivity) {
+        console.error('No activity selected for SpO2 editing');
+        return;
+    }
+    
+    // Load existing SpO2 data if available
+    spo2Entries = [];
+    if (selectedActivity.spo2_values && selectedActivity.spo2_values.length > 0) {
+        // Convert existing SpO2 data to entries format
+        const firstHrTimestamp = selectedActivity.heart_rate_values[0][0];
+        selectedActivity.spo2_values.forEach(spo2Point => {
+            const timeOffsetMs = spo2Point[0] - firstHrTimestamp;
+            const minutes = Math.floor(timeOffsetMs / 60000);
+            const seconds = Math.floor((timeOffsetMs % 60000) / 1000);
+            const timeOffset = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            spo2Entries.push({
+                time_offset: timeOffset,
+                spo2_value: spo2Point[1]
+            });
+        });
+    }
+    
+    // Populate the modal
+    populateSpo2Entries();
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('spo2Modal'));
+    modal.show();
+}
+
+function addSpo2Entry() {
+    spo2Entries.push({
+        time_offset: '',
+        spo2_value: ''
+    });
+    populateSpo2Entries();
+}
+
+function removeSpo2Entry(index) {
+    spo2Entries.splice(index, 1);
+    populateSpo2Entries();
+}
+
+function populateSpo2Entries() {
+    const container = document.getElementById('spo2Entries');
+    container.innerHTML = '';
+    
+    spo2Entries.forEach((entry, index) => {
+        const entryDiv = document.createElement('div');
+        entryDiv.className = 'row mb-2 align-items-center';
+        entryDiv.innerHTML = `
+            <div class="col-5">
+                <input type="text" class="form-control" placeholder="MM:SS" 
+                       value="${entry.time_offset}" 
+                       onchange="updateSpo2Entry(${index}, 'time_offset', this.value)">
+            </div>
+            <div class="col-5">
+                <input type="number" class="form-control" placeholder="SpO2 %" min="0" max="100"
+                       value="${entry.spo2_value}" 
+                       onchange="updateSpo2Entry(${index}, 'spo2_value', parseInt(this.value))">
+            </div>
+            <div class="col-2">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeSpo2Entry(${index})">
+                    <span>×</span>
+                </button>
+            </div>
+        `;
+        container.appendChild(entryDiv);
+    });
+}
+
+function updateSpo2Entry(index, field, value) {
+    if (index >= 0 && index < spo2Entries.length) {
+        spo2Entries[index][field] = value;
+    }
+}
+
+function saveSpo2Data() {
+    if (!selectedActivity) {
+        console.error('No activity selected for saving SpO2 data');
+        return;
+    }
+    
+    // Validate entries
+    const validEntries = spo2Entries.filter(entry => 
+        entry.time_offset && entry.time_offset.match(/^\d+:\d{2}$/) && 
+        entry.spo2_value !== '' && entry.spo2_value >= 0 && entry.spo2_value <= 100
+    );
+    
+    // Allow empty entries - this will clear the SpO2 data
+    
+    // Send data to server
+    fetch(`/api/activity/${selectedActivity.activity_id}/spo2`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            spo2_entries: validEntries
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the selected activity with new SpO2 data (null if empty)
+            selectedActivity.spo2_values = data.spo2_series || [];
+            
+            // Refresh the activity chart to show SpO2 data
+            createActivityHeartRateChart(selectedActivity);
+            
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('spo2Modal'));
+            modal.hide();
+            
+            if (data.spo2_series && data.spo2_series.length > 0) {
+                alert('SpO2 data saved successfully!');
+            } else {
+                alert('SpO2 data cleared successfully!');
+            }
+        } else {
+            alert('Error saving SpO2 data: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving SpO2 data:', error);
+        alert('Error saving SpO2 data');
+    });
+}
+
 // Load activities for a specific date
 function loadActivitiesForDate(date) {
     const dateStr = date.toISOString().split('T')[0];
@@ -1046,6 +1217,8 @@ function createActivitiesChart(activities) {
                     }
                 },
                 tooltip: {
+                    mode: 'nearest',
+                    intersect: false,
                     callbacks: {
                         title: function(context) {
                             return context[0].label;
@@ -1349,7 +1522,7 @@ function createHeartRateChart(date, dayData) {
                         display: false
                     },
                     tooltip: {
-                        mode: 'index',
+                        mode: 'nearest',
                         intersect: false,
                         callbacks: {
                             title: function(context) {
@@ -1751,6 +1924,33 @@ function createActivityHeartRateChart(activity) {
             });
         }
         
+        // Add SpO2 dataset if available
+        if (activity.spo2_values && activity.spo2_values.length > 0) {
+            // Create SpO2 data points only for actual SpO2 readings
+            const spo2DataPoints = activity.spo2_values.map(spo2Point => {
+                return { 
+                    x: new Date(spo2Point[0]), 
+                    y: spo2Point[1] 
+                };
+            });
+            
+            datasets.push({
+                label: 'SpO2 (%)',
+                data: spo2DataPoints,
+                borderColor: '#000080', // Deep blue
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0, // No markers
+                pointHoverRadius: 6,
+                hitRadius: 50,
+                pointHoverBackgroundColor: '#000080',
+                order: 1,
+                yAxisID: 'y2' // Third y-axis for SpO2
+            });
+        }
+        
         // Create the chart
         activityHrChart = new Chart(ctx, {
             type: 'line',
@@ -1767,7 +1967,7 @@ function createActivityHeartRateChart(activity) {
                         display: false
                     },
                     tooltip: {
-                        mode: 'index',
+                        mode: 'nearest',
                         intersect: false,
                         callbacks: {
                             title: function(context) {
@@ -1787,11 +1987,13 @@ function createActivityHeartRateChart(activity) {
                                 return `Time: ${context[0].label}`;
                             },
                             label: function(context) {
-                                // Show tooltip for both heart rate and breathing rate data
+                                // Show tooltip for heart rate, breathing rate, and SpO2 data
                                 if (context.dataset.label === 'Heart Rate (BPM)') {
                                     return `Heart Rate: ${context.parsed.y} BPM`;
                                 } else if (context.dataset.label === 'Breathing Rate (BPM)') {
                                     return `Breathing Rate: ${context.parsed.y} BPM`;
+                                } else if (context.dataset.label === 'SpO2 (%)') {
+                                    return `SpO2: ${context.parsed.y}%`;
                                 }
                                 return null; // Hide background dataset from tooltip
                             }
@@ -1841,14 +2043,31 @@ function createActivityHeartRateChart(activity) {
                     },
                     y1: {
                         type: 'linear',
-                        display: breathingValues.length > 0, // Only show if breathing data exists
+                        display: false, // Hide the entire axis
                         position: 'right',
                         title: {
-                            display: breathingValues.length > 0,
+                            display: false, // Hide the title
                             text: 'Breathing Rate (BPM)'
                         },
                         min: 0,
                         max: 60, // Typical breathing rate range
+                        ticks: {
+                            stepSize: 10
+                        },
+                        grid: {
+                            drawOnChartArea: false, // Only want to show grid for primary axis
+                        },
+                    },
+                    y2: {
+                        type: 'linear',
+                        display: false, // Hide the entire axis
+                        position: 'right',
+                        title: {
+                            display: false, // Hide the title
+                            text: 'SpO2 (%)'
+                        },
+                        min: 50,
+                        max: 100, // SpO2 range
                         ticks: {
                             stepSize: 10
                         },
