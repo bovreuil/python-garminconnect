@@ -529,6 +529,60 @@ def get_activities(date):
     
     return jsonify(activities_list)
 
+@app.route('/api/activity/<activity_id>/hr-csv')
+def download_activity_hr_csv(activity_id):
+    """Download HR data for a specific activity as CSV."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Get activity HR data
+    cur.execute("""
+        SELECT activity_name, heart_rate_series
+        FROM activity_data 
+        WHERE activity_id = ?
+    """, (activity_id,))
+    
+    activity = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not activity:
+        return jsonify({'error': 'Activity not found'}), 404
+    
+    heart_rate_series = json.loads(activity['heart_rate_series']) if activity['heart_rate_series'] else []
+    
+    if not heart_rate_series:
+        return jsonify({'error': 'No HR data available for this activity'}), 404
+    
+    # Create CSV content
+    import io
+    import csv
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['timestamp', 'hr'])  # Header
+    
+    for entry in heart_rate_series:
+        if entry and len(entry) >= 2:
+            timestamp = entry[0]
+            hr = entry[1]
+            writer.writerow([timestamp, hr])
+    
+    output.seek(0)
+    
+    # Create response with CSV content
+    from flask import Response
+    response = Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=activity_{activity_id}_hr_data.csv'}
+    )
+    
+    return response
+
 @app.route('/api/weekly-data/<start_date>')
 def get_weekly_data(start_date):
     """Get heart rate data for a week starting from start_date."""
