@@ -60,3 +60,124 @@ def get_user_hr_parameters():
     else:
         # Default values for Pete
         return 48, 167 
+
+def init_database():
+    """Initialize the database with all required tables."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Create users table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            name TEXT,
+            role TEXT DEFAULT 'user',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Create garmin_credentials table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS garmin_credentials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            password_encrypted TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Create background_jobs table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS background_jobs (
+            job_id TEXT PRIMARY KEY,
+            job_type TEXT NOT NULL,
+            target_date TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            status TEXT DEFAULT 'pending',
+            result TEXT,
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Create daily_data table (new schema)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS daily_data (
+            date DATE PRIMARY KEY,
+            heart_rate_series JSON,
+            trimp_data JSON,
+            total_trimp FLOAT,
+            daily_score FLOAT,
+            activity_type VARCHAR(50),
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Create activity_data table (new schema)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS activity_data (
+            activity_id VARCHAR(50) PRIMARY KEY,
+            date DATE,
+            activity_name VARCHAR(255),
+            activity_type VARCHAR(50),
+            start_time_local TIMESTAMP,
+            duration_seconds INTEGER,
+            distance_meters FLOAT NULL,
+            elevation_gain FLOAT NULL,
+            average_hr INTEGER NULL,
+            max_hr INTEGER NULL,
+            heart_rate_series JSON,
+            trimp_data JSON,
+            total_trimp FLOAT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (date) REFERENCES daily_data(date)
+        )
+    """)
+    
+    # Create legacy tables for migration (if they don't exist)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS heart_rate_data (
+            date DATE PRIMARY KEY,
+            heart_rate_values JSON,
+            presentation_buckets JSON,
+            total_trimp FLOAT,
+            daily_score FLOAT,
+            activity_type VARCHAR(50),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS activities (
+            activity_id VARCHAR(50) PRIMARY KEY,
+            date DATE,
+            activity_name VARCHAR(255),
+            activity_type VARCHAR(50),
+            start_time_local TIMESTAMP,
+            duration_seconds INTEGER,
+            distance_meters FLOAT,
+            elevation_gain FLOAT,
+            average_hr INTEGER,
+            max_hr INTEGER,
+            individual_hr_buckets JSON,
+            presentation_buckets JSON,
+            trimp_data JSON,
+            total_trimp FLOAT,
+            raw_activity_data TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    conn.commit()
+    cur.close()
+    conn.close() 

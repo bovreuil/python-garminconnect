@@ -447,45 +447,39 @@ def get_data(date):
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
+    try:
+        target_date = datetime.strptime(date, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format'}), 400
+    
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # First, check if raw_hr_data column exists
-    cur.execute("PRAGMA table_info(heart_rate_data)")
-    columns = [col[1] for col in cur.fetchall()]
-    has_raw_hr_data = 'raw_hr_data' in columns
-    
-    if has_raw_hr_data:
-        cur.execute("""
-            SELECT * FROM heart_rate_data 
-            WHERE date = ?
-        """, (date,))
-    else:
-        # Fallback to old schema
-        cur.execute("""
-            SELECT id, date, individual_hr_buckets, presentation_buckets, trimp_data, 
-                   total_trimp, daily_score, activity_type, heart_rate_values as raw_hr_data
-            FROM heart_rate_data 
-            WHERE date = ?
-        """, (date,))
+    # Get data from new daily_data table
+    cur.execute("""
+        SELECT heart_rate_series, trimp_data, total_trimp, daily_score, activity_type
+        FROM daily_data 
+        WHERE date = ?
+    """, (target_date,))
     
     data = cur.fetchone()
     cur.close()
     conn.close()
     
-    if not data:
+    if data:
+        # Convert from new schema format
+        heart_rate_series = json.loads(data['heart_rate_series']) if data['heart_rate_series'] else []
+        trimp_data = json.loads(data['trimp_data']) if data['trimp_data'] else {}
+        
+        return jsonify({
+            'heart_rate_values': heart_rate_series,
+            'presentation_buckets': trimp_data.get('presentation_buckets', {}),
+            'total_trimp': data['total_trimp'],
+            'daily_score': data['daily_score'],
+            'activity_type': data['activity_type']
+        })
+    else:
         return jsonify({'error': 'No data found for this date'}), 404
-    
-    return jsonify({
-        'date': data['date'],
-        'individual_hr_buckets': json.loads(data['individual_hr_buckets']),
-        'presentation_buckets': json.loads(data['presentation_buckets']),
-        'trimp_data': json.loads(data['trimp_data']),
-        'total_trimp': data['total_trimp'],
-        'daily_score': data['daily_score'],
-        'activity_type': data['activity_type'],
-        'raw_hr_data': json.loads(data['raw_hr_data']) if data['raw_hr_data'] else None
-    })
 
 @app.route('/api/activities/<date>')
 def get_activities(date):
@@ -493,149 +487,52 @@ def get_activities(date):
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
+    try:
+        target_date = datetime.strptime(date, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format'}), 400
+    
     conn = get_db_connection()
     cur = conn.cursor()
     
+    # Get activities from new activity_data table
     cur.execute("""
-        SELECT activity_id, activity_name, activity_type, start_time_local,
-               duration_seconds, distance_meters, elevation_gain, average_hr, max_hr,
-               individual_hr_buckets, presentation_buckets, trimp_data, total_trimp,
-               raw_activity_data
-        FROM activities 
+        SELECT activity_id, activity_name, activity_type, start_time_local, duration_seconds,
+               distance_meters, elevation_gain, average_hr, max_hr, heart_rate_series, 
+               trimp_data, total_trimp
+        FROM activity_data 
         WHERE date = ?
-        ORDER BY start_time_local ASC
-    """, (date,))
+        ORDER BY start_time_local
+    """, (target_date,))
     
     activities = cur.fetchall()
     cur.close()
     conn.close()
     
-    if activities:
-        activities_list = []
-        for activity in activities:
-            # Parse raw activity data to extract HR data
-            raw_hr_data = []
-            if activity['raw_activity_data']:
-                try:
-                    raw_activity_data = json.loads(activity['raw_activity_data'])
-                    print(f"Raw activity data keys for {activity['activity_id']}: {list(raw_activity_data.keys()) if isinstance(raw_activity_data, dict) else 'Not a dict'}")
-                    print(f"Raw activity data type: {type(raw_activity_data)}")
-                    print(f"Raw activity data sample: {str(raw_activity_data)[:500]}...")
-                    
-                    # Extract HR data from the raw activity data using the same method as TRIMP calculation
-                    if 'activityDetailMetrics' in raw_activity_data:
-                        activity_metrics = raw_activity_data['activityDetailMetrics']
-                        if activity_metrics:
-                            print(f"Found activityDetailMetrics with {len(activity_metrics)} entries")
-                            print(f"Chart extraction: First few activity_metrics entries:")
-                            for i, entry in enumerate(activity_metrics[:3]):
-                                print(f"  Entry {i}: {entry}")
-                            
-                            # Find HR and timestamp positions (using the same method as TRIMP calculation)
-                            position_data = {}
-                            for entry in activity_metrics:
-                                if 'metrics' in entry:
-                                    metrics = entry['metrics']
-                                    for pos, value in enumerate(metrics):
-                                        if pos not in position_data:
-                                            position_data[pos] = []
-                                        if value is not None:
-                                            position_data[pos].append(value)
-                            
-                            print(f"Chart extraction: Collected data for {len(position_data)} positions")
-                            
-                            # Find HR position (values in 48-167 range, should be integers)
-                            hr_candidates = []
-                            for pos, values in position_data.items():
-                                if values and min(values) >= 48 and max(values) <= 167:
-                                    # Check if all values are integers (HR data should be discrete)
-                                    all_integers = all(isinstance(v, (int, float)) and v == int(v) for v in values)
-                                    if all_integers:
-                                        unique_count = len(set(values))
-                                        if unique_count > 5:
-                                            hr_candidates.append((pos, unique_count, min(values), max(values)))
-                                            print(f"Chart extraction: HR candidate at position {pos}: {unique_count} unique values, range {min(values)}-{max(values)}, all integers: {all_integers}")
-                                    else:
-                                        print(f"Chart extraction: Excluded position {pos} as non-integer data: range {min(values)}-{max(values)}, all integers: {all_integers}")
-                            
-                            # Find timestamp position
-                            ts_candidates = []
-                            for pos, values in position_data.items():
-                                if values and min(values) > 1000000000000:
-                                    unique_count = len(set(values))
-                                    if unique_count > 100:
-                                        ts_candidates.append((pos, unique_count, min(values), max(values)))
-                                        print(f"Chart extraction: Timestamp candidate at position {pos}: {unique_count} unique values, range {min(values)}-{max(values)}")
-                            
-                            if hr_candidates and ts_candidates:
-                                hr_pos = hr_candidates[0][0]
-                                ts_pos = ts_candidates[0][0]
-                                print(f"Chart extraction: Selected HR position {hr_pos}, Timestamp position {ts_pos}")
-                                
-                                # Log all candidates for debugging
-                                print(f"Chart extraction: All HR candidates:")
-                                for pos, unique_count, min_val, max_val in hr_candidates:
-                                    print(f"  Position {pos}: {unique_count} unique values, range {min_val}-{max_val}")
-                                print(f"Chart extraction: All timestamp candidates:")
-                                for pos, unique_count, min_val, max_val in ts_candidates:
-                                    print(f"  Position {pos}: {unique_count} unique values, range {min_val}-{max_val}")
-                                
-                                # Extract HR time series
-                                for entry in activity_metrics:
-                                    if 'metrics' in entry and len(entry['metrics']) > max(hr_pos, ts_pos):
-                                        metrics = entry['metrics']
-                                        timestamp = metrics[ts_pos]
-                                        hr_value = metrics[hr_pos]
-                                        
-                                        if timestamp is not None and hr_value is not None:
-                                            raw_hr_data.append([timestamp, int(hr_value)])
-                                
-                                print(f"Chart extraction: Extracted {len(raw_hr_data)} HR data points from activityDetailMetrics")
-                                
-                                # Log sample of extracted data
-                                if raw_hr_data:
-                                    print(f"Chart extraction: Sample HR data (first 5 points):")
-                                    for i, (ts, hr) in enumerate(raw_hr_data[:5]):
-                                        print(f"  Point {i}: timestamp={ts}, HR={hr}")
-                            else:
-                                print(f"Chart extraction: Could not find HR and timestamp positions")
-                                if not hr_candidates:
-                                    print(f"Chart extraction: No HR candidates found!")
-                                    # Log all positions that were in 48-167 range but excluded
-                                    for pos, values in position_data.items():
-                                        if values and min(values) >= 48 and max(values) <= 167:
-                                            print(f"Chart extraction: Position {pos} in HR range but excluded: range {min(values)}-{max(values)}, unique count {len(set(values))}")
-                                if not ts_candidates:
-                                    print(f"Chart extraction: No timestamp candidates found!")
-                        else:
-                            print("activityDetailMetrics is empty")
-                    else:
-                        print(f"No 'activityDetailMetrics' key found in raw activity data")
-                except Exception as e:
-                    print(f"Error parsing raw activity data: {e}")
-            else:
-                print(f"No raw_activity_data for activity {activity['activity_id']}")
-            
-            activities_list.append({
-                'activity_id': activity['activity_id'],
-                'activity_name': activity['activity_name'],
-                'activity_type': activity['activity_type'],
-                'start_time_local': activity['start_time_local'],
-                'duration_seconds': activity['duration_seconds'],
-                'distance_meters': activity['distance_meters'],
-                'elevation_gain': activity['elevation_gain'],
-                'average_hr': activity['average_hr'],
-                'max_hr': activity['max_hr'],
-                'individual_hr_buckets': json.loads(activity['individual_hr_buckets']) if activity['individual_hr_buckets'] else {},
-                'presentation_buckets': json.loads(activity['presentation_buckets']) if activity['presentation_buckets'] else {},
-                'trimp_data': json.loads(activity['trimp_data']) if activity['trimp_data'] else {},
-                'total_trimp': activity['total_trimp'],
-                'raw_hr_data': raw_hr_data
-            })
+    activities_list = []
+    for activity in activities:
+        # Convert from new schema format
+        heart_rate_series = json.loads(activity['heart_rate_series']) if activity['heart_rate_series'] else []
+        trimp_data = json.loads(activity['trimp_data']) if activity['trimp_data'] else {}
         
-        return jsonify(activities_list)
-    else:
-        return jsonify([])
+        activities_list.append({
+            'activity_id': activity['activity_id'],
+            'activity_name': activity['activity_name'],
+            'activity_type': activity['activity_type'],
+            'start_time_local': activity['start_time_local'],
+            'duration_seconds': activity['duration_seconds'],
+            'distance_meters': activity['distance_meters'],
+            'elevation_gain': activity['elevation_gain'],
+            'average_hr': activity['average_hr'],
+            'max_hr': activity['max_hr'],
+            'individual_hr_buckets': trimp_data.get('individual_hr_buckets', {}),
+            'presentation_buckets': trimp_data.get('presentation_buckets', {}),
+            'trimp_data': trimp_data,
+            'total_trimp': activity['total_trimp'],
+            'heart_rate_values': heart_rate_series
+        })
+    
+    return jsonify(activities_list)
 
 @app.route('/api/weekly-data/<start_date>')
 def get_weekly_data(start_date):
@@ -653,8 +550,8 @@ def get_weekly_data(start_date):
     cur = conn.cursor()
     
     cur.execute("""
-        SELECT date, presentation_buckets, total_trimp, daily_score, activity_type
-        FROM heart_rate_data 
+        SELECT date, trimp_data, total_trimp, daily_score, activity_type
+        FROM daily_data 
         WHERE date >= ? AND date <= ?
         ORDER BY date
     """, (start, end))
@@ -666,9 +563,10 @@ def get_weekly_data(start_date):
     # Convert to list of dicts
     weekly_data = []
     for row in data:
+        trimp_data = json.loads(row['trimp_data']) if row['trimp_data'] else {}
         weekly_data.append({
             'date': row['date'],
-            'presentation_buckets': json.loads(row['presentation_buckets']),
+            'presentation_buckets': trimp_data.get('presentation_buckets', {}),
             'total_trimp': row['total_trimp'],
             'daily_score': row['daily_score'],
             'activity_type': row['activity_type']

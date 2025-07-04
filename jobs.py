@@ -18,6 +18,7 @@ from cryptography.fernet import Fernet
 import os
 from models import HeartRateAnalyzer
 from typing import Dict, List, Optional, Tuple
+import math
 
 
 # Configure logging
@@ -428,7 +429,7 @@ def collect_garmin_data_job(target_date: str, job_id: str):
         logger.info(f"collect_garmin_data_job: Fetching heart rate data for {target_date}")
         heart_rate_data = api.get_heart_rates(target_date)
         
-        logger.info(f"collect_garmin_data_job: Raw heart rate data: {heart_rate_data}")
+        logger.info(f"collect_garmin_data_job: Raw heart rate data received")
         
         # Check if we got valid data
         if not heart_rate_data:
@@ -459,7 +460,7 @@ def collect_garmin_data_job(target_date: str, job_id: str):
             return
         
         heart_rate_values = heart_rate_data['heartRateValues']
-        logger.info(f"collect_garmin_data_job: Heart rate values: {heart_rate_values}")
+        logger.info(f"collect_garmin_data_job: Heart rate values: {len(heart_rate_values)} points")
         
         if not heart_rate_values or len(heart_rate_values) == 0:
             error_msg = f"No heart rate values found for {target_date}"
@@ -494,7 +495,7 @@ def collect_garmin_data_job(target_date: str, job_id: str):
         
         # Analyze the data
         logger.info(f"collect_garmin_data_job: Analyzing heart rate data")
-        analysis_result = analyzer.analyze_heart_rate_data(heart_rate_data)
+        analysis_results = analyzer.analyze_heart_rate_data(heart_rate_data)
         
         # Debug raw heart rate data
         raw_hr_data = heart_rate_data['heartRateValues']
@@ -506,58 +507,77 @@ def collect_garmin_data_job(target_date: str, job_id: str):
         # Serialize raw data to JSON
         raw_hr_json = json.dumps(raw_hr_data)
         logger.info(f"collect_garmin_data_job: Raw HR JSON length: {len(raw_hr_json)}")
-        logger.info(f"collect_garmin_data_job: Raw HR JSON first 100 chars: {raw_hr_json[:100]}")
         
-        # Save to database
-        # First, try to delete any existing record for this date
-        cur.execute("DELETE FROM heart_rate_data WHERE date = ?", (target_date,))
+        # Store heart rate data in database
+        logger.info(f"collect_garmin_data_job: Storing heart rate data for {target_date}")
         
-        # Then insert the new record
+        # Delete existing data for this date
+        cur.execute("DELETE FROM daily_data WHERE date = ?", (target_date,))
+        
+        # Calculate TRIMP and other metrics
+        total_trimp = analysis_results['total_trimp']
+        daily_score = analysis_results['daily_score']
+        activity_type = analysis_results['activity_type']
+        
+        # Store in new daily_data table
         cur.execute("""
-            INSERT INTO heart_rate_data 
-            (date, individual_hr_buckets, presentation_buckets, trimp_data, 
-             total_trimp, daily_score, activity_type, raw_hr_data, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO daily_data 
+            (date, heart_rate_series, trimp_data, total_trimp, daily_score, activity_type)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (
-            target_date,
-            json.dumps(analysis_result['individual_hr_buckets']),
-            json.dumps(analysis_result['presentation_buckets']),
-            json.dumps(analysis_result['trimp_data']),
-            analysis_result['total_trimp'],
-            analysis_result['daily_score'],
-            analysis_result['activity_type'],
-            raw_hr_json
+            str(target_date),
+            json.dumps(heart_rate_values),
+            json.dumps(analysis_results['trimp_data']),
+            float(total_trimp),
+            float(daily_score),
+            str(activity_type)
         ))
         
         conn.commit()
         logger.info(f"collect_garmin_data_job: Data saved to database successfully")
         
         # Collect activities for the same date
+        activity_collection_success = True
         try:
             collect_activities_for_date(api, target_date, conn, cur)
         except Exception as activity_error:
             logger.warning(f"collect_garmin_data_job: Failed to collect activities: {activity_error}")
-            # Continue with the job even if activity collection fails
+            activity_collection_success = False
         
-        # Update job status to completed
-        result_data = {
-            'message': 'Data collection completed successfully',
-            'total_trimp': analysis_result['total_trimp'],
-            'daily_score': analysis_result['daily_score'],
-            'activity_type': analysis_result['activity_type']
-        }
-        
-        cur.execute("""
-            UPDATE background_jobs 
-            SET status = 'completed', result = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE job_id = ?
-        """, (json.dumps(result_data), job_id))
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        
-        logger.info(f"collect_garmin_data_job: Job {job_id} completed successfully")
+        # Update job status based on whether activity collection succeeded
+        if activity_collection_success:
+            result_data = {
+                'message': 'Data collection completed successfully',
+                'total_trimp': total_trimp,
+                'daily_score': daily_score,
+                'activity_type': activity_type
+            }
+            
+            cur.execute("""
+                UPDATE background_jobs 
+                SET status = 'completed', result = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE job_id = ?
+            """, (json.dumps(result_data), job_id))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            logger.info(f"collect_garmin_data_job: Job {job_id} completed successfully")
+        else:
+            # Mark as failed if activity collection failed
+            error_msg = f"Failed to collect activities for {target_date}"
+            cur.execute("""
+                UPDATE background_jobs 
+                SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE job_id = ?
+            """, (error_msg, job_id))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            logger.info(f"collect_garmin_data_job: Job {job_id} failed due to activity collection error")
         
     except Exception as e:
         error_msg = f"Error collecting data: {str(e)}"
@@ -599,7 +619,7 @@ def collect_garmin_data_job(target_date: str, job_id: str):
 
 def collect_activities_for_date(api, target_date: str, conn, cur):
     """
-    Collect activities for a specific date and store them in the database.
+    Collect activities for a specific date and store in new schema.
     
     Args:
         api: Garmin API instance
@@ -607,16 +627,12 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
         conn: Database connection
         cur: Database cursor
     """
-    logger.info(f"collect_activities_for_date: Collecting activities for {target_date}")
+    logger.info(f"collect_activities_for_date: Starting collection for {target_date}")
     
     try:
-        # Delete existing activities for this date first (like we do for heart rate data)
-        cur.execute("DELETE FROM activities WHERE date = ?", (target_date,))
-        logger.info(f"collect_activities_for_date: Deleted existing activities for {target_date}")
-        
         # Get activities for the date
         activities = api.get_activities_fordate(target_date)
-
+        
         # Handle new API structure: extract from ActivitiesForDay['payload'] if present
         if isinstance(activities, dict) and 'ActivitiesForDay' in activities:
             afd = activities['ActivitiesForDay']
@@ -633,224 +649,344 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
         
         logger.info(f"collect_activities_for_date: Found {len(activities)} activities for {target_date}")
         
-        # Get HR parameters for TRIMP calculation
-        resting_hr, max_hr = get_user_hr_parameters()
-        analyzer = HeartRateAnalyzer(resting_hr, max_hr)
+        # Debug: Check the structure of activities
+        if activities:
+            logger.info(f"collect_activities_for_date: First activity type: {type(activities[0])}")
+            logger.info(f"collect_activities_for_date: First activity keys: {list(activities[0].keys()) if isinstance(activities[0], dict) else 'Not a dict'}")
         
-        # Debug the activities structure
-        logger.info(f"collect_activities_for_date: Activities type: {type(activities)}")
-        logger.info(f"collect_activities_for_date: Activities length: {len(activities) if activities else 0}")
-        logger.info(f"collect_activities_for_date: Activities keys: {list(activities.keys()) if isinstance(activities, dict) else 'Not a dict'}")
-        logger.info(f"collect_activities_for_date: First activity: {activities[0] if activities and hasattr(activities, '__getitem__') and len(activities) > 0 else 'None'}")
-        
-        # If activities is a dict, it might have a different structure
-        if isinstance(activities, dict):
-            logger.info(f"collect_activities_for_date: Activities dict structure: {activities}")
-            # Check if it has an 'ActivitiesForDay' key (which contains the actual activities)
-            if 'ActivitiesForDay' in activities:
-                activities = activities['ActivitiesForDay']
-                logger.info(f"collect_activities_for_date: Found 'ActivitiesForDay' key, new length: {len(activities) if activities else 0}")
-            elif 'activities' in activities:
-                activities = activities['activities']
-                logger.info(f"collect_activities_for_date: Found 'activities' key, new length: {len(activities)}")
-            else:
-                logger.error(f"collect_activities_for_date: Activities is dict but no 'ActivitiesForDay' or 'activities' key found")
-                return
+        # Delete existing activity data for this date
+        cur.execute("DELETE FROM activity_data WHERE date = ?", (target_date,))
         
         # Process each activity
-        for i, activity in enumerate(activities):
-            logger.info(f"collect_activities_for_date: Processing activity {i}: {type(activity)}")
+        for activity in activities:
+            activity_id = str(activity['activityId'])
+            logger.info(f"collect_activities_for_date: Processing activity {activity_id}")
             
-            # Handle different possible activity formats
-            if isinstance(activity, str):
-                # If activity is a string, it might be the activity ID
-                activity_id = str(activity)
-                logger.info(f"collect_activities_for_date: Activity is string, using as ID: {activity_id}")
-            elif isinstance(activity, dict):
-                activity_id = str(activity.get('activityId'))
-                logger.info(f"collect_activities_for_date: Activity is dict, ID: {activity_id}")
-            else:
-                logger.warning(f"collect_activities_for_date: Unknown activity format: {type(activity)}, skipping")
-                continue
+            # Extract basic activity info
+            activity_name = activity.get('activityName', 'Unknown Activity')
+            activity_type = activity.get('activityType', 'unknown')
+            start_time_local = activity.get('startTimeLocal', '')
+            duration_seconds = activity.get('duration', 0)
+            distance_meters = activity.get('distance', 0)
+            elevation_gain = activity.get('elevationGain', 0)
+            average_hr = activity.get('averageHR', 0)
+            max_hr = activity.get('maxHR', 0)
             
-            if not activity_id:
-                logger.warning(f"collect_activities_for_date: Activity missing ID, skipping")
-                continue
-            
-            # Get detailed activity data
+            # Get detailed activity data for HR extraction
             try:
-                # Get detailed activity data which includes heart rate time series
                 activity_details = api.get_activity_details(activity_id)
-                logger.info(f"collect_activities_for_date: Got details for activity {activity_id}")
-                
-                                # Extract heart rate time series from activityDetailMetrics
-                hr_data = None
-                if activity_details and 'activityDetailMetrics' in activity_details:
-                    activity_metrics = activity_details['activityDetailMetrics']
-                    if activity_metrics and len(activity_metrics) > 0:
-                        # Get daily HR data for correlation
-                        cur.execute("SELECT raw_hr_data FROM heart_rate_data WHERE date = ?", (target_date,))
-                        daily_hr_result = cur.fetchone()
-                        daily_hr_data = []
-                        if daily_hr_result and daily_hr_result['raw_hr_data']:
-                            daily_hr_data = json.loads(daily_hr_result['raw_hr_data'])
-                        
-                        # Try advanced detection first
-                        start_time = activity_details.get('startTimeLocal', '')
-                        duration = activity_details.get('duration', 0)
-                        
-                        if start_time and duration > 0:
-                            hr_position, ts_position, correlation = detect_hr_and_timestamp_positions_advanced(
-                                activity_metrics, target_date, start_time, duration, daily_hr_data
-                            )
-                            
-                            if hr_position is not None and ts_position is not None:
-                                logger.info(f"collect_activities_for_date: Advanced detection successful for activity {activity_id}")
-                                logger.info(f"collect_activities_for_date: HR position: {hr_position}, TS position: {ts_position}, correlation: {correlation}")
-                            else:
-                                logger.warning(f"collect_activities_for_date: Missing start time or duration for activity {activity_id}, skipping advanced detection")
-                                logger.warning(f"collect_activities_for_date: Advanced detection failed for activity {activity_id}, trying fallback")
-                                
-                                # Log the activity_metrics structure for debugging
-                                logger.info(f"collect_activities_for_date: activity_metrics has {len(activity_metrics)} entries")
-                                logger.info(f"collect_activities_for_date: First few activity_metrics entries:")
-                                for i, entry in enumerate(activity_metrics[:3]):
-                                    logger.info(f"  Entry {i}: {entry}")
-                                
-                                hr_position, ts_position = detect_hr_and_timestamp_positions(activity_metrics)
-                        else:
-                            logger.warning(f"collect_activities_for_date: Missing start time or duration for activity {activity_id}, skipping advanced detection")
-                            logger.warning(f"collect_activities_for_date: Advanced detection failed for activity {activity_id}, trying fallback")
-                            
-                            # Log the activity_metrics structure for debugging
-                            logger.info(f"collect_activities_for_date: activity_metrics has {len(activity_metrics)} entries")
-                            logger.info(f"collect_activities_for_date: First few activity_metrics entries:")
-                            for i, entry in enumerate(activity_metrics[:3]):
-                                logger.info(f"  Entry {i}: {entry}")
-                            
-                            hr_position, ts_position = detect_hr_and_timestamp_positions(activity_metrics)
-                        
-                        if hr_position is not None and ts_position is not None:
-                            logger.info(f"collect_activities_for_date: Advanced detection successful for activity {activity_id}")
-                            hr_time_series = []
-                            for metric_entry in activity_metrics:
-                                if 'metrics' in metric_entry and len(metric_entry['metrics']) > max(hr_position, ts_position):
-                                    metrics = metric_entry['metrics']
-                                    heart_rate = metrics[hr_position]
-                                    timestamp = metrics[ts_position]
-                                    
-                                    # Include all heart rate data from the identified series (do not filter by value)
-                                    if timestamp is not None and heart_rate is not None:
-                                        hr_time_series.append([timestamp, int(heart_rate)])
-                                        
-                            if hr_time_series:
-                                # Calculate actual time intervals to determine sampling rate
-                                if len(hr_time_series) > 1:
-                                    time_diff = hr_time_series[1][0] - hr_time_series[0][0]
-                                    sampling_interval_seconds = time_diff / 1000  # Convert from milliseconds
-                                    logger.info(f"collect_activities_for_date: Activity {activity_id} HR sampling interval: {sampling_interval_seconds:.1f} seconds")
-                                
-                                hr_data = {'heartRateValues': hr_time_series}
-                                logger.info(f"collect_activities_for_date: Extracted {len(hr_time_series)} HR data points for activity {activity_id}")
-                            else:
-                                logger.info(f"collect_activities_for_date: No valid HR data points found for activity {activity_id}")
-                        else:
-                            logger.warning(f"collect_activities_for_date: Both advanced and fallback detection failed for activity {activity_id}")
-                    else:
-                        logger.info(f"collect_activities_for_date: No activityDetailMetrics data for activity {activity_id}")
-                else:
-                    logger.info(f"collect_activities_for_date: No activity details or activityDetailMetrics for activity {activity_id}")
-                    
+                logger.info(f"collect_activities_for_date: Got activity details for {activity_id}")
             except Exception as e:
-                logger.warning(f"collect_activities_for_date: Could not get HR data for activity {activity_id}: {e}")
-                hr_data = None
+                logger.error(f"collect_activities_for_date: Failed to get activity details for {activity_id}: {e}")
+                continue
             
-            # Calculate TRIMP if we have HR data
-            trimp_results = None
-            if hr_data and 'heartRateValues' in hr_data and hr_data['heartRateValues']:
-                logger.info(f"collect_activities_for_date: About to calculate TRIMP for activity {activity_id}")
-                logger.info(f"collect_activities_for_date: HR data points: {len(hr_data['heartRateValues'])}")
-                
-                # Log sample of HR data being used for TRIMP calculation
-                if hr_data['heartRateValues']:
-                    logger.info(f"collect_activities_for_date: Sample HR data for TRIMP calculation (first 5 points):")
-                    for i, (ts, hr) in enumerate(hr_data['heartRateValues'][:5]):
-                        logger.info(f"  Point {i}: timestamp={ts}, HR={hr}")
-                
-                trimp_results = analyzer.analyze_heart_rate_data(hr_data)
-                logger.info(f"collect_activities_for_date: Calculated TRIMP for activity {activity_id}: {trimp_results['total_trimp']:.2f}")
-                
-                # Log TRIMP breakdown
-                if trimp_results['presentation_buckets']:
-                    logger.info(f"collect_activities_for_date: TRIMP breakdown for activity {activity_id}:")
-                    for bucket, data in trimp_results['presentation_buckets'].items():
-                        if data['minutes'] > 0 or data['trimp'] > 0:
-                            logger.info(f"  {bucket}: {data['minutes']:.1f} minutes, {data['trimp']:.2f} TRIMP")
-            else:
-                logger.warning(f"collect_activities_for_date: No HR data available for TRIMP calculation for activity {activity_id}")
-                if hr_data:
-                    logger.info(f"collect_activities_for_date: HR data keys: {list(hr_data.keys()) if isinstance(hr_data, dict) else 'Not a dict'}")
-                    if 'heartRateValues' in hr_data:
-                        logger.info(f"collect_activities_for_date: heartRateValues length: {len(hr_data['heartRateValues']) if hr_data['heartRateValues'] else 'Empty'}")
+            # Extract HR data from activity
+            hr_series = []
+            trimp_data = {'zones': {}, 'total_trimp': 0.0}
+            total_trimp = 0.0
+            
+            if 'activityDetailMetrics' in activity_details:
+                activity_metrics = activity_details['activityDetailMetrics']
+                if activity_metrics:
+                    logger.info(f"collect_activities_for_date: Found activityDetailMetrics with {len(activity_metrics)} entries")
+                    
+                    # Use the same HR extraction logic as the app
+                    position_data = {}
+                    for entry in activity_metrics:
+                        if 'metrics' in entry:
+                            metrics = entry['metrics']
+                            for pos, value in enumerate(metrics):
+                                if pos not in position_data:
+                                    position_data[pos] = []
+                                if value is not None:
+                                    position_data[pos].append(value)
+                    
+                    # Find HR and timestamp positions
+                    hr_candidates = []
+                    ts_candidates = []
+                    
+                    for pos, values in position_data.items():
+                        if values and min(values) >= 48 and max(values) <= 167:
+                            # Check if all values are integers
+                            all_integers = all(isinstance(v, (int, float)) and v == int(v) for v in values)
+                            if all_integers:
+                                unique_count = len(set(values))
+                                if unique_count > 5:
+                                    hr_candidates.append((pos, unique_count, min(values), max(values)))
+                                    logger.info(f"collect_activities_for_date: HR candidate at position {pos}: "
+                                              f"{unique_count} unique values, range {min(values)}-{max(values)}")
+                        
+                        if values and min(values) > 1000000000000:
+                            unique_count = len(set(values))
+                            if unique_count > 100:
+                                ts_candidates.append((pos, unique_count, min(values), max(values)))
+                                logger.info(f"collect_activities_for_date: Timestamp candidate at position {pos}: "
+                                          f"{unique_count} unique values")
+                    
+                    if hr_candidates and ts_candidates:
+                        # Sort by unique count (descending) and take the first
+                        hr_candidates.sort(key=lambda x: x[1], reverse=True)
+                        ts_candidates.sort(key=lambda x: x[1], reverse=True)
+                        
+                        hr_pos = hr_candidates[0][0]
+                        ts_pos = ts_candidates[0][0]
+                        
+                        logger.info(f"collect_activities_for_date: Selected HR position {hr_pos}, Timestamp position {ts_pos}")
+                        
+                        # Extract HR time series
+                        for entry in activity_metrics:
+                            if 'metrics' in entry and len(entry['metrics']) > max(hr_pos, ts_pos):
+                                metrics = entry['metrics']
+                                timestamp = metrics[ts_pos]
+                                hr_value = metrics[hr_pos]
+                                
+                                if timestamp is not None and hr_value is not None:
+                                    hr_series.append([timestamp, int(hr_value)])
+                        
+                        logger.info(f"collect_activities_for_date: Extracted {len(hr_series)} HR data points")
+                        
+                        # Calculate TRIMP for activity
+                        if hr_series:
+                            total_trimp, trimp_breakdown = calculate_trimp(hr_series)
+                            trimp_data = {
+                                'presentation_buckets': trimp_breakdown,
+                                'total_trimp': total_trimp
+                            }
+                            logger.info(f"collect_activities_for_date: Calculated TRIMP for activity {activity_id}: {total_trimp}")
+                    else:
+                        logger.warning(f"collect_activities_for_date: Could not find HR and timestamp positions for activity {activity_id}")
                 else:
-                    logger.info(f"collect_activities_for_date: hr_data is None")
-            
-            # Extract activity data - handle both string and dict formats
-            if isinstance(activity, dict):
-                activity_name = activity.get('activityName', 'Unknown Activity')
-                activity_type = activity.get('activityType', {}).get('typeKey', 'unknown')
-                start_time_local = activity.get('startTimeLocal')
-                duration_seconds = activity.get('duration', 0)
-                distance_meters = activity.get('distance', 0)
-                elevation_gain = activity.get('elevationGain', 0)
-                average_hr = activity.get('averageHR')
-                max_hr = activity.get('maxHR')
+                    logger.warning(f"collect_activities_for_date: No activityDetailMetrics data for activity {activity_id}")
             else:
-                # If activity is a string (just an ID), we'll get details from the API
-                activity_name = 'Unknown Activity'
-                activity_type = 'unknown'
-                start_time_local = None
-                duration_seconds = 0
-                distance_meters = 0
-                elevation_gain = 0
-                average_hr = None
-                max_hr = None
+                logger.warning(f"collect_activities_for_date: No activityDetailMetrics in activity details for {activity_id}")
             
-            # Store activity in database
+            # Store activity data in new schema
             cur.execute("""
-                INSERT INTO activities 
-                (activity_id, date, activity_name, activity_type, start_time_local,
-                 duration_seconds, distance_meters, elevation_gain, average_hr, max_hr,
-                 individual_hr_buckets, presentation_buckets, trimp_data, total_trimp,
-                 raw_activity_data, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO activity_data 
+                (activity_id, date, activity_name, activity_type, start_time_local, duration_seconds,
+                 distance_meters, elevation_gain, average_hr, max_hr, heart_rate_series, trimp_data, total_trimp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                activity_id,
-                target_date,
-                activity_name,
-                activity_type,
-                start_time_local,
-                duration_seconds,
-                distance_meters,
-                elevation_gain,
-                average_hr,
-                max_hr,
-                json.dumps(trimp_results['individual_hr_buckets']) if trimp_results else None,
-                json.dumps(trimp_results['presentation_buckets']) if trimp_results else None,
-                json.dumps(trimp_results['trimp_data']) if trimp_results else None,
-                trimp_results['total_trimp'] if trimp_results else 0.0,
-                json.dumps(activity_details)
+                str(activity_id), 
+                str(target_date), 
+                str(activity_name), 
+                str(activity_type), 
+                str(start_time_local) if start_time_local else None, 
+                int(duration_seconds) if duration_seconds else 0,
+                float(distance_meters) if distance_meters else None, 
+                float(elevation_gain) if elevation_gain else None, 
+                int(average_hr) if average_hr else None, 
+                int(max_hr) if max_hr else None, 
+                json.dumps(hr_series), 
+                json.dumps(trimp_data), 
+                float(total_trimp)
             ))
             
-            logger.info(f"collect_activities_for_date: Stored activity {activity_id} in database")
+            logger.info(f"collect_activities_for_date: Stored activity {activity_id} in new schema")
+        
+        # Now merge activity HR data into daily HR data
+        merge_activity_hr_into_daily(target_date, conn, cur)
         
         conn.commit()
-        logger.info(f"collect_activities_for_date: Successfully processed {len(activities)} activities for {target_date}")
+        logger.info(f"collect_activities_for_date: Completed collection for {target_date}")
         
     except Exception as e:
         logger.error(f"collect_activities_for_date: Error collecting activities for {target_date}: {e}")
-        logger.error(f"collect_activities_for_date: Error type: {type(e)}")
-        logger.error(f"collect_activities_for_date: Error details: {str(e)}")
-        import traceback
-        logger.error(f"collect_activities_for_date: Full traceback: {traceback.format_exc()}")
         raise 
+
+def calculate_trimp(hr_series):
+    """
+    Calculate TRIMP from heart rate series data.
+    
+    Args:
+        hr_series: List of [timestamp, heart_rate] pairs
+        
+    Returns:
+        Tuple of (total_trimp, trimp_breakdown)
+    """
+    if not hr_series or len(hr_series) < 2:
+        return 0.0, {}
+    
+    # Get HR parameters
+    resting_hr, max_hr = get_user_hr_parameters()
+    
+    # Calculate TRIMP using the same logic as before
+    total_trimp = 0.0
+    trimp_by_zone = {}
+    
+    # Skip the first reading since it has no previous timestamp
+    for i in range(1, len(hr_series)):
+        current_ts, current_hr = hr_series[i]
+        prev_ts, prev_hr = hr_series[i-1]
+        
+        # Skip if any values are None
+        if current_ts is None or current_hr is None or prev_ts is None or prev_hr is None:
+            continue
+        
+        # Skip readings if the gap from the previous reading is greater than 300 seconds (5 minutes)
+        time_diff = (current_ts - prev_ts) / 1000  # Convert from milliseconds to seconds
+        if time_diff > 300:
+            continue
+        
+        # Calculate time interval in minutes
+        interval_minutes = time_diff / 60
+        
+        # Calculate TRIMP for this interval
+        hr_reserve = (current_hr - resting_hr) / (max_hr - resting_hr)
+        trimp_value = interval_minutes * hr_reserve * 0.64 * math.exp(1.92 * hr_reserve)
+        
+        total_trimp += trimp_value
+        
+        # Categorize by HR zone
+        zone = categorize_hr_zone(current_hr, resting_hr, max_hr)
+        if zone not in trimp_by_zone:
+            trimp_by_zone[zone] = {'minutes': 0, 'trimp': 0}
+        
+        trimp_by_zone[zone]['minutes'] += interval_minutes
+        trimp_by_zone[zone]['trimp'] += trimp_value
+    
+    return total_trimp, trimp_by_zone
+
+def categorize_hr_zone(hr, resting_hr, max_hr):
+    """Categorize heart rate into zones."""
+    if hr < 80:
+        return 'Below 80'
+    elif hr < 90:
+        return '80-89'
+    elif hr < 100:
+        return '90-99'
+    elif hr < 110:
+        return '100-109'
+    elif hr < 120:
+        return '110-119'
+    elif hr < 130:
+        return '120-129'
+    elif hr < 140:
+        return '130-139'
+    elif hr < 150:
+        return '140-149'
+    elif hr < 160:
+        return '150-159'
+    else:
+        return '160+'
+
+def merge_activity_hr_into_daily(target_date, conn, cur):
+    """
+    Merge activity HR data into daily HR data.
+    
+    Args:
+        target_date: Date to process
+        conn: Database connection
+        cur: Database cursor
+    """
+    logger.info(f"merge_activity_hr_into_daily: Starting merge for {target_date}")
+    
+    # Get daily HR data
+    cur.execute("SELECT heart_rate_series FROM daily_data WHERE date = ?", (target_date,))
+    daily_result = cur.fetchone()
+    
+    if not daily_result or not daily_result['heart_rate_series']:
+        logger.info(f"merge_activity_hr_into_daily: No daily HR data found for {target_date}")
+        return
+    
+    daily_hr_series = json.loads(daily_result['heart_rate_series'])
+    logger.info(f"merge_activity_hr_into_daily: Found {len(daily_hr_series)} daily HR points")
+    
+    # Get all activities for this date
+    cur.execute("""
+        SELECT activity_id, heart_rate_series, start_time_local, duration_seconds
+        FROM activity_data 
+        WHERE date = ? AND heart_rate_series IS NOT NULL
+        ORDER BY start_time_local
+    """, (target_date,))
+    
+    activities = cur.fetchall()
+    logger.info(f"merge_activity_hr_into_daily: Found {len(activities)} activities with HR data")
+    
+    # Process each activity
+    for activity in activities:
+        activity_id = activity['activity_id']
+        activity_hr_series = json.loads(activity['heart_rate_series'])
+        start_time = activity['start_time_local']
+        duration = activity['duration_seconds']
+        
+        if not activity_hr_series:
+            continue
+        
+        logger.info(f"merge_activity_hr_into_daily: Processing activity {activity_id} with {len(activity_hr_series)} HR points")
+        
+        # Find continuous segments in activity HR data
+        segments = find_continuous_segments(activity_hr_series)
+        logger.info(f"merge_activity_hr_into_daily: Found {len(segments)} continuous segments")
+        
+        # Replace daily HR data with activity HR data for each segment
+        for segment in segments:
+            segment_start = segment[0][0]  # First timestamp in segment
+            segment_end = segment[-1][0]   # Last timestamp in segment
+            
+            # Remove daily HR points that fall within this segment
+            daily_hr_series = [point for point in daily_hr_series 
+                             if point[0] < segment_start or point[0] > segment_end]
+            
+            # Add activity HR points for this segment
+            daily_hr_series.extend(segment)
+            
+            logger.info(f"merge_activity_hr_into_daily: Replaced daily HR data from {segment_start} to {segment_end}")
+        
+        # Sort daily HR series by timestamp
+        daily_hr_series.sort(key=lambda x: x[0])
+    
+    # Calculate daily TRIMP from merged data
+    total_trimp, trimp_breakdown = calculate_trimp(daily_hr_series)
+    trimp_data = {
+        'presentation_buckets': trimp_breakdown,
+        'total_trimp': total_trimp
+    }
+    
+    # Update daily data
+    cur.execute("""
+        UPDATE daily_data 
+        SET heart_rate_series = ?, trimp_data = ?, total_trimp = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE date = ?
+    """, (json.dumps(daily_hr_series), json.dumps(trimp_data), total_trimp, target_date))
+    
+    logger.info(f"merge_activity_hr_into_daily: Updated daily data with {len(daily_hr_series)} HR points, TRIMP: {total_trimp}")
+
+def find_continuous_segments(hr_series):
+    """
+    Find continuous segments in HR series data.
+    Segments are separated by gaps > 60 seconds.
+    
+    Args:
+        hr_series: List of [timestamp, heart_rate] pairs
+        
+    Returns:
+        List of segments, where each segment is a list of [timestamp, heart_rate] pairs
+    """
+    if not hr_series or len(hr_series) < 2:
+        return [hr_series] if hr_series else []
+    
+    segments = []
+    current_segment = [hr_series[0]]
+    
+    for i in range(1, len(hr_series)):
+        current_ts, current_hr = hr_series[i]
+        prev_ts, prev_hr = hr_series[i-1]
+        
+        # Check if gap is > 60 seconds
+        time_diff = (current_ts - prev_ts) / 1000  # Convert from milliseconds to seconds
+        
+        if time_diff > 60:
+            # Gap is too large, start new segment
+            if current_segment:
+                segments.append(current_segment)
+            current_segment = [hr_series[i]]
+        else:
+            # Gap is small enough, continue current segment
+            current_segment.append(hr_series[i])
+    
+    # Add the last segment
+    if current_segment:
+        segments.append(current_segment)
+    
+    return segments 
