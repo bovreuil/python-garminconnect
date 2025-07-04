@@ -821,12 +821,12 @@ function loadActivitiesForDate(date) {
             // Debug: Check if activities have raw_hr_data
             if (activities && activities.length > 0) {
                 activities.forEach((activity, index) => {
-                    console.log(`Activity ${index} (${activity.activity_name}):`, {
-                        has_heart_rate_values: !!activity.heart_rate_values,
-                        heart_rate_values_type: typeof activity.heart_rate_values,
-                        heart_rate_values_length: activity.heart_rate_values ? activity.heart_rate_values.length : 'N/A',
-                        heart_rate_values_sample: activity.heart_rate_values ? activity.heart_rate_values.slice(0, 3) : 'N/A'
-                    });
+                                    console.log(`Activity ${index} (${activity.activity_name}):`, {
+                    has_heart_rate_values: !!activity.heart_rate_values,
+                    heart_rate_values_type: typeof activity.heart_rate_values,
+                    heart_rate_values_length: activity.heart_rate_values ? activity.heart_rate_values.length : 'N/A',
+                    heart_rate_values_sample: activity.heart_rate_values ? activity.heart_rate_values.slice(0, 3) : 'N/A'
+                });
                 });
             }
             createActivitiesChart(activities);
@@ -1123,6 +1123,25 @@ function createHeartRateChart(date, dayData) {
     console.log('Heart rate values length:', hrData.length);
     console.log('First few data points:', hrData.slice(0, 5));
     
+    // Get the date from the selected date
+    const selectedDate = new Date(dayData.date + 'T00:00:00');
+    console.log('dayData.date:', dayData.date);
+    console.log('selectedDate:', selectedDate);
+    console.log('selectedDate.isValid:', !isNaN(selectedDate.getTime()));
+    
+    // Create evenly spaced 24-hour timeline (every 1 minute for high resolution)
+    const labels = [];
+    const data = [];
+    
+    for (let hour = 0; hour < 24; hour++) {
+        for (let minute = 0; minute < 60; minute += 1) {
+            const timestamp = new Date(selectedDate);
+            timestamp.setHours(hour, minute, 0, 0);
+            labels.push(timestamp);
+            data.push(null);
+        }
+    }
+    
     // Sort data by timestamp
     const sortedData = hrData.sort((a, b) => {
         const timestampA = Array.isArray(a) ? a[0] : a.timestamp;
@@ -1132,10 +1151,7 @@ function createHeartRateChart(date, dayData) {
     
     console.log('Sorted data length:', sortedData.length);
     
-    // Extract timestamps and heart rate values
-    const timestamps = [];
-    const hrValues = [];
-    
+    // Map heart rate data to the 24-hour timeline
     sortedData.forEach(point => {
         let timestamp, hr;
         
@@ -1152,42 +1168,65 @@ function createHeartRateChart(date, dayData) {
         // Skip null values
         if (hr === null || hr === undefined) return;
         
-        timestamps.push(new Date(timestamp));
-        hrValues.push(hr);
+        // Convert timestamp to Date object
+        const date = new Date(timestamp);
+        
+        // Find the exact index in our labels array (1-minute precision)
+        const hour = date.getHours();
+        const minute = date.getMinutes();
+        
+        // Create a timestamp for comparison (same date, specific hour/minute)
+        const comparisonTimestamp = new Date(selectedDate);
+        comparisonTimestamp.setHours(hour, minute, 0, 0);
+        
+        const index = labels.findIndex(label => label.getTime() === comparisonTimestamp.getTime());
+        if (index !== -1) {
+            data[index] = hr;
+        }
     });
     
-    console.log('Processed timestamps length:', timestamps.length);
-    console.log('Processed HR values length:', hrValues.length);
-    console.log('First few timestamps:', timestamps.slice(0, 5));
-    console.log('First few HR values:', hrValues.slice(0, 5));
+    console.log('Processed labels length:', labels.length);
+    console.log('Processed data length:', data.length);
+    console.log('First few labels:', labels.slice(0, 5));
+    console.log('First few data points:', data.slice(0, 5));
     
     // Create a smart dataset that only includes null values for actual gaps
     const chartLabels = [];
     const chartData = [];
     
+    // Sort the actual data points by timestamp
+    const actualDataPoints = [];
+    for (let i = 0; i < labels.length; i++) {
+        if (data[i] !== null) {
+            actualDataPoints.push({
+                timestamp: labels[i],
+                value: data[i]
+            });
+        }
+    }
+    
     // Add data points and insert null values for gaps > 5 minutes
-    for (let i = 0; i < timestamps.length; i++) {
-        const currentPoint = timestamps[i];
-        const currentHR = hrValues[i];
+    for (let i = 0; i < actualDataPoints.length; i++) {
+        const currentPoint = actualDataPoints[i];
         
         // Add the current data point
-        chartLabels.push(currentPoint);
-        chartData.push(currentHR);
+        chartLabels.push(currentPoint.timestamp);
+        chartData.push(currentPoint.value);
         
         // Check if there's a gap to the next point
-        if (i < timestamps.length - 1) {
-            const nextPoint = timestamps[i + 1];
-            const gapMinutes = (nextPoint.getTime() - currentPoint.getTime()) / (1000 * 60);
+        if (i < actualDataPoints.length - 1) {
+            const nextPoint = actualDataPoints[i + 1];
+            const gapMinutes = (nextPoint.timestamp.getTime() - currentPoint.timestamp.getTime()) / (1000 * 60);
             
             // If gap is > 5 minutes, add a null point to create a visual break
             if (gapMinutes > 5) {
                 // Add a null point 1 minute after the current segment
-                const gapTimestamp = new Date(currentPoint.getTime() + (1 * 60 * 1000)); // 1 minute after current
+                const gapTimestamp = new Date(currentPoint.timestamp.getTime() + (1 * 60 * 1000)); // 1 minute after current
                 chartLabels.push(gapTimestamp);
                 chartData.push(null);
                 
                 // Add a null point 1 minute before the next segment
-                const nextGapTimestamp = new Date(nextPoint.getTime() - (1 * 60 * 1000)); // 1 minute before next
+                const nextGapTimestamp = new Date(nextPoint.timestamp.getTime() - (1 * 60 * 1000)); // 1 minute before next
                 chartLabels.push(nextGapTimestamp);
                 chartData.push(null);
             }
@@ -1201,22 +1240,16 @@ function createHeartRateChart(date, dayData) {
     
     // Small delay to ensure DOM is ready
     setTimeout(() => {
-        // Force container resize to ensure proper dimensions
-        if (chartContainer) {
-            chartContainer.style.height = '300px';
-            chartContainer.style.width = '100%';
-        }
-        
         // Create the chart
         hrChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: timestamps,
+                labels: labels, // Use full 24-hour timeline for consistent x-axis
                 datasets: [
                     // Single background dataset with gradient
                     {
                         label: 'Background',
-                        data: timestamps.map(timestamp => ({ x: timestamp, y: 160 })), // Full height background
+                        data: labels.map(label => ({ x: label, y: 160 })), // Full height background for 24-hour timeline
                         borderColor: 'transparent',
                         backgroundColor: function(context) {
                             const chart = context.chart;
@@ -1260,7 +1293,7 @@ function createHeartRateChart(date, dayData) {
                     // Heart rate line on top
                     {
                         label: 'Heart Rate (BPM)',
-                        data: chartLabels.map((timestamp, index) => ({ x: timestamp, y: chartData[index] })),
+                        data: chartLabels.map((label, index) => ({ x: label, y: chartData[index] })), // Use data with null values for gaps
                         borderColor: '#e74c3c',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
@@ -1295,8 +1328,7 @@ function createHeartRateChart(date, dayData) {
                                     const day = String(date.getDate()).padStart(2, '0');
                                     const hour = String(date.getHours()).padStart(2, '0');
                                     const minute = String(date.getMinutes()).padStart(2, '0');
-                                    const second = String(date.getSeconds()).padStart(2, '0');
-                                    return `Time: ${year}-${month}-${day} ${hour}:${minute}:${second}`;
+                                    return `Time: ${year}-${month}-${day} ${hour}:${minute}`;
                                 }
                                 // Fallback to the label if raw data not available
                                 return `Time: ${context[0].label}`;
@@ -1321,20 +1353,20 @@ function createHeartRateChart(date, dayData) {
                     x: {
                         type: 'time',
                         time: {
-                            unit: 'minute',
+                            unit: 'hour',
                             displayFormats: {
-                                minute: 'HH:mm'
+                                hour: 'HH:mm'
                             }
                         },
                         title: {
                             display: true,
                             text: 'Time'
                         },
-                        min: timestamps[0],
-                        max: timestamps[timestamps.length - 1],
+                        min: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 0, 0, 0),
+                        max: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 23, 59, 0),
                         ticks: {
                             maxRotation: 0,
-                            stepSize: 1,
+                            stepSize: 2,
                             source: 'auto'
                         }
                     },
@@ -1405,12 +1437,6 @@ function createActivityHeartRateChart(activity) {
         
         // Wait for DOM to be ready before creating chart
         setTimeout(() => {
-            // Force container resize to ensure proper dimensions
-            if (chartContainer) {
-                chartContainer.style.height = '300px';
-                chartContainer.style.width = '100%';
-            }
-            
             // No raw data available - show message
             activityHrChart = new Chart(ctx, {
                 type: 'line',
@@ -1543,12 +1569,6 @@ function createActivityHeartRateChart(activity) {
     
     // Small delay to ensure DOM is ready
     setTimeout(() => {
-        // Force container resize to ensure proper dimensions
-        if (chartContainer) {
-            chartContainer.style.height = '300px';
-            chartContainer.style.width = '100%';
-        }
-        
         // Create the chart
         activityHrChart = new Chart(ctx, {
             type: 'line',

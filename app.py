@@ -479,6 +479,7 @@ def get_data(date):
         trimp_data = json.loads(data['trimp_data']) if data['trimp_data'] else {}
         
         return jsonify({
+            'date': date,
             'heart_rate_values': heart_rate_series,
             'presentation_buckets': trimp_data.get('presentation_buckets', {}),
             'total_trimp': data['total_trimp'],
