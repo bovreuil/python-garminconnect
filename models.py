@@ -121,13 +121,16 @@ class TRIMPCalculator:
             
             # Only calculate TRIMP for readings with a previous timestamp (i > 0)
             if hr is not None and hr >= 80 and i > 0:
-                # Calculate time duration for this sample
+                # Check gap from previous reading
                 prev_timestamp = heart_rate_values[i-1][0] if isinstance(heart_rate_values[i-1], list) else heart_rate_values[i-1].get('timestamp', 0)
                 gap_seconds = (timestamp - prev_timestamp) / 1000
-                if gap_seconds > 300:  # Skip readings after large gaps (watch taken off)
+                
+                # Skip readings after large gaps (watch taken off)
+                if gap_seconds > 300:
                     continue
+                
+                # Use the gap duration as the time interval for this reading
                 time_interval_seconds = gap_seconds
-                # Convert to minutes
                 time_interval_minutes = time_interval_seconds / 60
                 
                 # Individual bucket (count occurrences, not time)
