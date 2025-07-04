@@ -209,11 +209,75 @@ def create_background_job(job_type: str, target_date: Optional[str] = None, star
 # Routes
 @app.route('/')
 def index():
-    """Main dashboard page."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('dashboard.html')
+
+@app.route('/<date>')
+def date_view(date):
+    """Route for specific date navigation."""
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    return render_template('dashboard.html', today=date.today().isoformat())
+    # Validate date format
+    try:
+        datetime.strptime(date, '%Y-%m-%d')
+    except ValueError:
+        return redirect(url_for('index'))
+    
+    return render_template('dashboard.html', initial_date=date)
+
+@app.route('/<date>/<activity_id>')
+def activity_view(date, activity_id):
+    """Route for specific activity navigation."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    # Validate date format
+    try:
+        datetime.strptime(date, '%Y-%m-%d')
+    except ValueError:
+        return redirect(url_for('index'))
+    
+    return render_template('dashboard.html', initial_date=date, initial_activity_id=activity_id)
+
+@app.route('/<period>/<date>')
+def period_date_view(period, date):
+    """Route for specific two-week period and date navigation."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    # Validate period format (YYYY-MM-DD-YYYY-MM-DD)
+    try:
+        start_date, end_date = period.split('-', 4)[:4], period.split('-', 4)[4:]
+        start_str = '-'.join(start_date)
+        end_str = '-'.join(end_date)
+        datetime.strptime(start_str, '%Y-%m-%d')
+        datetime.strptime(end_str, '%Y-%m-%d')
+        datetime.strptime(date, '%Y-%m-%d')
+    except (ValueError, IndexError):
+        return redirect(url_for('index'))
+    
+    return render_template('dashboard.html', initial_period=period, initial_date=date)
+
+@app.route('/<period>/<date>/<activity_id>')
+def period_activity_view(period, date, activity_id):
+    """Route for specific two-week period, date, and activity navigation."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    # Validate period format (YYYY-MM-DD-YYYY-MM-DD)
+    try:
+        start_date, end_date = period.split('-', 4)[:4], period.split('-', 4)[4:]
+        start_str = '-'.join(start_date)
+        end_str = '-'.join(end_date)
+        datetime.strptime(start_str, '%Y-%m-%d')
+        datetime.strptime(end_str, '%Y-%m-%d')
+        datetime.strptime(date, '%Y-%m-%d')
+    except (ValueError, IndexError):
+        return redirect(url_for('index'))
+    
+    return render_template('dashboard.html', initial_period=period, initial_date=date, initial_activity_id=activity_id)
 
 @app.route('/login')
 def login():

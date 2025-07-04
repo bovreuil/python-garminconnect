@@ -187,6 +187,82 @@
 // Register the DataLabels plugin
 Chart.register(ChartDataLabels);
 
+// URL Navigation Functions
+function updateURL(path = null) {
+    if (path) {
+        history.pushState(null, '', path);
+    } else {
+        // Clear URL to root
+        history.pushState(null, '', '/');
+    }
+}
+
+function getPeriodString(startDate, endDate) {
+    const startStr = startDate.toISOString().split('T')[0];
+    const endStr = endDate.toISOString().split('T')[0];
+    return `${startStr}-${endStr}`;
+}
+
+function handleInitialNavigation() {
+    // Check for initial period and date from server-side template
+    {% if initial_period %}
+    const initialPeriod = '{{ initial_period }}';
+    const initialDate = '{{ initial_date }}';
+    const initialActivityId = '{{ initial_activity_id }}';
+    
+    // Parse the period to get start and end dates
+    const [startStr, endStr] = initialPeriod.split('-', 4).slice(0, 4).join('-') + '-' + initialPeriod.split('-', 4).slice(4).join('-');
+    const startDate = new Date(startStr + 'T00:00:00');
+    const endDate = new Date(endStr + 'T00:00:00');
+    
+    // Navigate to the specific two-week period
+    loadTwoWeekData(startDate, endDate);
+    
+    // Open single day view
+    setTimeout(() => {
+        showSingleDateView(new Date(initialDate + 'T00:00:00'));
+        
+        // If there's an activity ID, open that activity view
+        if (initialActivityId) {
+            setTimeout(() => {
+                // Find the activity and open it
+                loadActivitiesForDate(new Date(initialDate + 'T00:00:00')).then(() => {
+                    const activity = activitiesData.find(a => a.activity_id === initialActivityId);
+                    if (activity) {
+                        showSingleActivityView(activity);
+                    }
+                });
+            }, 1000); // Wait for activities to load
+        }
+    }, 500);
+    {% elif initial_date %}
+    const initialDate = '{{ initial_date }}';
+    const initialActivityId = '{{ initial_activity_id }}';
+    
+    // Navigate to the week containing this date
+    const targetDate = new Date(initialDate + 'T00:00:00');
+    navigateToWeek(targetDate);
+    
+    // Open single day view
+    setTimeout(() => {
+        showSingleDateView(initialDate);
+        
+        // If there's an activity ID, open that activity view
+        if (initialActivityId) {
+            setTimeout(() => {
+                // Find the activity and open it
+                loadActivitiesForDate(initialDate).then(() => {
+                    const activity = activitiesData.find(a => a.activity_id === initialActivityId);
+                    if (activity) {
+                        showSingleActivityView(activity);
+                    }
+                });
+            }, 1000); // Wait for activities to load
+        }
+    }, 500);
+    {% endif %}
+}
+
 // Chart.js configuration
 Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 Chart.defaults.font.size = 12;
@@ -282,6 +358,10 @@ function navigateWeek(direction) {
     const newEndDate = new Date(currentEndDate);
     newEndDate.setDate(currentEndDate.getDate() + (direction * 7));
     
+    // Update URL with new period
+    const periodStr = getPeriodString(newStartDate, newEndDate);
+    updateURL(`/${periodStr}`);
+    
     loadTwoWeekData(newStartDate, newEndDate);
 }
 
@@ -293,6 +373,11 @@ function goToToday() {
     
     const today = new Date();
     const { startDate, endDate } = calculateTwoWeekPeriod(today);
+    
+    // Update URL with today's period
+    const periodStr = getPeriodString(startDate, endDate);
+    updateURL(`/${periodStr}`);
+    
     loadTwoWeekData(startDate, endDate);
 }
 
@@ -620,14 +705,20 @@ function showSingleDateView(date, dayData) {
     
     selectedDate = date; // Store the selected date globally
     
-    const dateStr = date.toLocaleDateString('en-US', { 
+    // Update URL with period and date
+    const dateStr = date.toISOString().split('T')[0];
+    const periodStr = currentStartDate && currentEndDate ? getPeriodString(currentStartDate, currentEndDate) : '';
+    const url = periodStr ? `/${periodStr}/${dateStr}` : `/${dateStr}`;
+    updateURL(url);
+    
+    const dateDisplayStr = date.toLocaleDateString('en-US', { 
         weekday: 'long', 
         year: 'numeric', 
         month: 'long', 
         day: 'numeric' 
     });
     
-    document.getElementById('selectedDateTitle').textContent = dateStr;
+    document.getElementById('selectedDateTitle').textContent = dateDisplayStr;
     
     if (!dayData) {
         document.getElementById('dateDetails').innerHTML = '<p class="text-muted">No data available for this date</p>';
@@ -753,6 +844,14 @@ function closeSingleDateView() {
     document.getElementById('singleDateSection').style.display = 'none';
     selectedDate = null; // Clear the selected date
     
+    // Update URL to just the period (without date/activity)
+    if (currentStartDate && currentEndDate) {
+        const periodStr = getPeriodString(currentStartDate, currentEndDate);
+        updateURL(`/${periodStr}`);
+    } else {
+        updateURL(); // Clear to root
+    }
+    
     // Destroy activities chart if it exists
     if (activitiesChart) {
         activitiesChart.destroy();
@@ -763,6 +862,12 @@ function closeSingleDateView() {
 // Show single activity view
 function showSingleActivityView(activity) {
     selectedActivity = activity; // Store the selected activity globally
+    
+    // Update URL to include activity ID
+    const dateStr = selectedDate ? selectedDate.toISOString().split('T')[0] : '';
+    const periodStr = currentStartDate && currentEndDate ? getPeriodString(currentStartDate, currentEndDate) : '';
+    const url = periodStr ? `/${periodStr}/${dateStr}/${activity.activity_id}` : `/${dateStr}/${activity.activity_id}`;
+    updateURL(url);
     
     // Set the activity title
     document.getElementById('activityTitle').textContent = activity.activity_name;
@@ -880,6 +985,14 @@ function showSingleActivityView(activity) {
 function closeSingleActivityView() {
     document.getElementById('singleActivitySection').style.display = 'none';
     selectedActivity = null; // Clear the selected activity
+    
+    // Update URL to just the period (without date/activity)
+    if (currentStartDate && currentEndDate) {
+        const periodStr = getPeriodString(currentStartDate, currentEndDate);
+        updateURL(`/${periodStr}`);
+    } else {
+        updateURL(); // Clear to root
+    }
     
     // Destroy activity HR chart if it exists
     if (activityHrChart) {
@@ -2285,6 +2398,29 @@ function saveActivityNotes(activityId) {
 
 function cancelActivityNotes(activityId) {
     loadActivityNotes(activityId);
+}
+
+// Initialize navigation when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle initial navigation if URL parameters are present
+    handleInitialNavigation();
+});
+
+// Navigate to a specific week containing the target date
+function navigateToWeek(targetDate) {
+    // Calculate the two-week period that includes the target date
+    const { startDate, endDate } = calculateTwoWeekPeriod(targetDate);
+    
+    // Close any open views
+    closeSingleDateView();
+    closeSingleActivityView();
+    
+    // Update URL with the period
+    const periodStr = getPeriodString(startDate, endDate);
+    updateURL(`/${periodStr}`);
+    
+    // Load the two-week data
+    loadTwoWeekData(startDate, endDate);
 }
 </script>
 {% endblock %} 
