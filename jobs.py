@@ -19,6 +19,7 @@ import os
 from models import HeartRateAnalyzer
 from typing import Dict, List, Optional, Tuple
 import math
+from config import TIME_CONFIG, API_CONFIG
 
 
 # Configure logging
@@ -44,6 +45,9 @@ def detect_hr_and_timestamp_positions_advanced(activity_metrics: List[Dict], tar
     if not activity_metrics or not daily_hr_data:
         logger.info("detect_hr_and_timestamp_positions_advanced: No activity metrics or daily HR data")
         return None, None, 0.0
+    
+    # Get HR parameters from database
+    resting_hr, max_hr = get_user_hr_parameters()
     
     # 1. Calculate timestamp range (3-day window centered on target date)
     target_datetime = datetime.strptime(target_date, "%Y-%m-%d")
@@ -74,7 +78,7 @@ def detect_hr_and_timestamp_positions_advanced(activity_metrics: List[Dict], tar
         if values and min(values) > 1000000000000:  # Timestamps are in milliseconds
             if start_timestamp <= min(values) <= end_timestamp and start_timestamp <= max(values) <= end_timestamp:
                 unique_count = len(set(values))
-                if unique_count > 100:  # Should have many unique timestamps
+                if unique_count > API_CONFIG['UNIQUE_TIMESTAMP_THRESHOLD']:  # Should have many unique timestamps
                     ts_candidates.append((pos, unique_count, min(values), max(values)))
     
     if not ts_candidates:
@@ -91,10 +95,10 @@ def detect_hr_and_timestamp_positions_advanced(activity_metrics: List[Dict], tar
     for ts_pos, unique_count, min_ts, max_ts in ts_candidates:
         logger.debug(f"detect_hr_and_timestamp_positions_advanced: Checking timestamp position {ts_pos}")
         
-        # Find HR candidates in 48-167 range
+        # Find HR candidates in configured range
         hr_candidates = []
         for pos, values in position_data.items():
-            if values and min(values) >= 48 and max(values) <= 167:
+            if values and min(values) >= resting_hr and max(values) <= max_hr:
                 # Exclude GPS coordinates (values around 51.4-51.5 are likely London latitude)
                 if not (min(values) >= 51.4 and max(values) <= 51.5):
                     unique_count = len(set(values))
@@ -145,6 +149,9 @@ def calculate_hr_correlation(activity_metrics: List[Dict], ts_pos: int, hr_pos: 
         Correlation coefficient (0.0 to 1.0)
     """
     try:
+        # Get HR parameters from database
+        resting_hr, max_hr = get_user_hr_parameters()
+        
         # 1. Extract activity HR time series
         activity_hr_series = []
         for entry in activity_metrics:
@@ -153,7 +160,7 @@ def calculate_hr_correlation(activity_metrics: List[Dict], ts_pos: int, hr_pos: 
                 timestamp = metrics[ts_pos]
                 hr_value = metrics[hr_pos]
                 
-                if timestamp and hr_value and 48 <= hr_value <= 167:
+                if timestamp and hr_value and resting_hr <= hr_value <= max_hr:
                     activity_hr_series.append([timestamp, hr_value])
         
         if len(activity_hr_series) < 10:  # Need minimum data points
@@ -284,6 +291,9 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
     if not activity_metrics:
         return None, None
     
+    # Get HR parameters from database
+    resting_hr, max_hr = get_user_hr_parameters()
+    
     logger.debug(f"detect_hr_and_timestamp_positions (fallback): Starting detection with {len(activity_metrics)} metric entries")
     
     # Collect all values for each position
@@ -299,10 +309,10 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
     
     logger.debug(f"detect_hr_and_timestamp_positions (fallback): Collected data for {len(position_data)} positions")
     
-    # Find heart rate position (values in 48-167 range, should be integers)
+    # Find heart rate position (values in configured range, should be integers)
     hr_candidates = []
     for pos, values in position_data.items():
-        if values and min(values) >= 48 and max(values) <= 167:
+        if values and min(values) >= resting_hr and max(values) <= max_hr:
             # Check if all values are integers (HR data should be discrete)
             all_integers = all(isinstance(v, (int, float)) and v == int(v) for v in values)
             if all_integers:
@@ -340,9 +350,9 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
             logger.info(f"  Position {pos}: {unique_count} unique values, range {min_val}-{max_val}")
     else:
         logger.warning(f"detect_hr_and_timestamp_positions (fallback): No HR candidates found!")
-        # Log all positions that were in 48-167 range but excluded
+        # Log all positions that were in HR range but excluded
         for pos, values in position_data.items():
-            if values and min(values) >= 48 and max(values) <= 167:
+            if values and min(values) >= resting_hr and max(values) <= max_hr:
                 logger.info(f"detect_hr_and_timestamp_positions (fallback): Position {pos} in HR range but excluded: "
                           f"range {min(values)}-{max(values)}, unique count {len(set(values))}")
     
@@ -713,8 +723,11 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                     hr_candidates = []
                     ts_candidates = []
                     
+                    # Get HR parameters from database
+                    resting_hr, max_hr = get_user_hr_parameters()
+                    
                     for pos, values in position_data.items():
-                        if values and min(values) >= 48 and max(values) <= 167:
+                        if values and min(values) >= resting_hr and max(values) <= max_hr:
                             # Check if all values are integers
                             all_integers = all(isinstance(v, (int, float)) and v == int(v) for v in values)
                             if all_integers:

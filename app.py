@@ -37,6 +37,10 @@ from jobs import collect_garmin_data_job
 # Import models
 from models import HeartRateAnalyzer, TRIMPCalculator
 
+# Import configuration
+from config import SERVER_CONFIG, API_CONFIG
+from database import get_user_hr_parameters
+
 # Load environment variables
 load_dotenv('env.local')
 
@@ -113,8 +117,8 @@ def init_database():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS hr_parameters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            resting_hr INTEGER DEFAULT 48,
-            max_hr INTEGER DEFAULT 167,
+            resting_hr INTEGER,
+            max_hr INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -154,11 +158,14 @@ def init_database():
         )
     """)
     
-    # Ensure we have default HR parameters
-    cur.execute("""
-        INSERT OR IGNORE INTO hr_parameters (id, resting_hr, max_hr)
-        VALUES (1, 48, 167)
-    """)
+    # Ensure we have default HR parameters (only if none exist)
+    cur.execute("SELECT COUNT(*) FROM hr_parameters")
+    count = cur.fetchone()[0]
+    if count == 0:
+        cur.execute("""
+            INSERT INTO hr_parameters (id, resting_hr, max_hr)
+            VALUES (1, 48, 167)
+        """)
     
     conn.commit()
     cur.close()
@@ -198,7 +205,7 @@ def create_background_job(job_type: str, target_date: Optional[str] = None, star
     
     # Generate a unique job ID with microseconds and random component
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # Include milliseconds
-    random_suffix = random.randint(1000, 9999)
+    random_suffix = random.randint(1000, API_CONFIG['MAX_ACTIVITIES_LIMIT'])
     job_id = f"{job_type}_{timestamp}_{random_suffix}"
     
     cur.execute("""
@@ -410,7 +417,7 @@ def collect_data():
             logger.info(f"collect_data: Processing date range from {start} to {end}")
             
             if (end - start).days > 30:  # Limit to 30 days
-                return jsonify({'error': 'Date range too large. Maximum 30 days allowed.'}), 400
+                return jsonify({'error': f'Date range too large. Maximum {API_CONFIG["MAX_DATE_RANGE_DAYS"]} days allowed.'}), 400
             
             job_ids = []
             current_date = start
@@ -426,7 +433,7 @@ def collect_data():
                 
                 # Add a small delay between job creation to prevent rate limiting
                 if job_count % 3 == 0:  # Every 3 jobs
-                    time.sleep(0.5)  # 500ms delay
+                    time.sleep(0.5)  # 500ms delay between jobs
             
             logger.info(f"collect_data: Created {len(job_ids)} jobs total")
             
@@ -586,8 +593,10 @@ def hr_parameters():
     
     if request.method == 'POST':
         data = request.get_json()
-        resting_hr = data.get('resting_hr', 48)
-        max_hr = data.get('max_hr', 167)
+        # Get current HR parameters from database as defaults
+        current_resting_hr, current_max_hr = get_user_hr_parameters()
+        resting_hr = data.get('resting_hr', current_resting_hr)
+        max_hr = data.get('max_hr', current_max_hr)
         
         ensure_user_hr_parameters(resting_hr, max_hr)
         return jsonify({'success': True, 'resting_hr': resting_hr, 'max_hr': max_hr})
@@ -608,8 +617,10 @@ def setup_hr_parameters():
         return redirect(url_for('index'))
     
     if request.method == 'POST':
-        resting_hr = int(request.form.get('resting_hr', 48))
-        max_hr = int(request.form.get('max_hr', 167))
+        # Get current HR parameters from database as defaults
+        current_resting_hr, current_max_hr = get_user_hr_parameters()
+        resting_hr = int(request.form.get('resting_hr', current_resting_hr))
+        max_hr = int(request.form.get('max_hr', current_max_hr))
         
         ensure_user_hr_parameters(resting_hr, max_hr)
         flash('HR parameters updated successfully!', 'success')
@@ -695,4 +706,4 @@ def get_job_status(job_id):
 
 if __name__ == '__main__':
     init_database()
-    app.run(debug=True, host='0.0.0.0', port=5001) 
+    app.run(debug=SERVER_CONFIG['DEBUG'], host=SERVER_CONFIG['HOST'], port=SERVER_CONFIG['DEFAULT_PORT']) 

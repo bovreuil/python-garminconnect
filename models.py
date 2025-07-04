@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class TRIMPCalculator:
     """Class to calculate TRIMP (Training Impulse) using exponential model."""
     
-    def __init__(self, resting_hr: int = 48, max_hr: int = 167):
+    def __init__(self, resting_hr: int, max_hr: int):
         """
         Initialize TRIMP calculator with personal HR parameters.
         
@@ -162,7 +162,7 @@ class TRIMPCalculator:
 class HeartRateAnalyzer:
     """Class to analyze heart rate data using TRIMP calculations."""
     
-    def __init__(self, resting_hr: int = 48, max_hr: int = 167):
+    def __init__(self, resting_hr: int, max_hr: int):
         """
         Initialize with personal HR parameters.
         
