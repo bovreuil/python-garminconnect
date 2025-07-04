@@ -119,25 +119,14 @@ class TRIMPCalculator:
                 hr = hr_value.get('value')
                 timestamp = hr_value.get('timestamp', 0)
             
-            if hr is not None and hr >= 80:  # Only count HR >= 80
+            # Only calculate TRIMP for readings with a previous timestamp (i > 0)
+            if hr is not None and hr >= 80 and i > 0:
                 # Calculate time duration for this sample
-                if i == 0:
-                    # For the first sample, assume the same interval as the next sample
-                    if len(heart_rate_values) > 1:
-                        next_timestamp = heart_rate_values[1][0] if isinstance(heart_rate_values[1], list) else heart_rate_values[1].get('timestamp', 0)
-                        time_interval_seconds = (next_timestamp - timestamp) / 1000
-                    else:
-                        time_interval_seconds = 60  # Default to 1 minute if only one sample
-                elif i == len(heart_rate_values) - 1:
-                    # For the last sample, use the same interval as the previous sample
-                    prev_timestamp = heart_rate_values[i-1][0] if isinstance(heart_rate_values[i-1], list) else heart_rate_values[i-1].get('timestamp', 0)
-                    time_interval_seconds = (timestamp - prev_timestamp) / 1000
-                else:
-                    # For middle samples, use the average of the intervals to previous and next samples
-                    prev_timestamp = heart_rate_values[i-1][0] if isinstance(heart_rate_values[i-1], list) else heart_rate_values[i-1].get('timestamp', 0)
-                    next_timestamp = heart_rate_values[i+1][0] if isinstance(heart_rate_values[i+1], list) else heart_rate_values[i+1].get('timestamp', 0)
-                    time_interval_seconds = ((timestamp - prev_timestamp) + (next_timestamp - timestamp)) / 2000
-                
+                prev_timestamp = heart_rate_values[i-1][0] if isinstance(heart_rate_values[i-1], list) else heart_rate_values[i-1].get('timestamp', 0)
+                gap_seconds = (timestamp - prev_timestamp) / 1000
+                if gap_seconds > 300:  # Skip readings after large gaps (watch taken off)
+                    continue
+                time_interval_seconds = gap_seconds
                 # Convert to minutes
                 time_interval_minutes = time_interval_seconds / 60
                 
