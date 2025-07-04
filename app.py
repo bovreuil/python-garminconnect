@@ -527,6 +527,9 @@ def get_activities(date):
                         activity_metrics = raw_activity_data['activityDetailMetrics']
                         if activity_metrics:
                             print(f"Found activityDetailMetrics with {len(activity_metrics)} entries")
+                            print(f"Chart extraction: First few activity_metrics entries:")
+                            for i, entry in enumerate(activity_metrics[:3]):
+                                print(f"  Entry {i}: {entry}")
                             
                             # Find HR and timestamp positions (using the same method as TRIMP calculation)
                             position_data = {}
@@ -539,14 +542,21 @@ def get_activities(date):
                                         if value is not None:
                                             position_data[pos].append(value)
                             
-                            # Find HR position (values in 48-167 range, excluding GPS)
+                            print(f"Chart extraction: Collected data for {len(position_data)} positions")
+                            
+                            # Find HR position (values in 48-167 range, should be integers)
                             hr_candidates = []
                             for pos, values in position_data.items():
                                 if values and min(values) >= 48 and max(values) <= 167:
-                                    if not (min(values) >= 51.4 and max(values) <= 51.5):  # Exclude GPS
+                                    # Check if all values are integers (HR data should be discrete)
+                                    all_integers = all(isinstance(v, (int, float)) and v == int(v) for v in values)
+                                    if all_integers:
                                         unique_count = len(set(values))
                                         if unique_count > 5:
                                             hr_candidates.append((pos, unique_count, min(values), max(values)))
+                                            print(f"Chart extraction: HR candidate at position {pos}: {unique_count} unique values, range {min(values)}-{max(values)}, all integers: {all_integers}")
+                                    else:
+                                        print(f"Chart extraction: Excluded position {pos} as non-integer data: range {min(values)}-{max(values)}, all integers: {all_integers}")
                             
                             # Find timestamp position
                             ts_candidates = []
@@ -555,11 +565,20 @@ def get_activities(date):
                                     unique_count = len(set(values))
                                     if unique_count > 100:
                                         ts_candidates.append((pos, unique_count, min(values), max(values)))
+                                        print(f"Chart extraction: Timestamp candidate at position {pos}: {unique_count} unique values, range {min(values)}-{max(values)}")
                             
                             if hr_candidates and ts_candidates:
                                 hr_pos = hr_candidates[0][0]
                                 ts_pos = ts_candidates[0][0]
-                                print(f"HR position: {hr_pos}, Timestamp position: {ts_pos}")
+                                print(f"Chart extraction: Selected HR position {hr_pos}, Timestamp position {ts_pos}")
+                                
+                                # Log all candidates for debugging
+                                print(f"Chart extraction: All HR candidates:")
+                                for pos, unique_count, min_val, max_val in hr_candidates:
+                                    print(f"  Position {pos}: {unique_count} unique values, range {min_val}-{max_val}")
+                                print(f"Chart extraction: All timestamp candidates:")
+                                for pos, unique_count, min_val, max_val in ts_candidates:
+                                    print(f"  Position {pos}: {unique_count} unique values, range {min_val}-{max_val}")
                                 
                                 # Extract HR time series
                                 for entry in activity_metrics:
@@ -571,9 +590,23 @@ def get_activities(date):
                                         if timestamp is not None and hr_value is not None:
                                             raw_hr_data.append([timestamp, int(hr_value)])
                                 
-                                print(f"Extracted {len(raw_hr_data)} HR data points from activityDetailMetrics")
+                                print(f"Chart extraction: Extracted {len(raw_hr_data)} HR data points from activityDetailMetrics")
+                                
+                                # Log sample of extracted data
+                                if raw_hr_data:
+                                    print(f"Chart extraction: Sample HR data (first 5 points):")
+                                    for i, (ts, hr) in enumerate(raw_hr_data[:5]):
+                                        print(f"  Point {i}: timestamp={ts}, HR={hr}")
                             else:
-                                print("Could not find HR and timestamp positions")
+                                print(f"Chart extraction: Could not find HR and timestamp positions")
+                                if not hr_candidates:
+                                    print(f"Chart extraction: No HR candidates found!")
+                                    # Log all positions that were in 48-167 range but excluded
+                                    for pos, values in position_data.items():
+                                        if values and min(values) >= 48 and max(values) <= 167:
+                                            print(f"Chart extraction: Position {pos} in HR range but excluded: range {min(values)}-{max(values)}, unique count {len(set(values))}")
+                                if not ts_candidates:
+                                    print(f"Chart extraction: No timestamp candidates found!")
                         else:
                             print("activityDetailMetrics is empty")
                     else:

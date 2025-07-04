@@ -283,6 +283,8 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
     if not activity_metrics:
         return None, None
     
+    logger.info(f"detect_hr_and_timestamp_positions (fallback): Starting detection with {len(activity_metrics)} metric entries")
+    
     # Collect all values for each position
     position_data = {}
     for entry in activity_metrics:
@@ -294,15 +296,23 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
                 if value is not None:
                     position_data[pos].append(value)
     
-    # Find heart rate position (values in 48-167 range, many unique values)
+    logger.info(f"detect_hr_and_timestamp_positions (fallback): Collected data for {len(position_data)} positions")
+    
+    # Find heart rate position (values in 48-167 range, should be integers)
     hr_candidates = []
     for pos, values in position_data.items():
         if values and min(values) >= 48 and max(values) <= 167:
-            # Exclude GPS coordinates (values around 51.4-51.5 are likely London latitude)
-            if not (min(values) >= 51.4 and max(values) <= 51.5):
+            # Check if all values are integers (HR data should be discrete)
+            all_integers = all(isinstance(v, (int, float)) and v == int(v) for v in values)
+            if all_integers:
                 unique_count = len(set(values))
-                if unique_count > 5:  # Should have many different heart rate values
+                if unique_count > 5:  # Should have some different heart rate values
                     hr_candidates.append((pos, unique_count, min(values), max(values)))
+                    logger.info(f"detect_hr_and_timestamp_positions (fallback): HR candidate at position {pos}: "
+                              f"{unique_count} unique values, range {min(values)}-{max(values)}, all integers: {all_integers}")
+            else:
+                logger.info(f"detect_hr_and_timestamp_positions (fallback): Excluded position {pos} as non-integer data: "
+                          f"range {min(values)}-{max(values)}, all integers: {all_integers}")
     
     # Find timestamp position (large numbers > 1000000000000, many unique values)
     ts_candidates = []
@@ -311,6 +321,8 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
             unique_count = len(set(values))
             if unique_count > 100:  # Should have many unique timestamps
                 ts_candidates.append((pos, unique_count, min(values), max(values)))
+                logger.info(f"detect_hr_and_timestamp_positions (fallback): Timestamp candidate at position {pos}: "
+                          f"{unique_count} unique values, range {min(values)}-{max(values)}")
     
     # Select best candidates
     hr_position = None
@@ -318,16 +330,35 @@ def detect_hr_and_timestamp_positions(activity_metrics: List[Dict]) -> Tuple[Opt
         # Sort by number of unique values (descending) and take the first
         hr_candidates.sort(key=lambda x: x[1], reverse=True)
         hr_position = hr_candidates[0][0]
-        logger.info(f"detect_hr_and_timestamp_positions (fallback): Found HR at position {hr_position} "
+        logger.info(f"detect_hr_and_timestamp_positions (fallback): Selected HR position {hr_position} "
                    f"({hr_candidates[0][1]} unique values, range {hr_candidates[0][2]}-{hr_candidates[0][3]})")
+        
+        # Log all HR candidates for debugging
+        logger.info(f"detect_hr_and_timestamp_positions (fallback): All HR candidates:")
+        for pos, unique_count, min_val, max_val in hr_candidates:
+            logger.info(f"  Position {pos}: {unique_count} unique values, range {min_val}-{max_val}")
+    else:
+        logger.warning(f"detect_hr_and_timestamp_positions (fallback): No HR candidates found!")
+        # Log all positions that were in 48-167 range but excluded
+        for pos, values in position_data.items():
+            if values and min(values) >= 48 and max(values) <= 167:
+                logger.info(f"detect_hr_and_timestamp_positions (fallback): Position {pos} in HR range but excluded: "
+                          f"range {min(values)}-{max(values)}, unique count {len(set(values))}")
     
     ts_position = None
     if ts_candidates:
         # Sort by number of unique values (descending) and take the first
         ts_candidates.sort(key=lambda x: x[1], reverse=True)
         ts_position = ts_candidates[0][0]
-        logger.info(f"detect_hr_and_timestamp_positions (fallback): Found timestamp at position {ts_position} "
+        logger.info(f"detect_hr_and_timestamp_positions (fallback): Selected timestamp position {ts_position} "
                    f"({ts_candidates[0][1]} unique values)")
+        
+        # Log all timestamp candidates for debugging
+        logger.info(f"detect_hr_and_timestamp_positions (fallback): All timestamp candidates:")
+        for pos, unique_count, min_val, max_val in ts_candidates:
+            logger.info(f"  Position {pos}: {unique_count} unique values, range {min_val}-{max_val}")
+    else:
+        logger.warning(f"detect_hr_and_timestamp_positions (fallback): No timestamp candidates found!")
     
     return hr_position, ts_position
 
@@ -672,12 +703,35 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                             hr_position, ts_position, correlation = detect_hr_and_timestamp_positions_advanced(
                                 activity_metrics, target_date, start_time, duration, daily_hr_data
                             )
+                            
+                            if hr_position is not None and ts_position is not None:
+                                logger.info(f"collect_activities_for_date: Advanced detection successful for activity {activity_id}")
+                                logger.info(f"collect_activities_for_date: HR position: {hr_position}, TS position: {ts_position}, correlation: {correlation}")
+                            else:
+                                logger.warning(f"collect_activities_for_date: Missing start time or duration for activity {activity_id}, skipping advanced detection")
+                                logger.warning(f"collect_activities_for_date: Advanced detection failed for activity {activity_id}, trying fallback")
+                                
+                                # Log the activity_metrics structure for debugging
+                                logger.info(f"collect_activities_for_date: activity_metrics has {len(activity_metrics)} entries")
+                                logger.info(f"collect_activities_for_date: First few activity_metrics entries:")
+                                for i, entry in enumerate(activity_metrics[:3]):
+                                    logger.info(f"  Entry {i}: {entry}")
+                                
+                                hr_position, ts_position = detect_hr_and_timestamp_positions(activity_metrics)
                         else:
                             logger.warning(f"collect_activities_for_date: Missing start time or duration for activity {activity_id}, skipping advanced detection")
-                            hr_position, ts_position, correlation = None, None, 0.0
+                            logger.warning(f"collect_activities_for_date: Advanced detection failed for activity {activity_id}, trying fallback")
+                            
+                            # Log the activity_metrics structure for debugging
+                            logger.info(f"collect_activities_for_date: activity_metrics has {len(activity_metrics)} entries")
+                            logger.info(f"collect_activities_for_date: First few activity_metrics entries:")
+                            for i, entry in enumerate(activity_metrics[:3]):
+                                logger.info(f"  Entry {i}: {entry}")
+                            
+                            hr_position, ts_position = detect_hr_and_timestamp_positions(activity_metrics)
                         
                         if hr_position is not None and ts_position is not None:
-                            logger.info(f"collect_activities_for_date: Advanced detection successful for activity {activity_id}, correlation: {correlation:.3f}")
+                            logger.info(f"collect_activities_for_date: Advanced detection successful for activity {activity_id}")
                             hr_time_series = []
                             for metric_entry in activity_metrics:
                                 if 'metrics' in metric_entry and len(metric_entry['metrics']) > max(hr_position, ts_position):
@@ -701,29 +755,7 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                             else:
                                 logger.info(f"collect_activities_for_date: No valid HR data points found for activity {activity_id}")
                         else:
-                            logger.warning(f"collect_activities_for_date: Advanced detection failed for activity {activity_id}, trying fallback")
-                            # Fallback to simple detection
-                            hr_position, ts_position = detect_hr_and_timestamp_positions(activity_metrics)
-                            if hr_position is not None and ts_position is not None:
-                                logger.info(f"collect_activities_for_date: Fallback detection successful for activity {activity_id}")
-                                hr_time_series = []
-                                for metric_entry in activity_metrics:
-                                    if 'metrics' in metric_entry and len(metric_entry['metrics']) > max(hr_position, ts_position):
-                                        metrics = metric_entry['metrics']
-                                        heart_rate = metrics[hr_position]
-                                        timestamp = metrics[ts_position]
-                                        
-                                        # Include all heart rate data from the identified series (do not filter by value)
-                                        if timestamp is not None and heart_rate is not None:
-                                            hr_time_series.append([timestamp, int(heart_rate)])
-                                
-                                if hr_time_series:
-                                    hr_data = {'heartRateValues': hr_time_series}
-                                    logger.info(f"collect_activities_for_date: Extracted {len(hr_time_series)} HR data points for activity {activity_id} (fallback)")
-                                else:
-                                    logger.info(f"collect_activities_for_date: No valid HR data points found for activity {activity_id} (fallback)")
-                            else:
-                                logger.warning(f"collect_activities_for_date: Both advanced and fallback detection failed for activity {activity_id}")
+                            logger.warning(f"collect_activities_for_date: Both advanced and fallback detection failed for activity {activity_id}")
                     else:
                         logger.info(f"collect_activities_for_date: No activityDetailMetrics data for activity {activity_id}")
                 else:
@@ -736,8 +768,32 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
             # Calculate TRIMP if we have HR data
             trimp_results = None
             if hr_data and 'heartRateValues' in hr_data and hr_data['heartRateValues']:
+                logger.info(f"collect_activities_for_date: About to calculate TRIMP for activity {activity_id}")
+                logger.info(f"collect_activities_for_date: HR data points: {len(hr_data['heartRateValues'])}")
+                
+                # Log sample of HR data being used for TRIMP calculation
+                if hr_data['heartRateValues']:
+                    logger.info(f"collect_activities_for_date: Sample HR data for TRIMP calculation (first 5 points):")
+                    for i, (ts, hr) in enumerate(hr_data['heartRateValues'][:5]):
+                        logger.info(f"  Point {i}: timestamp={ts}, HR={hr}")
+                
                 trimp_results = analyzer.analyze_heart_rate_data(hr_data)
                 logger.info(f"collect_activities_for_date: Calculated TRIMP for activity {activity_id}: {trimp_results['total_trimp']:.2f}")
+                
+                # Log TRIMP breakdown
+                if trimp_results['presentation_buckets']:
+                    logger.info(f"collect_activities_for_date: TRIMP breakdown for activity {activity_id}:")
+                    for bucket, data in trimp_results['presentation_buckets'].items():
+                        if data['minutes'] > 0 or data['trimp'] > 0:
+                            logger.info(f"  {bucket}: {data['minutes']:.1f} minutes, {data['trimp']:.2f} TRIMP")
+            else:
+                logger.warning(f"collect_activities_for_date: No HR data available for TRIMP calculation for activity {activity_id}")
+                if hr_data:
+                    logger.info(f"collect_activities_for_date: HR data keys: {list(hr_data.keys()) if isinstance(hr_data, dict) else 'Not a dict'}")
+                    if 'heartRateValues' in hr_data:
+                        logger.info(f"collect_activities_for_date: heartRateValues length: {len(hr_data['heartRateValues']) if hr_data['heartRateValues'] else 'Empty'}")
+                else:
+                    logger.info(f"collect_activities_for_date: hr_data is None")
             
             # Extract activity data - handle both string and dict formats
             if isinstance(activity, dict):
