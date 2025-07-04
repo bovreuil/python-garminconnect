@@ -144,9 +144,10 @@ class TRIMPCalculator:
                 # Presentation bucket
                 for j, (min_hr, max_hr) in enumerate(self.presentation_buckets):
                     if min_hr <= hr <= max_hr:
-                        bucket_name = f"{min_hr}-{max_hr if max_hr != 999 else '999'}"
-                        if bucket_name == "160-999":
+                        if max_hr == 999:
                             bucket_name = "160+"
+                        else:
+                            bucket_name = f"{min_hr}-{max_hr}"
                         presentation_buckets[bucket_name]['minutes'] += time_interval_minutes
                         presentation_buckets[bucket_name]['trimp'] += trimp
                         break

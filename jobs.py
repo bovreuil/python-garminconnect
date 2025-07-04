@@ -460,81 +460,75 @@ def collect_garmin_data_job(target_date: str, job_id: str):
             return
         
         heart_rate_values = heart_rate_data['heartRateValues']
-        logger.info(f"collect_garmin_data_job: Heart rate values: {len(heart_rate_values)} points")
+        logger.info(f"collect_garmin_data_job: Heart rate values: {len(heart_rate_values) if heart_rate_values else 0} points")
         
-        if not heart_rate_values or len(heart_rate_values) == 0:
-            error_msg = f"No heart rate values found for {target_date}"
-            logger.warning(f"collect_garmin_data_job: {error_msg}")
+        # Check if we have daily HR data
+        has_daily_hr_data = heart_rate_values and len(heart_rate_values) > 0
+        
+        if not has_daily_hr_data:
+            logger.info(f"collect_garmin_data_job: No daily HR data found for {target_date}, will try to construct from activities")
+            # Don't exit early - continue to collect activities
+        else:
+            # Check for None values in heart rate data
+            if any(value is None for value in heart_rate_values):
+                error_msg = f"Heart rate data contains None values for {target_date} - no valid data"
+                logger.warning(f"collect_garmin_data_job: {error_msg}")
+                cur.execute("""
+                    UPDATE background_jobs 
+                    SET status = 'completed', result = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE job_id = ?
+                """, (json.dumps({'message': error_msg, 'data_found': False}), job_id))
+                conn.commit()
+                cur.close()
+                conn.close()
+                return
+            
+            # Get HR parameters for analysis
+            resting_hr, max_hr = get_user_hr_parameters()
+            analyzer = HeartRateAnalyzer(resting_hr, max_hr)
+            
+            # Analyze the data
+            logger.info(f"collect_garmin_data_job: Analyzing heart rate data")
+            analysis_results = analyzer.analyze_heart_rate_data(heart_rate_data)
+            
+            # Debug raw heart rate data
+            raw_hr_data = heart_rate_data['heartRateValues']
+            logger.info(f"collect_garmin_data_job: Raw HR data type: {type(raw_hr_data)}")
+            logger.info(f"collect_garmin_data_job: Raw HR data length: {len(raw_hr_data) if raw_hr_data else 0}")
+            if raw_hr_data and len(raw_hr_data) > 0:
+                logger.info(f"collect_garmin_data_job: First few HR data points: {raw_hr_data[:3]}")
+            
+            # Serialize raw data to JSON
+            raw_hr_json = json.dumps(raw_hr_data)
+            logger.info(f"collect_garmin_data_job: Raw HR JSON length: {len(raw_hr_json)}")
+            
+            # Store heart rate data in database
+            logger.info(f"collect_garmin_data_job: Storing heart rate data for {target_date}")
+            
+            # Delete existing data for this date
+            cur.execute("DELETE FROM daily_data WHERE date = ?", (target_date,))
+            
+            # Calculate TRIMP and other metrics
+            total_trimp = analysis_results['total_trimp']
+            daily_score = analysis_results['daily_score']
+            activity_type = analysis_results['activity_type']
+            
+            # Store in new daily_data table
             cur.execute("""
-                UPDATE background_jobs 
-                SET status = 'completed', result = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE job_id = ?
-            """, (json.dumps({'message': error_msg, 'data_found': False}), job_id))
+                INSERT INTO daily_data 
+                (date, heart_rate_series, trimp_data, total_trimp, daily_score, activity_type)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                str(target_date),
+                json.dumps(heart_rate_values),
+                json.dumps(analysis_results['trimp_data']),
+                float(total_trimp),
+                float(daily_score),
+                str(activity_type)
+            ))
+            
             conn.commit()
-            cur.close()
-            conn.close()
-            return
-        
-        # Check for None values in heart rate data
-        if any(value is None for value in heart_rate_values):
-            error_msg = f"Heart rate data contains None values for {target_date} - no valid data"
-            logger.warning(f"collect_garmin_data_job: {error_msg}")
-            cur.execute("""
-                UPDATE background_jobs 
-                SET status = 'completed', result = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE job_id = ?
-            """, (json.dumps({'message': error_msg, 'data_found': False}), job_id))
-            conn.commit()
-            cur.close()
-            conn.close()
-            return
-        
-        # Get HR parameters for analysis
-        resting_hr, max_hr = get_user_hr_parameters()
-        analyzer = HeartRateAnalyzer(resting_hr, max_hr)
-        
-        # Analyze the data
-        logger.info(f"collect_garmin_data_job: Analyzing heart rate data")
-        analysis_results = analyzer.analyze_heart_rate_data(heart_rate_data)
-        
-        # Debug raw heart rate data
-        raw_hr_data = heart_rate_data['heartRateValues']
-        logger.info(f"collect_garmin_data_job: Raw HR data type: {type(raw_hr_data)}")
-        logger.info(f"collect_garmin_data_job: Raw HR data length: {len(raw_hr_data) if raw_hr_data else 0}")
-        if raw_hr_data and len(raw_hr_data) > 0:
-            logger.info(f"collect_garmin_data_job: First few HR data points: {raw_hr_data[:3]}")
-        
-        # Serialize raw data to JSON
-        raw_hr_json = json.dumps(raw_hr_data)
-        logger.info(f"collect_garmin_data_job: Raw HR JSON length: {len(raw_hr_json)}")
-        
-        # Store heart rate data in database
-        logger.info(f"collect_garmin_data_job: Storing heart rate data for {target_date}")
-        
-        # Delete existing data for this date
-        cur.execute("DELETE FROM daily_data WHERE date = ?", (target_date,))
-        
-        # Calculate TRIMP and other metrics
-        total_trimp = analysis_results['total_trimp']
-        daily_score = analysis_results['daily_score']
-        activity_type = analysis_results['activity_type']
-        
-        # Store in new daily_data table
-        cur.execute("""
-            INSERT INTO daily_data 
-            (date, heart_rate_series, trimp_data, total_trimp, daily_score, activity_type)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            str(target_date),
-            json.dumps(heart_rate_values),
-            json.dumps(analysis_results['trimp_data']),
-            float(total_trimp),
-            float(daily_score),
-            str(activity_type)
-        ))
-        
-        conn.commit()
-        logger.info(f"collect_garmin_data_job: Data saved to database successfully")
+            logger.info(f"collect_garmin_data_job: Data saved to database successfully")
         
         # Collect activities for the same date
         activity_collection_success = True
@@ -544,14 +538,28 @@ def collect_garmin_data_job(target_date: str, job_id: str):
             logger.warning(f"collect_garmin_data_job: Failed to collect activities: {activity_error}")
             activity_collection_success = False
         
+        # If no daily HR data was found but we have activities, try to construct daily data from activities
+        if not has_daily_hr_data and activity_collection_success:
+            logger.info(f"collect_garmin_data_job: No daily HR data found, attempting to construct from activities")
+            try:
+                construct_daily_data_from_activities(target_date, conn, cur)
+            except Exception as construction_error:
+                logger.warning(f"collect_garmin_data_job: Failed to construct daily data from activities: {construction_error}")
+        
         # Update job status based on whether activity collection succeeded
         if activity_collection_success:
-            result_data = {
-                'message': 'Data collection completed successfully',
-                'total_trimp': total_trimp,
-                'daily_score': daily_score,
-                'activity_type': activity_type
-            }
+            if has_daily_hr_data:
+                result_data = {
+                    'message': 'Data collection completed successfully',
+                    'total_trimp': total_trimp,
+                    'daily_score': daily_score,
+                    'activity_type': activity_type
+                }
+            else:
+                result_data = {
+                    'message': 'Activity collection completed successfully (no daily HR data)',
+                    'data_found': False
+                }
             
             cur.execute("""
                 UPDATE background_jobs 
@@ -990,3 +998,92 @@ def find_continuous_segments(hr_series):
         segments.append(current_segment)
     
     return segments 
+
+def construct_daily_data_from_activities(target_date, conn, cur):
+    """
+    Construct daily HR data from activities when no daily HR data exists.
+    
+    Args:
+        target_date: Date to process
+        conn: Database connection
+        cur: Database cursor
+    """
+    logger.info(f"construct_daily_data_from_activities: Starting construction for {target_date}")
+    
+    # Get all activities for this date
+    cur.execute("""
+        SELECT activity_id, heart_rate_series, start_time_local, duration_seconds
+        FROM activity_data 
+        WHERE date = ? AND heart_rate_series IS NOT NULL
+        ORDER BY start_time_local
+    """, (target_date,))
+    
+    activities = cur.fetchall()
+    logger.info(f"construct_daily_data_from_activities: Found {len(activities)} activities with HR data")
+    
+    if not activities:
+        logger.info(f"construct_daily_data_from_activities: No activities with HR data found for {target_date}")
+        return
+    
+    # Collect all HR data from activities
+    all_hr_series = []
+    total_duration_seconds = 0
+    
+    for activity in activities:
+        activity_id = activity['activity_id']
+        activity_hr_series = json.loads(activity['heart_rate_series'])
+        duration_seconds = activity['duration_seconds']
+        
+        if not activity_hr_series:
+            continue
+        
+        logger.info(f"construct_daily_data_from_activities: Processing activity {activity_id} with {len(activity_hr_series)} HR points")
+        
+        # Add activity duration to total
+        if duration_seconds:
+            total_duration_seconds += duration_seconds
+        
+        # Find continuous segments in activity HR data
+        segments = find_continuous_segments(activity_hr_series)
+        logger.info(f"construct_daily_data_from_activities: Found {len(segments)} continuous segments")
+        
+        # Add all segments to the daily HR series
+        for segment in segments:
+            all_hr_series.extend(segment)
+    
+    if not all_hr_series:
+        logger.info(f"construct_daily_data_from_activities: No HR data collected from activities for {target_date}")
+        return
+    
+    # Sort by timestamp
+    all_hr_series.sort(key=lambda x: x[0])
+    logger.info(f"construct_daily_data_from_activities: Collected {len(all_hr_series)} total HR points")
+    
+    # Get HR parameters for analysis
+    resting_hr, max_hr = get_user_hr_parameters()
+    analyzer = HeartRateAnalyzer(resting_hr, max_hr)
+    
+    # Create a heart_rate_data structure for analysis
+    heart_rate_data = {
+        'heartRateValues': all_hr_series
+    }
+    
+    # Analyze the constructed data
+    analysis_results = analyzer.analyze_heart_rate_data(heart_rate_data)
+    
+    # Store in daily_data table
+    cur.execute("""
+        INSERT INTO daily_data 
+        (date, heart_rate_series, trimp_data, total_trimp, daily_score, activity_type)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        str(target_date),
+        json.dumps(all_hr_series),
+        json.dumps(analysis_results['trimp_data']),
+        float(analysis_results['total_trimp']),
+        float(analysis_results['daily_score']),
+        str(analysis_results['activity_type'])
+    ))
+    
+    conn.commit()
+    logger.info(f"construct_daily_data_from_activities: Created daily data with {len(all_hr_series)} HR points, TRIMP: {analysis_results['total_trimp']}, Duration: {total_duration_seconds/60:.1f} minutes") 
