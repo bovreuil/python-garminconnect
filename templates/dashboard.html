@@ -1152,21 +1152,53 @@ function createHeartRateChart(date, dayData) {
     console.log('First few labels:', labels.slice(0, 5));
     console.log('First few data points:', data.slice(0, 5));
     
-    // Filter out null values to keep only actual heart rate data
-    const filteredLabels = [];
-    const filteredData = [];
+    // Create a smart dataset that only includes null values for actual gaps
+    const chartLabels = [];
+    const chartData = [];
     
+    // Sort the actual data points by timestamp
+    const actualDataPoints = [];
     for (let i = 0; i < labels.length; i++) {
         if (data[i] !== null) {
-            filteredLabels.push(labels[i]);
-            filteredData.push(data[i]);
+            actualDataPoints.push({
+                timestamp: labels[i],
+                value: data[i]
+            });
         }
     }
     
-    console.log('Filtered labels length:', filteredLabels.length);
-    console.log('Filtered data length:', filteredData.length);
-    console.log('First few filtered labels:', filteredLabels.slice(0, 5));
-    console.log('First few filtered data points:', filteredData.slice(0, 5));
+    // Add data points and insert null values for gaps > 5 minutes
+    for (let i = 0; i < actualDataPoints.length; i++) {
+        const currentPoint = actualDataPoints[i];
+        
+        // Add the current data point
+        chartLabels.push(currentPoint.timestamp);
+        chartData.push(currentPoint.value);
+        
+        // Check if there's a gap to the next point
+        if (i < actualDataPoints.length - 1) {
+            const nextPoint = actualDataPoints[i + 1];
+            const gapMinutes = (nextPoint.timestamp.getTime() - currentPoint.timestamp.getTime()) / (1000 * 60);
+            
+            // If gap is > 5 minutes, add a null point to create a visual break
+            if (gapMinutes > 5) {
+                // Add a null point 1 minute after the current segment
+                const gapTimestamp = new Date(currentPoint.timestamp.getTime() + (1 * 60 * 1000)); // 1 minute after current
+                chartLabels.push(gapTimestamp);
+                chartData.push(null);
+                
+                // Add a null point 1 minute before the next segment
+                const nextGapTimestamp = new Date(nextPoint.timestamp.getTime() - (1 * 60 * 1000)); // 1 minute before next
+                chartLabels.push(nextGapTimestamp);
+                chartData.push(null);
+            }
+        }
+    }
+    
+    console.log('Chart labels length:', chartLabels.length);
+    console.log('Chart data length:', chartData.length);
+    console.log('First few chart labels:', chartLabels.slice(0, 5));
+    console.log('First few chart data points:', chartData.slice(0, 5));
     
     // Small delay to ensure DOM is ready
     setTimeout(() => {
@@ -1223,7 +1255,7 @@ function createHeartRateChart(date, dayData) {
                     // Heart rate line on top
                     {
                         label: 'Heart Rate (BPM)',
-                        data: filteredLabels.map((label, index) => ({ x: label, y: filteredData[index] })), // Use filtered data with timestamps
+                        data: chartLabels.map((label, index) => ({ x: label, y: chartData[index] })), // Use data with null values for gaps
                         borderColor: '#e74c3c',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
@@ -1239,6 +1271,7 @@ function createHeartRateChart(date, dayData) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                spanGaps: false, // Don't draw lines across gaps
                 plugins: {
                     legend: {
                         display: false
@@ -1529,6 +1562,7 @@ function createActivityHeartRateChart(activity) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                spanGaps: false, // Don't draw lines across gaps
                 plugins: {
                     legend: {
                         display: false
