@@ -78,6 +78,46 @@ def detect_hr_and_timestamp_positions(activity_details: Dict) -> Tuple[Optional[
     
     return hr_position, ts_position
 
+
+def detect_breathing_rate_position(activity_details: Dict) -> Optional[int]:
+    """
+    Detect breathing rate position in activity metrics.
+    
+    Args:
+        activity_details: Activity details from Garmin API
+        
+    Returns:
+        Breathing rate position or None if not found
+    """
+    logger.info(f"detect_breathing_rate_position: Analyzing activity details for breathing rate")
+    
+    # Get metric descriptors
+    metric_descriptors = activity_details.get('metricDescriptors', [])
+    if not metric_descriptors:
+        logger.warning(f"detect_breathing_rate_position: No metricDescriptors found")
+        return None
+    
+    # Find breathing rate position
+    breathing_pos = None
+    
+    for descriptor in metric_descriptors:
+        metrics_index = descriptor.get('metricsIndex')
+        key = descriptor.get('key', '')
+        logger.info(f"detect_breathing_rate_position: Descriptor {metrics_index}: key='{key}'")
+        
+        if key == 'directRespirationRate':
+            breathing_pos = metrics_index
+            logger.info(f"detect_breathing_rate_position: Found breathing rate at position {breathing_pos}")
+            break
+    
+    if breathing_pos is not None:
+        logger.info(f"detect_breathing_rate_position: Successfully detected breathing rate at {breathing_pos}")
+        return breathing_pos
+    else:
+        logger.info(f"detect_breathing_rate_position: No breathing rate data found")
+        return None
+
+
 def collect_garmin_data_job(target_date: str, job_id: str):
     """
     Background job to collect heart rate data from Garmin Connect.
@@ -428,8 +468,9 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                 logger.error(f"collect_activities_for_date: Failed to get activity details for {activity_id}: {e}")
                 continue
             
-            # Extract HR data from activity
+            # Extract HR and breathing rate data from activity
             hr_series = []
+            breathing_series = []
             trimp_data = {'zones': {}, 'total_trimp': 0.0}
             total_trimp = 0.0
             
@@ -441,8 +482,13 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                     # Use the clean HR detection function with activity details
                     hr_pos, ts_pos = detect_hr_and_timestamp_positions(activity_details)
                     
+                    # Detect breathing rate position
+                    breathing_pos = detect_breathing_rate_position(activity_details)
+                    
                     if hr_pos is not None and ts_pos is not None:
                         logger.info(f"collect_activities_for_date: Selected HR position {hr_pos}, Timestamp position {ts_pos}")
+                        if breathing_pos is not None:
+                            logger.info(f"collect_activities_for_date: Selected breathing rate position {breathing_pos}")
                         
                         # Get the factor for HR values from metricDescriptors
                         hr_factor = 1.0
@@ -452,9 +498,10 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                                 logger.info(f"collect_activities_for_date: Using HR factor: {hr_factor}")
                                 break
                         
-                        # Extract HR time series
+                        # Extract HR and breathing rate time series
                         hr_values_checked = 0
                         hr_values_filtered = 0
+                        breathing_values_checked = 0
                         
                         # Get user's HR parameters for filtering
                         user_resting_hr, user_max_hr = get_user_hr_parameters()
@@ -484,8 +531,21 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                                         continue
                                     
                                     hr_series.append([timestamp, int(actual_hr_value)])
+                                
+                                # Extract breathing rate if available
+                                if breathing_pos is not None and len(metrics) > breathing_pos:
+                                    breathing_value = metrics[breathing_pos]
+                                    if timestamp is not None and breathing_value is not None:
+                                        breathing_values_checked += 1
+                                        
+                                        # Log first few breathing values for debugging
+                                        if breathing_values_checked <= 5:
+                                            logger.info(f"collect_activities_for_date: Sample breathing value {breathing_values_checked}: {breathing_value}")
+                                        
+                                        breathing_series.append([timestamp, float(breathing_value)])
                         
                         logger.info(f"collect_activities_for_date: Checked {hr_values_checked} HR values, filtered {hr_values_filtered}, extracted {len(hr_series)}")
+                        logger.info(f"collect_activities_for_date: Checked {breathing_values_checked} breathing values, extracted {len(breathing_series)}")
                         
                         # Calculate TRIMP for activity using the new function
                         if hr_series:
@@ -506,8 +566,8 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
             cur.execute("""
                 INSERT INTO activity_data 
                 (activity_id, date, activity_name, activity_type, start_time_local, duration_seconds,
-                 distance_meters, elevation_gain, average_hr, max_hr, heart_rate_series, trimp_data, total_trimp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 distance_meters, elevation_gain, average_hr, max_hr, heart_rate_series, breathing_rate_series, trimp_data, total_trimp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 str(activity_id), 
                 str(target_date), 
@@ -520,8 +580,9 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                 int(average_hr) if average_hr else None, 
                 int(max_hr) if max_hr else None, 
                 json.dumps(hr_series), 
+                json.dumps(breathing_series), 
                 json.dumps(trimp_data), 
-                float(trimp_results['total_trimp'])
+                float(trimp_results['total_trimp']) if 'trimp_results' in locals() else 0.0
             ))
             
             logger.info(f"collect_activities_for_date: Stored activity {activity_id} in new schema")

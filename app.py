@@ -498,7 +498,7 @@ def get_activities(date):
     cur.execute("""
         SELECT activity_id, activity_name, activity_type, start_time_local, duration_seconds,
                distance_meters, elevation_gain, average_hr, max_hr, heart_rate_series, 
-               trimp_data, total_trimp
+               breathing_rate_series, trimp_data, total_trimp
         FROM activity_data 
         WHERE date = ?
         ORDER BY start_time_local
@@ -512,6 +512,7 @@ def get_activities(date):
     for activity in activities:
         # Convert from new schema format
         heart_rate_series = json.loads(activity['heart_rate_series']) if activity['heart_rate_series'] else []
+        breathing_rate_series = json.loads(activity['breathing_rate_series']) if activity['breathing_rate_series'] else []
         trimp_data = json.loads(activity['trimp_data']) if activity['trimp_data'] else {}
         
         activities_list.append({
@@ -528,7 +529,8 @@ def get_activities(date):
             'presentation_buckets': trimp_data.get('presentation_buckets', {}),
             'trimp_data': trimp_data,
             'total_trimp': activity['total_trimp'],
-            'heart_rate_values': heart_rate_series
+            'heart_rate_values': heart_rate_series,
+            'breathing_rate_values': breathing_rate_series
         })
     
     return jsonify(activities_list)

@@ -1527,8 +1527,11 @@ function createActivityHeartRateChart(activity) {
     
     // Process heart rate values
     const hrData = activity.heart_rate_values;
+    const breathingData = activity.breathing_rate_values || [];
     console.log('Activity heart rate values length:', hrData.length);
-    console.log('First few data points:', hrData.slice(0, 5));
+    console.log('Activity breathing rate values length:', breathingData.length);
+    console.log('First few HR data points:', hrData.slice(0, 5));
+    console.log('First few breathing data points:', breathingData.slice(0, 5));
     
     // Sort data by timestamp
     const sortedData = hrData.sort((a, b) => {
@@ -1537,11 +1540,19 @@ function createActivityHeartRateChart(activity) {
         return timestampA - timestampB;
     });
     
+    // Sort breathing data by timestamp if available
+    const sortedBreathingData = breathingData.length > 0 ? breathingData.sort((a, b) => {
+        const timestampA = Array.isArray(a) ? a[0] : a.timestamp;
+        const timestampB = Array.isArray(b) ? b[0] : b.timestamp;
+        return timestampA - timestampB;
+    }) : [];
+    
     console.log('Sorted activity data length:', sortedData.length);
     
     // Extract timestamps and heart rate values
     const timestamps = [];
     const hrValues = [];
+    const breathingValues = [];
     
     sortedData.forEach(point => {
         let timestamp, hr;
@@ -1562,6 +1573,28 @@ function createActivityHeartRateChart(activity) {
         timestamps.push(new Date(timestamp));
         hrValues.push(hr);
     });
+    
+    // Extract breathing rate values if available
+    if (sortedBreathingData.length > 0) {
+        sortedBreathingData.forEach(point => {
+            let timestamp, breathing;
+            
+            if (Array.isArray(point)) {
+                // Format: [timestamp, value]
+                timestamp = point[0];
+                breathing = point[1];
+            } else {
+                // Format: {"value": x, "timestamp": y}
+                timestamp = point.timestamp;
+                breathing = point.value;
+            }
+            
+            // Skip null values
+            if (breathing === null || breathing === undefined) return;
+            
+            breathingValues.push({ timestamp: new Date(timestamp), value: breathing });
+        });
+    }
     
     console.log('Processed activity timestamps length:', timestamps.length);
     console.log('Processed activity HR values length:', hrValues.length);
@@ -1628,44 +1661,40 @@ function createActivityHeartRateChart(activity) {
             return;
         }
         
-        // Create the chart
-        activityHrChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: chartLabels,
-                datasets: [
-                    // Single background dataset with gradient
-                    {
-                        label: 'Background',
-                        data: chartLabels.map(timestamp => ({ x: timestamp, y: 160 })), // Full height background
-                        borderColor: 'transparent',
-                        backgroundColor: function(context) {
-                            const chart = context.chart;
-                            const {ctx, chartArea} = chart;
-                            
-                            if (!chartArea) {
-                                return 'transparent';
-                            }
-                            
-                            // Create gradient
-                            const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                            
-                            // Add color stops for each zone
-                            gradient.addColorStop(0, '#e74c3c'); // 160+ Red
-                            gradient.addColorStop(1/12, '#e74c3c'); // 150-159 Red
-                            gradient.addColorStop(1/12, '#fd7e14'); // 150-159 Orange
-                            gradient.addColorStop(1/6, '#fd7e14'); // 140-149 Orange
-                            gradient.addColorStop(1/6, '#ffc107'); // 140-149 Yellow
-                            gradient.addColorStop(3/12, '#ffc107'); // 130-139 Yellow
-                            gradient.addColorStop(3/12, '#9acd32'); // 130-139 Yellow-green
-                            gradient.addColorStop(1/3, '#9acd32'); // 120-129 Yellow-green
-                            gradient.addColorStop(1/3, '#28a745'); // 120-129 Green
-                            gradient.addColorStop(5/12, '#28a745'); // 110-119 Green
-                            gradient.addColorStop(5/12, '#006d5b'); // 110-119 Deep teal
-                            gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
-                            gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
-                            gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
-                            gradient.addColorStop(7/12, '#002040'); // 80-89 Midnight
+        // Create datasets array
+        const datasets = [
+            // Single background dataset with gradient
+            {
+                label: 'Background',
+                data: chartLabels.map(timestamp => ({ x: timestamp, y: 160 })), // Full height background
+                borderColor: 'transparent',
+                backgroundColor: function(context) {
+                    const chart = context.chart;
+                    const {ctx, chartArea} = chart;
+                    
+                    if (!chartArea) {
+                        return 'transparent';
+                    }
+                    
+                    // Create gradient
+                    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                    
+                    // Add color stops for each zone
+                    gradient.addColorStop(0, '#e74c3c'); // 160+ Red
+                    gradient.addColorStop(1/12, '#e74c3c'); // 150-159 Red
+                    gradient.addColorStop(1/12, '#fd7e14'); // 150-159 Orange
+                    gradient.addColorStop(1/6, '#fd7e14'); // 140-149 Orange
+                    gradient.addColorStop(1/6, '#ffc107'); // 140-149 Yellow
+                    gradient.addColorStop(3/12, '#ffc107'); // 130-139 Yellow
+                    gradient.addColorStop(3/12, '#9acd32'); // 130-139 Yellow-green
+                    gradient.addColorStop(1/3, '#9acd32'); // 120-129 Yellow-green
+                    gradient.addColorStop(1/3, '#28a745'); // 120-129 Green
+                    gradient.addColorStop(5/12, '#28a745'); // 110-119 Green
+                    gradient.addColorStop(5/12, '#006d5b'); // 110-119 Deep teal
+                    gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
+                    gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
+                    gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
+                    gradient.addColorStop(7/12, '#002040'); // 80-89 Midnight
                             gradient.addColorStop(2/3, '#002040'); // 80-89 Midnight
                             gradient.addColorStop(2/3, '#000000'); // 80-89 Black
                             gradient.addColorStop(1, '#000000'); // Below 80 Black
@@ -1676,7 +1705,7 @@ function createActivityHeartRateChart(activity) {
                         fill: true,
                         tension: 0,
                         pointRadius: 0,
-                        order: 1
+                        order: 2
                     },
                     // Heart rate line on top
                     {
@@ -1690,9 +1719,44 @@ function createActivityHeartRateChart(activity) {
                         pointRadius: 0,
                         pointHoverRadius: 4,
                         pointHoverBackgroundColor: '#e74c3c',
-                        order: 0
+                        order: 0,
+                        yAxisID: 'y'
                     }
-                ]
+                ];
+        
+        // Add breathing rate dataset if available
+        if (breathingValues.length > 0) {
+            // Create breathing rate data points aligned with HR timestamps
+            const breathingDataPoints = chartLabels.map(timestamp => {
+                // Find the closest breathing rate value to this timestamp
+                const closestBreathing = breathingValues.find(bv => 
+                    Math.abs(bv.timestamp.getTime() - timestamp.getTime()) < 30000 // Within 30 seconds
+                );
+                return { x: timestamp, y: closestBreathing ? closestBreathing.value : null };
+            });
+            
+            datasets.push({
+                label: 'Breathing Rate (BPM)',
+                data: breathingDataPoints,
+                borderColor: '#87CEEB', // Light blue
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                pointHoverBackgroundColor: '#87CEEB',
+                order: 1,
+                yAxisID: 'y1' // Secondary y-axis
+            });
+        }
+        
+        // Create the chart
+        activityHrChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartLabels,
+                datasets: datasets
             },
             options: {
                 responsive: true,
@@ -1723,9 +1787,11 @@ function createActivityHeartRateChart(activity) {
                                 return `Time: ${context[0].label}`;
                             },
                             label: function(context) {
-                                // Only show tooltip for heart rate data, not background
+                                // Show tooltip for both heart rate and breathing rate data
                                 if (context.dataset.label === 'Heart Rate (BPM)') {
                                     return `Heart Rate: ${context.parsed.y} BPM`;
+                                } else if (context.dataset.label === 'Breathing Rate (BPM)') {
+                                    return `Breathing Rate: ${context.parsed.y} BPM`;
                                 }
                                 return null; // Hide background dataset from tooltip
                             }
@@ -1760,6 +1826,9 @@ function createActivityHeartRateChart(activity) {
                         }
                     },
                     y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
                         title: {
                             display: true,
                             text: 'Heart Rate (BPM)'
@@ -1769,6 +1838,23 @@ function createActivityHeartRateChart(activity) {
                         ticks: {
                             stepSize: 20
                         }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: breathingValues.length > 0, // Only show if breathing data exists
+                        position: 'right',
+                        title: {
+                            display: breathingValues.length > 0,
+                            text: 'Breathing Rate (BPM)'
+                        },
+                        min: 0,
+                        max: 60, // Typical breathing rate range
+                        ticks: {
+                            stepSize: 10
+                        },
+                        grid: {
+                            drawOnChartArea: false, // Only want to show grid for primary axis
+                        },
                     }
                 },
                 interaction: {
