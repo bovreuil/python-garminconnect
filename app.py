@@ -1032,6 +1032,65 @@ def daily_notes(date):
             logger.error(f"Error loading daily notes for {date}: {e}")
             return jsonify({'error': f'Error loading notes: {str(e)}'}), 500
 
+@app.route('/api/data/<date>/hr-csv')
+def download_daily_hr_csv(date):
+    """Download HR data for a specific date as CSV."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        target_date = datetime.strptime(date, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format'}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Get daily HR data
+    cur.execute("""
+        SELECT heart_rate_series
+        FROM daily_data 
+        WHERE date = ?
+    """, (target_date,))
+    
+    daily_data = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not daily_data:
+        return jsonify({'error': 'Daily data not found'}), 404
+    
+    heart_rate_series = json.loads(daily_data['heart_rate_series']) if daily_data['heart_rate_series'] else []
+    
+    if not heart_rate_series:
+        return jsonify({'error': 'No HR data available for this date'}), 404
+    
+    # Create CSV content
+    import io
+    import csv
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['timestamp', 'hr'])  # Header
+    
+    for entry in heart_rate_series:
+        if entry and len(entry) >= 2:
+            timestamp = entry[0]
+            hr = entry[1]
+            writer.writerow([timestamp, hr])
+    
+    output.seek(0)
+    
+    # Create response with CSV content
+    from flask import Response
+    response = Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=daily_{date}_hr_data.csv'}
+    )
+    
+    return response
+
 if __name__ == '__main__':
     init_database()
     app.run(debug=SERVER_CONFIG['DEBUG'], host=SERVER_CONFIG['HOST'], port=SERVER_CONFIG['DEFAULT_PORT']) 

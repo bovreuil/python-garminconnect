@@ -51,9 +51,14 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Single Date View</h5>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="closeSingleDate">
-                    <span>×</span>
-                </button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="downloadDailyCsv">
+                        <span>📥 CSV</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="closeSingleDate">
+                        <span>×</span>
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <!-- 24-Hour Heart Rate Chart -->
@@ -203,6 +208,14 @@ function getPeriodString(startDate, endDate) {
     return `${startStr}-${endStr}`;
 }
 
+// Helper function to format dates consistently without timezone issues
+function formatDateForAPI(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 function handleInitialNavigation() {
     // Check for initial period and date from server-side template
     {% if initial_period %}
@@ -316,6 +329,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('closeSingleDate').addEventListener('click', closeSingleDateView);
     document.getElementById('closeSingleActivity').addEventListener('click', closeSingleActivityView);
     document.getElementById('downloadActivityCsv').addEventListener('click', downloadActivityCsv);
+    document.getElementById('downloadDailyCsv').addEventListener('click', downloadDailyCsv);
     document.getElementById('editSpo2').addEventListener('click', openSpo2Editor);
     document.getElementById('addSpo2Entry').addEventListener('click', addSpo2Entry);
     document.getElementById('saveSpo2').addEventListener('click', saveSpo2Data);
@@ -438,7 +452,7 @@ function loadTwoWeekData(startDate, endDate) {
 
 // Load data for a single date
 function loadDateData(date) {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateForAPI(date);
     
     console.log(`Loading data for ${dateStr}`);
     
@@ -706,7 +720,7 @@ function showSingleDateView(date, dayData) {
     selectedDate = date; // Store the selected date globally
     
     // Update URL with period and date
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateForAPI(date);
     const periodStr = currentStartDate && currentEndDate ? getPeriodString(currentStartDate, currentEndDate) : '';
     const url = periodStr ? `/${periodStr}/${dateStr}` : `/${dateStr}`;
     updateURL(url);
@@ -769,7 +783,7 @@ function showSingleDateView(date, dayData) {
             <div class="mt-3">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h6 class="mb-0">Notes</h6>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editDailyNotes('${typeof date === 'string' ? date : date.toISOString().split('T')[0]}')">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editDailyNotes('${formatDateForAPI(date)}')">
                         <span>✏️</span>
                     </button>
                 </div>
@@ -782,7 +796,7 @@ function showSingleDateView(date, dayData) {
         document.getElementById('dateDetails').innerHTML = detailsHtml;
         
         // Load notes for this date
-        loadDailyNotes(typeof date === 'string' ? date : date.toISOString().split('T')[0]);
+        loadDailyNotes(formatDateForAPI(date));
         
         // Display zone breakdown
         if (dayData.presentation_buckets) {
@@ -1027,6 +1041,25 @@ function downloadActivityCsv() {
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = `activity_${activityId}_hr_data.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Download daily HR data as CSV
+function downloadDailyCsv() {
+    if (!selectedDate) {
+        console.error('No date selected for download');
+        return;
+    }
+    
+    const dateStr = formatDateForAPI(selectedDate);
+    const downloadUrl = `/api/data/${dateStr}/hr-csv`;
+    
+    // Create a temporary link element to trigger the download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `daily_${dateStr}_hr_data.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2248,7 +2281,7 @@ function createActivityHeartRateChart(activity) {
 
 // Notes Functions
 function loadDailyNotes(date) {
-    const formattedDate = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+    const formattedDate = typeof date === 'string' ? date : formatDateForAPI(date);
     fetch(`/api/data/${formattedDate}/notes`)
         .then(response => response.json())
         .then(data => {
@@ -2286,8 +2319,8 @@ function editDailyNotes(date) {
     notesElement.innerHTML = `
         <textarea class="form-control" rows="4" placeholder="Enter your notes here...">${currentNotes}</textarea>
         <div class="mt-2">
-            <button type="button" class="btn btn-sm btn-primary" onclick="saveDailyNotes('${typeof date === 'string' ? date : date.toISOString().split('T')[0]}')">Save</button>
-            <button type="button" class="btn btn-sm btn-secondary" onclick="cancelDailyNotes('${typeof date === 'string' ? date : date.toISOString().split('T')[0]}')">Cancel</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="saveDailyNotes('${typeof date === 'string' ? date : formatDateForAPI(date)}')">Save</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="cancelDailyNotes('${typeof date === 'string' ? date : formatDateForAPI(date)}')">Cancel</button>
         </div>
     `;
 }
@@ -2297,7 +2330,7 @@ function saveDailyNotes(date) {
     const textarea = notesElement.querySelector('textarea');
     const notes = textarea.value;
     
-    fetch(`/api/data/${typeof date === 'string' ? date : date.toISOString().split('T')[0]}/notes`, {
+    fetch(`/api/data/${typeof date === 'string' ? date : formatDateForAPI(date)}/notes`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -2324,7 +2357,7 @@ function saveDailyNotes(date) {
 }
 
 function cancelDailyNotes(date) {
-    loadDailyNotes(typeof date === 'string' ? date : date.toISOString().split('T')[0]);
+    loadDailyNotes(typeof date === 'string' ? date : formatDateForAPI(date));
 }
 
 function loadActivityNotes(activityId) {
