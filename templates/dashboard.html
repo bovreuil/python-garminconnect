@@ -979,6 +979,12 @@ function showSingleActivityView(activity) {
     if (oldNotes && oldNotes.id === 'activityNotes') {
         oldNotes.parentNode.removeChild(oldNotes);
     }
+    
+    // Scroll to the section
+    document.getElementById('singleActivitySection').scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+    });
 }
 
 // Close single activity view
