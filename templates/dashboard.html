@@ -429,19 +429,22 @@ function loadTwoWeekData(startDate, endDate) {
     showLoading();
     updateDateRange();
     
-    // Generate array of 14 dates
-    const dates = [];
+    // Generate array of 14 date labels (strings, not Date objects)
+    const dateLabels = [];
     const currentDate = new Date(startDate);
     for (let i = 0; i < 14; i++) {
-        dates.push(new Date(currentDate));
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        dateLabels.push(`${year}-${month}-${day}`);
         currentDate.setDate(currentDate.getDate() + 1);
     }
     
-    // Load data for all dates
-    Promise.all(dates.map(date => loadDateData(date)))
+    // Load data for all date labels
+    Promise.all(dateLabels.map(dateLabel => loadDateData(dateLabel)))
         .then(results => {
             currentDataResults = results; // Store for click handling
-            updateTwoWeekChart(dates, results);
+            updateTwoWeekChart(dateLabels, results);
             hideLoading();
         })
         .catch(error => {
@@ -450,15 +453,13 @@ function loadTwoWeekData(startDate, endDate) {
         });
 }
 
-// Load data for a single date
-function loadDateData(date) {
-    const dateStr = formatDateForAPI(date);
+// Load data for a single date label (string)
+function loadDateData(dateLabel) {
+    console.log(`Loading data for ${dateLabel}`);
     
-    console.log(`Loading data for ${dateStr}`);
-    
-    return fetch(`/api/data/${dateStr}`)
+    return fetch(`/api/data/${dateLabel}`)
         .then(response => {
-            console.log(`Response for ${dateStr}:`, response.status, response.ok);
+            console.log(`Response for ${dateLabel}:`, response.status, response.ok);
             if (!response.ok) {
                 // Return null for dates with no data
                 return null;
@@ -467,20 +468,20 @@ function loadDateData(date) {
         })
         .then(data => {
             if (data) {
-                console.log(`Data for ${dateStr}:`, data.total_trimp, data.presentation_buckets ? Object.keys(data.presentation_buckets) : 'no buckets');
+                console.log(`Data for ${dateLabel}:`, data.total_trimp, data.presentation_buckets ? Object.keys(data.presentation_buckets) : 'no buckets');
             } else {
-                console.log(`No data for ${dateStr}`);
+                console.log(`No data for ${dateLabel}`);
             }
             return data;
         })
         .catch(error => {
-            console.error(`Error loading data for ${dateStr}:`, error);
+            console.error(`Error loading data for ${dateLabel}:`, error);
             return null;
         });
 }
 
 // Update the two-week chart
-function updateTwoWeekChart(dates, dataResults) {
+function updateTwoWeekChart(dateLabels, dataResults) {
     const ctx = document.getElementById('twoWeekChart').getContext('2d');
     
     if (twoWeekChart) {
@@ -488,7 +489,9 @@ function updateTwoWeekChart(dates, dataResults) {
     }
     
     // Prepare data for stacked column chart
-    const labels = dates.map(date => {
+    const labels = dateLabels.map(dateLabel => {
+        // Create a Date object just for display formatting
+        const date = new Date(dateLabel + 'T00:00:00');
         const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
         const dayNum = date.getDate();
         return `${dayName} ${dayNum}`;
@@ -592,9 +595,9 @@ function updateTwoWeekChart(dates, dataResults) {
                     const xAxis = twoWeekChart.scales.x;
                     const clickIndex = xAxis.getValueForPixel(x);
                     
-                    if (clickIndex >= 0 && clickIndex < dates.length) {
-                        const date = dates[clickIndex];
-                        showSingleDateView(date, dataResults[clickIndex]);
+                    if (clickIndex >= 0 && clickIndex < dateLabels.length) {
+                        const dateLabel = dateLabels[clickIndex];
+                        showSingleDateView(dateLabel, dataResults[clickIndex]);
                     }
                 }
             },
@@ -713,18 +716,19 @@ function hideLoading() {
 }
 
 // Show single date view
-function showSingleDateView(date, dayData) {
+function showSingleDateView(dateLabel, dayData) {
     // Close single activity view when switching to a different date
     closeSingleActivityView();
     
-    selectedDate = date; // Store the selected date globally
+    selectedDate = dateLabel; // Store the selected date label globally
     
-    // Update URL with period and date
-    const dateStr = formatDateForAPI(date);
+    // Update URL with period and date label
     const periodStr = currentStartDate && currentEndDate ? getPeriodString(currentStartDate, currentEndDate) : '';
-    const url = periodStr ? `/${periodStr}/${dateStr}` : `/${dateStr}`;
+    const url = periodStr ? `/${periodStr}/${dateLabel}` : `/${dateLabel}`;
     updateURL(url);
     
+    // Create a Date object just for display formatting
+    const date = new Date(dateLabel + 'T00:00:00');
     const dateDisplayStr = date.toLocaleDateString('en-US', { 
         weekday: 'long', 
         year: 'numeric', 
@@ -744,7 +748,7 @@ function showSingleDateView(date, dayData) {
         }
     } else {
         // Create 24-hour heart rate chart
-        createHeartRateChart(date, dayData);
+        createHeartRateChart(dateLabel, dayData);
         
         // Display date details
         let detailsHtml = '<div class="row">';
@@ -783,7 +787,7 @@ function showSingleDateView(date, dayData) {
             <div class="mt-3">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h6 class="mb-0">Notes</h6>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editDailyNotes('${formatDateForAPI(date)}')">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editDailyNotes('${dateLabel}')">
                         <span>✏️</span>
                     </button>
                 </div>
@@ -796,7 +800,7 @@ function showSingleDateView(date, dayData) {
         document.getElementById('dateDetails').innerHTML = detailsHtml;
         
         // Load notes for this date
-        loadDailyNotes(formatDateForAPI(date));
+        loadDailyNotes(dateLabel);
         
         // Display zone breakdown
         if (dayData.presentation_buckets) {
@@ -844,7 +848,7 @@ function showSingleDateView(date, dayData) {
     document.getElementById('singleDateSection').style.display = 'block';
     
     // Load and display activities for this date
-    loadActivitiesForDate(date);
+    loadActivitiesForDate(dateLabel);
     
     // Scroll to the section
     document.getElementById('singleDateSection').scrollIntoView({ 
@@ -878,7 +882,7 @@ function showSingleActivityView(activity) {
     selectedActivity = activity; // Store the selected activity globally
     
     // Update URL to include activity ID
-    const dateStr = selectedDate ? selectedDate.toISOString().split('T')[0] : '';
+    const dateStr = selectedDate || ''; // selectedDate is now a string label
     const periodStr = currentStartDate && currentEndDate ? getPeriodString(currentStartDate, currentEndDate) : '';
     const url = periodStr ? `/${periodStr}/${dateStr}/${activity.activity_id}` : `/${dateStr}/${activity.activity_id}`;
     updateURL(url);
@@ -1053,13 +1057,12 @@ function downloadDailyCsv() {
         return;
     }
     
-    const dateStr = formatDateForAPI(selectedDate);
-    const downloadUrl = `/api/data/${dateStr}/hr-csv`;
+    const downloadUrl = `/api/data/${selectedDate}/hr-csv`;
     
     // Create a temporary link element to trigger the download
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = `daily_${dateStr}_hr_data.csv`;
+    link.download = `daily_${selectedDate}_hr_data.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1199,20 +1202,18 @@ function saveSpo2Data() {
     });
 }
 
-// Load activities for a specific date
-function loadActivitiesForDate(date) {
-    const dateStr = date.toISOString().split('T')[0];
-    
-    fetch(`/api/activities/${dateStr}`)
+// Load activities for a specific date label
+function loadActivitiesForDate(dateLabel) {
+    fetch(`/api/activities/${dateLabel}`)
         .then(response => {
             if (!response.ok) {
-                console.log(`No activities found for ${dateStr}`);
+                console.log(`No activities found for ${dateLabel}`);
                 return [];
             }
             return response.json();
         })
         .then(activities => {
-            console.log(`Activities for ${dateStr}:`, activities);
+            console.log(`Activities for ${dateLabel}:`, activities);
             // Debug: Check if activities have raw_hr_data
             if (activities && activities.length > 0) {
                 activities.forEach((activity, index) => {
@@ -1227,7 +1228,7 @@ function loadActivitiesForDate(date) {
             createActivitiesChart(activities);
         })
         .catch(error => {
-            console.error(`Error loading activities for ${dateStr}:`, error);
+            console.error(`Error loading activities for ${dateLabel}:`, error);
             createActivitiesChart([]);
         });
 }
@@ -1451,8 +1452,8 @@ function createActivitiesChart(activities) {
 }
 
 // Create 24-hour heart rate chart
-function createHeartRateChart(date, dayData) {
-    console.log('Creating heart rate chart for date:', date);
+function createHeartRateChart(dateLabel, dayData) {
+    console.log('Creating heart rate chart for date label:', dateLabel);
     console.log('Day data:', dayData);
     
     const chartElement = document.getElementById('hrChart');
@@ -1520,11 +1521,11 @@ function createHeartRateChart(date, dayData) {
     console.log('Heart rate values length:', hrData.length);
     console.log('First few data points:', hrData.slice(0, 5));
     
-    // Get the date from the selected date
-    const selectedDate = new Date(dayData.date + 'T00:00:00');
-    console.log('dayData.date:', dayData.date);
-    console.log('selectedDate:', selectedDate);
-    console.log('selectedDate.isValid:', !isNaN(selectedDate.getTime()));
+    // Get the date from the selected date label
+    const chartDate = new Date(dateLabel + 'T00:00:00');
+    console.log('dateLabel:', dateLabel);
+    console.log('chartDate:', chartDate);
+    console.log('chartDate.isValid:', !isNaN(chartDate.getTime()));
     
     // Create evenly spaced 24-hour timeline (every 1 minute for high resolution)
     const labels = [];
@@ -1532,7 +1533,7 @@ function createHeartRateChart(date, dayData) {
     
     for (let hour = 0; hour < 24; hour++) {
         for (let minute = 0; minute < 60; minute += 1) {
-            const timestamp = new Date(selectedDate);
+            const timestamp = new Date(chartDate);
             timestamp.setHours(hour, minute, 0, 0);
             labels.push(timestamp);
             data.push(null);
@@ -1573,7 +1574,7 @@ function createHeartRateChart(date, dayData) {
         const minute = date.getMinutes();
         
         // Create a timestamp for comparison (same date, specific hour/minute)
-        const comparisonTimestamp = new Date(selectedDate);
+        const comparisonTimestamp = new Date(chartDate);
         comparisonTimestamp.setHours(hour, minute, 0, 0);
         
         const index = labels.findIndex(label => label.getTime() === comparisonTimestamp.getTime());
@@ -1759,8 +1760,8 @@ function createHeartRateChart(date, dayData) {
                             display: true,
                             text: 'Time'
                         },
-                        min: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 0, 0, 0),
-                        max: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 23, 59, 0),
+                        min: new Date(chartDate.getFullYear(), chartDate.getMonth(), chartDate.getDate(), 0, 0, 0),
+                        max: new Date(chartDate.getFullYear(), chartDate.getMonth(), chartDate.getDate(), 23, 59, 0),
                         ticks: {
                             maxRotation: 0,
                             stepSize: 2,
@@ -2280,9 +2281,8 @@ function createActivityHeartRateChart(activity) {
 }
 
 // Notes Functions
-function loadDailyNotes(date) {
-    const formattedDate = typeof date === 'string' ? date : formatDateForAPI(date);
-    fetch(`/api/data/${formattedDate}/notes`)
+function loadDailyNotes(dateLabel) {
+    fetch(`/api/data/${dateLabel}/notes`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -2311,7 +2311,7 @@ function loadDailyNotes(date) {
         });
 }
 
-function editDailyNotes(date) {
+function editDailyNotes(dateLabel) {
     const notesElement = document.getElementById('dailyNotes');
     const currentNotes = notesElement.querySelector('p')?.textContent || '';
     
@@ -2319,18 +2319,18 @@ function editDailyNotes(date) {
     notesElement.innerHTML = `
         <textarea class="form-control" rows="4" placeholder="Enter your notes here...">${currentNotes}</textarea>
         <div class="mt-2">
-            <button type="button" class="btn btn-sm btn-primary" onclick="saveDailyNotes('${typeof date === 'string' ? date : formatDateForAPI(date)}')">Save</button>
-            <button type="button" class="btn btn-sm btn-secondary" onclick="cancelDailyNotes('${typeof date === 'string' ? date : formatDateForAPI(date)}')">Cancel</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="saveDailyNotes('${dateLabel}')">Save</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="cancelDailyNotes('${dateLabel}')">Cancel</button>
         </div>
     `;
 }
 
-function saveDailyNotes(date) {
+function saveDailyNotes(dateLabel) {
     const notesElement = document.getElementById('dailyNotes');
     const textarea = notesElement.querySelector('textarea');
     const notes = textarea.value;
     
-    fetch(`/api/data/${typeof date === 'string' ? date : formatDateForAPI(date)}/notes`, {
+    fetch(`/api/data/${dateLabel}/notes`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -2356,8 +2356,8 @@ function saveDailyNotes(date) {
     });
 }
 
-function cancelDailyNotes(date) {
-    loadDailyNotes(typeof date === 'string' ? date : formatDateForAPI(date));
+function cancelDailyNotes(dateLabel) {
+    loadDailyNotes(dateLabel);
 }
 
 function loadActivityNotes(activityId) {

@@ -501,24 +501,24 @@ def collect_data():
 
 @app.route('/api/data/<date>')
 def get_data(date):
-    """Get heart rate data for a specific date."""
+    """Get heart rate data for a specific date label."""
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
-    try:
-        target_date = datetime.strptime(date, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({'error': 'Invalid date format'}), 400
+    # Treat date as a string label, not a real date
+    # Validate format: YYYY-MM-DD
+    if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
+        return jsonify({'error': 'Invalid date label format. Expected YYYY-MM-DD'}), 400
     
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Get data from new daily_data table
+    # Get data from new daily_data table using date as string
     cur.execute("""
         SELECT heart_rate_series, trimp_data, total_trimp, daily_score, activity_type
         FROM daily_data 
         WHERE date = ?
-    """, (target_date,))
+    """, (date,))
     
     data = cur.fetchone()
     cur.close()
@@ -546,19 +546,19 @@ def get_data(date):
 
 @app.route('/api/activities/<date>')
 def get_activities(date):
-    """Get activities for a specific date."""
+    """Get activities for a specific date label."""
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
-    try:
-        target_date = datetime.strptime(date, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({'error': 'Invalid date format'}), 400
+    # Treat date as a string label, not a real date
+    # Validate format: YYYY-MM-DD
+    if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
+        return jsonify({'error': 'Invalid date label format. Expected YYYY-MM-DD'}), 400
     
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Get activities from new activity_data table
+    # Get activities from new activity_data table using date as string
     cur.execute("""
         SELECT activity_id, activity_name, activity_type, start_time_local, duration_seconds,
                distance_meters, elevation_gain, average_hr, max_hr, heart_rate_series, 
@@ -566,7 +566,7 @@ def get_activities(date):
         FROM activity_data 
         WHERE date = ?
         ORDER BY start_time_local
-    """, (target_date,))
+    """, (date,))
     
     activities = cur.fetchall()
     cur.close()
@@ -973,14 +973,14 @@ def activity_notes(activity_id):
 
 @app.route('/api/data/<date>/notes', methods=['GET', 'POST'])
 def daily_notes(date):
-    """Get or update notes for a specific date."""
+    """Get or update notes for a specific date label."""
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
-    try:
-        target_date = datetime.strptime(date, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({'error': 'Invalid date format'}), 400
+    # Treat date as a string label, not a real date
+    # Validate format: YYYY-MM-DD
+    if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
+        return jsonify({'error': 'Invalid date label format. Expected YYYY-MM-DD'}), 400
     
     conn = get_db_connection()
     cur = conn.cursor()
@@ -995,7 +995,7 @@ def daily_notes(date):
                 UPDATE daily_data 
                 SET notes = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE date = ?
-            """, (notes, target_date))
+            """, (notes, date))
             
             conn.commit()
             cur.close()
@@ -1014,7 +1014,7 @@ def daily_notes(date):
     else:  # GET
         try:
             # Get current notes
-            cur.execute("SELECT notes FROM daily_data WHERE date = ?", (target_date,))
+            cur.execute("SELECT notes FROM daily_data WHERE date = ?", (date,))
             result = cur.fetchone()
             
             cur.close()
@@ -1034,24 +1034,24 @@ def daily_notes(date):
 
 @app.route('/api/data/<date>/hr-csv')
 def download_daily_hr_csv(date):
-    """Download HR data for a specific date as CSV."""
+    """Download HR data for a specific date label as CSV."""
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
-    try:
-        target_date = datetime.strptime(date, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({'error': 'Invalid date format'}), 400
+    # Treat date as a string label, not a real date
+    # Validate format: YYYY-MM-DD
+    if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
+        return jsonify({'error': 'Invalid date label format. Expected YYYY-MM-DD'}), 400
     
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Get daily HR data
+    # Get daily HR data using date as string
     cur.execute("""
         SELECT heart_rate_series
         FROM daily_data 
         WHERE date = ?
-    """, (target_date,))
+    """, (date,))
     
     daily_data = cur.fetchone()
     cur.close()
