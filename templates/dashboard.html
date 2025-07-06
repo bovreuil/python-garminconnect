@@ -192,6 +192,31 @@
 // Register the DataLabels plugin
 Chart.register(ChartDataLabels);
 
+// Add CSS for notes fields
+const style = document.createElement('style');
+style.textContent = `
+    .notes-field {
+        padding: 0.5rem;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        cursor: pointer;
+        min-height: 2.5rem;
+        transition: all 0.2s ease-in-out;
+    }
+    
+    .notes-field:hover {
+        background-color: #e9ecef;
+        border-color: #adb5bd;
+    }
+    
+    .notes-field p {
+        margin: 0;
+        min-height: 1.5rem;
+    }
+`;
+document.head.appendChild(style);
+
 // URL Navigation Functions
 function updateURL(path = null) {
     if (path) {
@@ -785,13 +810,8 @@ function showSingleDateView(dateLabel, dayData) {
         // Add notes section
         detailsHtml += `
             <div class="mt-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="mb-0">Notes</h6>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editDailyNotes('${dateLabel}')">
-                        <span>✏️</span>
-                    </button>
-                </div>
-                <div id="dailyNotes" class="p-2 bg-light rounded border">
+                <h6 class="mb-2">Notes</h6>
+                <div id="dailyNotes" class="notes-field" onclick="editDailyNotes('${dateLabel}')">
                     <p class="mb-0"></p>
                 </div>
             </div>
@@ -976,13 +996,8 @@ function showSingleActivityView(activity) {
     // Add notes section to activity summary
     let notesHtml = `
         <div class="mt-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0">Notes</h6>
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editActivityNotes('${activity.activity_id}')">
-                    <span>✏️</span>
-                </button>
-            </div>
-            <div id="activityNotes" class="p-2 bg-light rounded border">
+            <h6 class="mb-2">Notes</h6>
+            <div id="activityNotes" class="notes-field" onclick="editActivityNotes('${activity.activity_id}')">
                 <p class="mb-0"></p>
             </div>
         </div>
@@ -2291,14 +2306,14 @@ function loadDailyNotes(dateLabel) {
                     if (data.notes && data.notes.trim()) {
                         notesElement.innerHTML = `<p class="mb-0">${data.notes.replace(/\n/g, '<br>')}</p>`;
                     } else {
-                        notesElement.innerHTML = '<p class="text-muted mb-0"></p>';
+                        notesElement.innerHTML = '<p class="mb-0"></p>';
                     }
                 }
             } else {
                 console.error('Error loading daily notes:', data.error);
                 const notesElement = document.getElementById('dailyNotes');
                 if (notesElement) {
-                    notesElement.innerHTML = '<p class="text-danger mb-0"></p>';
+                    notesElement.innerHTML = '<p class="text-danger mb-0">Error loading notes</p>';
                 }
             }
         })
@@ -2306,23 +2321,35 @@ function loadDailyNotes(dateLabel) {
             console.error('Error loading daily notes:', error);
             const notesElement = document.getElementById('dailyNotes');
             if (notesElement) {
-                notesElement.innerHTML = '<p class="text-danger mb-0"></p>';
+                notesElement.innerHTML = '<p class="text-danger mb-0">Error loading notes</p>';
             }
         });
 }
 
 function editDailyNotes(dateLabel) {
     const notesElement = document.getElementById('dailyNotes');
-    const currentNotes = notesElement.querySelector('p')?.textContent || '';
+    const currentNotesElement = notesElement.querySelector('p');
+    let currentNotes = '';
+    
+    if (currentNotesElement) {
+        // Convert <br> tags back to newlines for the textarea
+        currentNotes = currentNotesElement.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+    }
     
     // Create edit form
     notesElement.innerHTML = `
-        <textarea class="form-control" rows="4" placeholder="Enter your notes here...">${currentNotes}</textarea>
+        <textarea class="form-control" rows="4" onclick="event.stopPropagation()">${currentNotes}</textarea>
         <div class="mt-2">
-            <button type="button" class="btn btn-sm btn-primary" onclick="saveDailyNotes('${dateLabel}')">Save</button>
-            <button type="button" class="btn btn-sm btn-secondary" onclick="cancelDailyNotes('${dateLabel}')">Cancel</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation(); saveDailyNotes('${dateLabel}')">Save</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); cancelDailyNotes('${dateLabel}')">Cancel</button>
         </div>
     `;
+    // Focus and move cursor to end
+    const textarea = notesElement.querySelector('textarea');
+    if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    }
 }
 
 function saveDailyNotes(dateLabel) {
@@ -2343,7 +2370,7 @@ function saveDailyNotes(dateLabel) {
             if (notes && notes.trim()) {
                 notesElement.innerHTML = `<p class="mb-0">${notes.replace(/\n/g, '<br>')}</p>`;
             } else {
-                notesElement.innerHTML = '<p class="text-muted mb-0"></p>';
+                notesElement.innerHTML = '<p class="mb-0"></p>';
             }
         } else {
             console.error('Error saving daily notes:', data.error);
@@ -2370,14 +2397,14 @@ function loadActivityNotes(activityId) {
                     if (data.notes && data.notes.trim()) {
                         notesElement.innerHTML = `<p class="mb-0">${data.notes.replace(/\n/g, '<br>')}</p>`;
                     } else {
-                        notesElement.innerHTML = '<p class="text-muted mb-0"></p>';
+                        notesElement.innerHTML = '<p class="mb-0"></p>';
                     }
                 }
             } else {
                 console.error('Error loading activity notes:', data.error);
                 const notesElement = document.getElementById('activityNotes');
                 if (notesElement) {
-                    notesElement.innerHTML = '<p class="text-danger mb-0"></p>';
+                    notesElement.innerHTML = '<p class="text-danger mb-0">Error loading notes</p>';
                 }
             }
         })
@@ -2385,23 +2412,35 @@ function loadActivityNotes(activityId) {
             console.error('Error loading activity notes:', error);
             const notesElement = document.getElementById('activityNotes');
             if (notesElement) {
-                notesElement.innerHTML = '<p class="text-danger mb-0"></p>';
+                notesElement.innerHTML = '<p class="text-danger mb-0">Error loading notes</p>';
             }
         });
 }
 
 function editActivityNotes(activityId) {
     const notesElement = document.getElementById('activityNotes');
-    const currentNotes = notesElement.querySelector('p')?.textContent || '';
+    const currentNotesElement = notesElement.querySelector('p');
+    let currentNotes = '';
+    
+    if (currentNotesElement) {
+        // Convert <br> tags back to newlines for the textarea
+        currentNotes = currentNotesElement.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+    }
     
     // Create edit form
     notesElement.innerHTML = `
-        <textarea class="form-control" rows="4" placeholder="Enter your notes here...">${currentNotes}</textarea>
+        <textarea class="form-control" rows="4" onclick="event.stopPropagation()">${currentNotes}</textarea>
         <div class="mt-2">
-            <button type="button" class="btn btn-sm btn-primary" onclick="saveActivityNotes('${activityId}')">Save</button>
-            <button type="button" class="btn btn-sm btn-secondary" onclick="cancelActivityNotes('${activityId}')">Cancel</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation(); saveActivityNotes('${activityId}')">Save</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); cancelActivityNotes('${activityId}')">Cancel</button>
         </div>
     `;
+    // Focus and move cursor to end
+    const textarea = notesElement.querySelector('textarea');
+    if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    }
 }
 
 function saveActivityNotes(activityId) {
@@ -2422,7 +2461,7 @@ function saveActivityNotes(activityId) {
             if (notes && notes.trim()) {
                 notesElement.innerHTML = `<p class="mb-0">${notes.replace(/\n/g, '<br>')}</p>`;
             } else {
-                notesElement.innerHTML = '<p class="text-muted mb-0"></p>';
+                notesElement.innerHTML = '<p class="mb-0"></p>';
             }
         } else {
             console.error('Error saving activity notes:', data.error);
