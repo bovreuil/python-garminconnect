@@ -1201,12 +1201,6 @@ function saveSpo2Data() {
             // Close the modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('spo2Modal'));
             modal.hide();
-            
-            if (data.spo2_series && data.spo2_series.length > 0) {
-                alert('SpO2 data saved successfully!');
-            } else {
-                alert('SpO2 data cleared successfully!');
-            }
         } else {
             alert('Error saving SpO2 data: ' + data.error);
         }
