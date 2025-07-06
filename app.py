@@ -28,7 +28,10 @@ from database import (
     encrypt_password, 
     decrypt_password, 
     get_user_hr_parameters, 
-    update_job_status
+    update_job_status,
+    get_user_data,
+    save_user_data,
+    delete_user_data
 )
 
 # Import job functions
@@ -562,7 +565,7 @@ def get_activities(date):
     cur.execute("""
         SELECT activity_id, activity_name, activity_type, start_time_local, duration_seconds,
                distance_meters, elevation_gain, average_hr, max_hr, heart_rate_series, 
-               breathing_rate_series, spo2_series, trimp_data, total_trimp
+               breathing_rate_series, trimp_data, total_trimp
         FROM activity_data 
         WHERE date = ?
         ORDER BY start_time_local
@@ -577,8 +580,11 @@ def get_activities(date):
         # Convert from new schema format
         heart_rate_series = json.loads(activity['heart_rate_series']) if activity['heart_rate_series'] else []
         breathing_rate_series = json.loads(activity['breathing_rate_series']) if activity['breathing_rate_series'] else []
-        spo2_series = json.loads(activity['spo2_series']) if activity['spo2_series'] else []
         trimp_data = json.loads(activity['trimp_data']) if activity['trimp_data'] else {}
+        
+        # Get user data (SpO2 and notes) from user_data table
+        spo2_series = get_user_data('activity_spo2', activity['activity_id'])
+        activity_notes = get_user_data('activity_notes', activity['activity_id'])
         
         activities_list.append({
             'activity_id': activity['activity_id'],
@@ -596,7 +602,7 @@ def get_activities(date):
             'total_trimp': activity['total_trimp'],
             'heart_rate_values': heart_rate_series,
             'breathing_rate_values': breathing_rate_series,
-            'spo2_values': spo2_series
+            'spo2_values': spo2_series or []
         })
     
     return jsonify(activities_list)
@@ -627,36 +633,25 @@ def save_activity_spo2(activity_id):
             if not isinstance(spo2_value, int) or spo2_value < 0 or spo2_value > 100:
                 return jsonify({'error': 'SpO2 value must be an integer between 0 and 100'}), 400
         
+        # Check if activity exists
         conn = get_db_connection()
         cur = conn.cursor()
-        
-        # Get activity start time and first HR timestamp
-        cur.execute("""
-            SELECT start_time_local, heart_rate_series
-            FROM activity_data 
-            WHERE activity_id = ?
-        """, (activity_id,))
-        
+        cur.execute("SELECT heart_rate_series FROM activity_data WHERE activity_id = ?", (activity_id,))
         activity = cur.fetchone()
-        if not activity:
-            cur.close()
-            conn.close()
-            return jsonify({'error': 'Activity not found'}), 404
+        cur.close()
+        conn.close()
         
-        # We don't need to parse the start_time_local - we'll use the first HR timestamp as the base
+        if not activity:
+            return jsonify({'error': 'Activity not found'}), 404
         
         # Get first HR timestamp to calculate base timestamp
         heart_rate_series = json.loads(activity['heart_rate_series']) if activity['heart_rate_series'] else []
         if not heart_rate_series:
-            cur.close()
-            conn.close()
             return jsonify({'error': 'Activity has no HR data to calculate timestamps'}), 400
         
         # Get first HR timestamp
         first_hr_timestamp = heart_rate_series[0][0] if heart_rate_series and len(heart_rate_series) > 0 else None
         if not first_hr_timestamp:
-            cur.close()
-            conn.close()
             return jsonify({'error': 'Cannot determine base timestamp from HR data'}), 400
         
         # Convert SpO2 entries to timestamp series
@@ -674,17 +669,12 @@ def save_activity_spo2(activity_id):
             
             spo2_series.append([spo2_timestamp, spo2_value])
         
-        # Save SpO2 series to database (null if empty)
-        spo2_series_json = json.dumps(spo2_series) if spo2_series else None
-        cur.execute("""
-            UPDATE activity_data 
-            SET spo2_series = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE activity_id = ?
-        """, (spo2_series_json, activity_id))
-        
-        conn.commit()
-        cur.close()
-        conn.close()
+        # Save SpO2 series to user_data table
+        if spo2_series:
+            save_user_data('activity_spo2', activity_id, spo2_series)
+        else:
+            # Delete existing SpO2 data if empty
+            delete_user_data('activity_spo2', activity_id)
         
         return jsonify({
             'success': True,
@@ -920,24 +910,17 @@ def activity_notes(activity_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
     if request.method == 'POST':
         try:
             data = request.get_json()
             notes = data.get('notes', '').strip()
             
-            # Update activity notes
-            cur.execute("""
-                UPDATE activity_data 
-                SET notes = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE activity_id = ?
-            """, (notes, activity_id))
-            
-            conn.commit()
-            cur.close()
-            conn.close()
+            # Save activity notes to user_data table
+            if notes:
+                save_user_data('activity_notes', activity_id, notes)
+            else:
+                # Delete existing notes if empty
+                delete_user_data('activity_notes', activity_id)
             
             return jsonify({
                 'success': True,
@@ -951,19 +934,12 @@ def activity_notes(activity_id):
     
     else:  # GET
         try:
-            # Get current notes
-            cur.execute("SELECT notes FROM activity_data WHERE activity_id = ?", (activity_id,))
-            result = cur.fetchone()
-            
-            cur.close()
-            conn.close()
-            
-            if not result:
-                return jsonify({'error': 'Activity not found'}), 404
+            # Get current notes from user_data table
+            notes = get_user_data('activity_notes', activity_id)
             
             return jsonify({
                 'success': True,
-                'notes': result['notes'] or ''
+                'notes': notes or ''
             })
             
         except Exception as e:
@@ -982,24 +958,17 @@ def daily_notes(date):
     if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
         return jsonify({'error': 'Invalid date label format. Expected YYYY-MM-DD'}), 400
     
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
     if request.method == 'POST':
         try:
             data = request.get_json()
             notes = data.get('notes', '').strip()
             
-            # Update daily notes
-            cur.execute("""
-                UPDATE daily_data 
-                SET notes = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE date = ?
-            """, (notes, date))
-            
-            conn.commit()
-            cur.close()
-            conn.close()
+            # Save daily notes to user_data table
+            if notes:
+                save_user_data('daily_notes', date, notes)
+            else:
+                # Delete existing notes if empty
+                delete_user_data('daily_notes', date)
             
             return jsonify({
                 'success': True,
@@ -1013,19 +982,12 @@ def daily_notes(date):
     
     else:  # GET
         try:
-            # Get current notes
-            cur.execute("SELECT notes FROM daily_data WHERE date = ?", (date,))
-            result = cur.fetchone()
-            
-            cur.close()
-            conn.close()
-            
-            if not result:
-                return jsonify({'error': 'Daily data not found'}), 404
+            # Get current notes from user_data table
+            notes = get_user_data('daily_notes', date)
             
             return jsonify({
                 'success': True,
-                'notes': result['notes'] or ''
+                'notes': notes or ''
             })
             
         except Exception as e:

@@ -8,6 +8,7 @@ from cryptography.fernet import Fernet
 import os
 from dotenv import load_dotenv
 import logging
+import json
 
 # Load environment variables
 load_dotenv('env.local')
@@ -69,6 +70,78 @@ def get_user_hr_parameters():
         # Default values for Pete
         return 48, 167
 
+def get_user_data(data_type: str, target_id: str):
+    """
+    Get user-entered data (SpO2 or notes) for a specific target.
+    
+    Args:
+        data_type: 'activity_spo2', 'activity_notes', or 'daily_notes'
+        target_id: activity_id for activities, date for daily
+        
+    Returns:
+        The data content or None if not found
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT data_content
+        FROM user_data 
+        WHERE data_type = ? AND target_id = ?
+    """, (data_type, target_id))
+    
+    result = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if result and result['data_content']:
+        return json.loads(result['data_content'])
+    return None
+
+def save_user_data(data_type: str, target_id: str, data_content):
+    """
+    Save user-entered data (SpO2 or notes) for a specific target.
+    
+    Args:
+        data_type: 'activity_spo2', 'activity_notes', or 'daily_notes'
+        target_id: activity_id for activities, date for daily
+        data_content: The data to save (will be JSON serialized)
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Convert to JSON string
+    json_content = json.dumps(data_content) if data_content else None
+    
+    cur.execute("""
+        INSERT OR REPLACE INTO user_data (data_type, target_id, data_content, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    """, (data_type, target_id, json_content))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def delete_user_data(data_type: str, target_id: str):
+    """
+    Delete user-entered data for a specific target.
+    
+    Args:
+        data_type: 'activity_spo2', 'activity_notes', or 'daily_notes'
+        target_id: activity_id for activities, date for daily
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("""
+        DELETE FROM user_data 
+        WHERE data_type = ? AND target_id = ?
+    """, (data_type, target_id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+
 def init_database():
     """Initialize the database with all required tables."""
     conn = get_db_connection()
@@ -121,7 +194,6 @@ def init_database():
             total_trimp FLOAT,
             daily_score FLOAT,
             activity_type VARCHAR(50),
-            notes TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -142,13 +214,24 @@ def init_database():
             max_hr INTEGER NULL,
             heart_rate_series JSON,
             breathing_rate_series JSON,
-            spo2_series JSON,
             trimp_data JSON,
             total_trimp FLOAT,
-            notes TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (date) REFERENCES daily_data(date)
+        )
+    """)
+    
+    # Create user_data table for SpO2 and notes (separate from system data)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data_type VARCHAR(50) NOT NULL,  -- 'activity_spo2', 'activity_notes', 'daily_notes'
+            target_id VARCHAR(100) NOT NULL,  -- activity_id for activities, date for daily
+            data_content JSON,                -- SpO2 series or text notes
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(data_type, target_id)
         )
     """)
     

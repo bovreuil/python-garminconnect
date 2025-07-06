@@ -176,7 +176,7 @@ def collect_garmin_data_job(target_date: str, job_id: str):
         
         logger.info(f"collect_garmin_data_job: Connecting to Garmin with email {creds['email']}")
         
-        # Clean up any existing data for this date
+        # Clean up any existing data for this date (user data is stored separately)
         logger.info(f"collect_garmin_data_job: Cleaning up existing data for {target_date}")
         cur.execute("DELETE FROM daily_data WHERE date = ?", (target_date,))
         cur.execute("DELETE FROM activity_data WHERE date = ?", (target_date,))
@@ -369,7 +369,7 @@ def collect_garmin_data_job(target_date: str, job_id: str):
             conn.close()
             
             logger.info(f"collect_garmin_data_job: Job {job_id} failed due to activity collection error")
-        
+
     except Exception as e:
         error_msg = f"Error collecting data: {str(e)}"
         logger.error(f"collect_garmin_data_job: {error_msg}")
