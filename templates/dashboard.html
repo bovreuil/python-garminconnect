@@ -33,8 +33,7 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0">Two Week Overview</h5>
-                <small class="text-muted" id="dateRange"></small>
+                <h5 class="mb-0" id="twoWeekTitle">Two Week Overview</h5>
             </div>
             <div class="card-body">
                 <div id="chartContainer" class="chart-container">
@@ -50,7 +49,7 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Single Date View</h5>
+                <h5 class="mb-0" id="singleDateTitle">Single Date View</h5>
                 <div class="d-flex gap-2">
                     <button type="button" class="btn btn-sm btn-outline-primary" id="downloadDailyCsv">
                         <span>📥 CSV</span>
@@ -73,7 +72,7 @@
                 
                 <div class="row mb-4">
                     <div class="col-md-6">
-                        <h6 id="selectedDateTitle">Date Details</h6>
+                        <h6 id="selectedDateTitle">Day Summary</h6>
                         <div id="dateDetails">
                             <p class="text-muted">Click on a column above to view details</p>
                         </div>
@@ -100,8 +99,8 @@
                 <div class="row mt-4" id="singleActivitySection" style="display: none;">
                     <div class="col-12">
                         <div class="card">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0">Single Activity View</h5>
+                                        <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0" id="singleActivityTitle">Single Activity View</h5>
                                 <div class="d-flex gap-2">
                                     <button type="button" class="btn btn-sm btn-outline-primary" id="downloadActivityCsv">
                                         <span>📥 CSV</span>
@@ -728,7 +727,8 @@ function updateDateRange() {
         year: 'numeric'
     });
     
-    document.getElementById('dateRange').textContent = `${startStr} - ${endStr}`;
+    // Update the two week title with the date range
+    document.getElementById('twoWeekTitle').textContent = `${startStr} - ${endStr}`;
 }
 
 // Show/hide loading
@@ -761,7 +761,9 @@ function showSingleDateView(dateLabel, dayData) {
         day: 'numeric' 
     });
     
-    document.getElementById('selectedDateTitle').textContent = dateDisplayStr;
+    // Update the single date title with the formatted date
+    document.getElementById('singleDateTitle').textContent = dateDisplayStr;
+    document.getElementById('selectedDateTitle').textContent = 'Day Summary';
     
     if (!dayData) {
         document.getElementById('dateDetails').innerHTML = '<p class="text-muted">No data available for this date</p>';
@@ -907,8 +909,18 @@ function showSingleActivityView(activity) {
     const url = periodStr ? `/${periodStr}/${dateStr}/${activity.activity_id}` : `/${dateStr}/${activity.activity_id}`;
     updateURL(url);
     
-    // Set the activity title
-    document.getElementById('activityTitle').textContent = activity.activity_name;
+    // Create a Date object for display formatting
+    const activityDate = new Date(selectedDate + 'T00:00:00');
+    const activityDateStr = activityDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    });
+    
+    // Update the single activity title with date and activity name
+    document.getElementById('singleActivityTitle').textContent = `${activityDateStr} - ${activity.activity_name}`;
+    document.getElementById('activityTitle').textContent = 'Activity Heart Rate';
     
     // Show the section
     document.getElementById('singleActivitySection').style.display = 'block';
