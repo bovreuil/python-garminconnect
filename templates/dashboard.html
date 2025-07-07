@@ -170,14 +170,14 @@
                     <p class="text-muted">Enter SpO2 readings with time offsets from activity start. Use MM:SS format for time (e.g., 5:30 for 5 minutes 30 seconds).</p>
                 </div>
                 
-                <div id="spo2Entries">
-                    <!-- SpO2 entries will be added here dynamically -->
-                </div>
-                
                 <div class="mb-3">
                     <button type="button" class="btn btn-sm btn-outline-primary" id="addSpo2Entry">
                         <span>+ Add Entry</span>
                     </button>
+                </div>
+                
+                <div id="spo2Entries">
+                    <!-- SpO2 entries will be added here dynamically -->
                 </div>
             </div>
             <div class="modal-footer">
@@ -1119,8 +1119,22 @@ function openSpo2Editor() {
 }
 
 function addSpo2Entry() {
+    let defaultTime = '0:00';
+    
+    // If there are existing entries, calculate the next time (15 seconds after the last entry)
+    if (spo2Entries.length > 0) {
+        const lastEntry = spo2Entries[spo2Entries.length - 1];
+        if (lastEntry.time_offset && lastEntry.time_offset.match(/^\d+:\d{2}$/)) {
+            const [minutes, seconds] = lastEntry.time_offset.split(':').map(Number);
+            let totalSeconds = minutes * 60 + seconds + 15; // Add 15 seconds
+            const newMinutes = Math.floor(totalSeconds / 60);
+            const newSeconds = totalSeconds % 60;
+            defaultTime = `${newMinutes}:${newSeconds.toString().padStart(2, '0')}`;
+        }
+    }
+    
     spo2Entries.push({
-        time_offset: '',
+        time_offset: defaultTime,
         spo2_value: ''
     });
     populateSpo2Entries();
