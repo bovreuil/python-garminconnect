@@ -2033,6 +2033,55 @@ function createActivityHeartRateChart(activity) {
     console.log('Activity start time:', startTime);
     console.log('Activity end time:', endTime);
     
+    // Calculate activity duration and determine smart tick intervals
+    const activityDurationMs = endTime.getTime() - startTime.getTime();
+    const activityDurationMinutes = activityDurationMs / (1000 * 60);
+    
+    // Define possible tick intervals in minutes
+    const possibleIntervals = [0.5, 1, 5, 15, 30, 60, 120, 300, 600]; // 30s, 1m, 5m, 15m, 30m, 1h, 2h, 5h, 10h
+    
+    // Find the optimal interval that gives us ≤ 23 ticks
+    let optimalInterval = 1; // Default to 1 minute
+    for (let i = 0; i < possibleIntervals.length; i++) {
+        const interval = possibleIntervals[i];
+        const numTicks = Math.ceil(activityDurationMinutes / interval) + 1; // +1 for the start tick
+        if (numTicks <= 23) {
+            optimalInterval = interval;
+            break;
+        }
+    }
+    
+    // Generate custom tick positions at round intervals from start
+    const customTicks = [];
+    let currentTime = 0; // Start at 0 minutes
+    while (currentTime <= activityDurationMinutes) {
+        customTicks.push(new Date(startTime.getTime() + (currentTime * 60 * 1000)));
+        currentTime += optimalInterval;
+    }
+    
+    console.log('Activity duration:', activityDurationMinutes.toFixed(1), 'minutes');
+    console.log('Using tick interval:', optimalInterval, 'minutes');
+    console.log('Number of ticks:', customTicks.length);
+    // Helper function to format time based on interval
+    function formatTickLabel(timestamp) {
+        const timeSinceStart = timestamp.getTime() - startTime.getTime();
+        const totalMinutes = timeSinceStart / (1000 * 60);
+        
+        if (optimalInterval <= 1) {
+            // For 30s and 1m intervals: use m:ss format
+            const minutes = Math.floor(totalMinutes);
+            const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        } else {
+            // For 5m and larger intervals: use h:mm format
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = Math.floor(totalMinutes % 60);
+            return `${hours}:${minutes.toString().padStart(2, '0')}`;
+        }
+    }
+    
+    console.log('Custom tick positions:', customTicks.map(t => formatTickLabel(t)));
+    
     // Small delay to ensure DOM is ready and chart element is properly set up
     setTimeout(() => {
         // Re-get the chart element and context after the delay to ensure they're still valid
@@ -2188,14 +2237,21 @@ function createActivityHeartRateChart(activity) {
                                 // Get the raw timestamp from the data point
                                 const rawData = context[0].raw;
                                 if (rawData && rawData.x) {
-                                    const date = new Date(rawData.x);
-                                    const year = date.getFullYear();
-                                    const month = String(date.getMonth() + 1).padStart(2, '0');
-                                    const day = String(date.getDate()).padStart(2, '0');
-                                    const hour = String(date.getHours()).padStart(2, '0');
-                                    const minute = String(date.getMinutes()).padStart(2, '0');
-                                    const second = String(date.getSeconds()).padStart(2, '0');
-                                    return `Time: ${year}-${month}-${day} ${hour}:${minute}:${second}`;
+                                    const timestamp = new Date(rawData.x);
+                                    const timeSinceStart = timestamp.getTime() - startTime.getTime();
+                                    const totalMinutes = timeSinceStart / (1000 * 60);
+                                    
+                                    if (optimalInterval <= 1) {
+                                        // For 30s and 1m intervals: use m:ss format
+                                        const minutes = Math.floor(totalMinutes);
+                                        const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                                        return `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                                    } else {
+                                        // For 5m and larger intervals: use h:mm format
+                                        const hours = Math.floor(totalMinutes / 60);
+                                        const minutes = Math.floor(totalMinutes % 60);
+                                        return `Time: ${hours}:${minutes.toString().padStart(2, '0')}`;
+                                    }
                                 }
                                 // Fallback to the label if raw data not available
                                 return `Time: ${context[0].label}`;
@@ -2226,19 +2282,71 @@ function createActivityHeartRateChart(activity) {
                         time: {
                             unit: 'minute',
                             displayFormats: {
-                                minute: 'HH:mm'
+                                minute: 'mm:ss',
+                                second: 'mm:ss'
                             }
                         },
                         title: {
                             display: true,
-                            text: 'Time'
+                            text: 'Time Since Activity Start'
                         },
                         min: startTime,
                         max: endTime,
                         ticks: {
                             maxRotation: 0,
-                            stepSize: 1,
-                            source: 'auto'
+                            source: 'auto',
+                            callback: function(value, index, values) {
+                                // Calculate time since activity start
+                                const timestamp = new Date(value);
+                                const timeSinceStart = timestamp.getTime() - startTime.getTime();
+                                const totalMinutes = timeSinceStart / (1000 * 60);
+                                
+                                if (optimalInterval <= 1) {
+                                    // For 30s and 1m intervals: use m:ss format
+                                    const minutes = Math.floor(totalMinutes);
+                                    const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                                    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                                } else {
+                                    // For 5m and larger intervals: use h:mm format
+                                    const hours = Math.floor(totalMinutes / 60);
+                                    const minutes = Math.floor(totalMinutes % 60);
+                                    return `${hours}:${minutes.toString().padStart(2, '0')}`;
+                                }
+                            }
+                        },
+                        afterBuildTicks: function(axis) {
+                            // Replace the ticks with our custom ones at optimal intervals
+                            const newTicks = [];
+                            let currentTime = 0;
+                            while (currentTime <= activityDurationMinutes) {
+                                const tickTime = new Date(startTime.getTime() + (currentTime * 60 * 1000));
+                                newTicks.push({
+                                    value: tickTime.getTime(),
+                                    label: (() => {
+                                        const timeSinceStart = tickTime.getTime() - startTime.getTime();
+                                        const totalMinutes = timeSinceStart / (1000 * 60);
+                                        
+                                        if (optimalInterval <= 1) {
+                                            const minutes = Math.floor(totalMinutes);
+                                            const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                                            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                                        } else {
+                                            const hours = Math.floor(totalMinutes / 60);
+                                            const minutes = Math.floor(totalMinutes % 60);
+                                            return `${hours}:${minutes.toString().padStart(2, '0')}`;
+                                        }
+                                    })()
+                                });
+                                currentTime += optimalInterval;
+                            }
+                            axis.ticks = newTicks;
+                        },
+                        time: {
+                            unit: 'minute',
+                            displayFormats: {
+                                minute: 'mm:ss',
+                                second: 'mm:ss'
+                            }
                         }
                     },
                     y: {
