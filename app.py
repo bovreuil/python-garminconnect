@@ -415,8 +415,8 @@ def setup_garmin():
         conn.close()
         
         flash('Garmin credentials saved successfully!', 'success')
-        logger.info(f"setup_garmin: Redirecting to dashboard")
-        return redirect(url_for('index'))
+        logger.info(f"setup_garmin: Redirecting to admin page")
+        return redirect(url_for('admin'))
     
     return render_template('setup_garmin.html')
 
@@ -824,7 +824,7 @@ def setup_hr_parameters():
         
         ensure_user_hr_parameters(resting_hr, max_hr)
         flash('HR parameters updated successfully!', 'success')
-        return redirect(url_for('index'))
+        return redirect(url_for('admin'))
     
     # GET request - show current values
     resting_hr, max_hr = get_user_hr_parameters()
