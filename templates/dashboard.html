@@ -1709,7 +1709,7 @@ function createHeartRateChart(dateLabel, dayData) {
                         fill: true,
                         tension: 0,
                         pointRadius: 0,
-                        order: 1
+                        order: 100 // Draw background first
                     },
                     // Heart rate line on top
                     {
@@ -1789,6 +1789,12 @@ function createHeartRateChart(dateLabel, dayData) {
                             maxRotation: 0,
                             stepSize: 2,
                             source: 'auto'
+                        },
+                        grid: {
+                            display: true,
+                            color: 'rgba(0, 0, 0, 0.3)', // Same as activity chart
+                            drawBorder: false,
+                            z: 1 // Try to ensure gridlines are drawn above background
                         }
                     },
                     y: {
@@ -2347,6 +2353,12 @@ function createActivityHeartRateChart(activity) {
                                 minute: 'mm:ss',
                                 second: 'mm:ss'
                             }
+                        },
+                        grid: {
+                            display: true,
+                            color: 'rgba(0, 0, 0, 0.3)', // Even darker for visibility
+                            drawBorder: false,
+                            z: 1 // Try to ensure gridlines are drawn above background
                         }
                     },
                     y: {
