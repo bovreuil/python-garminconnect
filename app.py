@@ -582,6 +582,12 @@ def get_activities(date):
         breathing_rate_series = json.loads(activity['breathing_rate_series']) if activity['breathing_rate_series'] else []
         trimp_data = json.loads(activity['trimp_data']) if activity['trimp_data'] else {}
         
+        # Check for CSV override
+        csv_override = get_user_data('activity_hr_csv', activity['activity_id'])
+        if csv_override:
+            # Use CSV override data instead of original HR series
+            heart_rate_series = csv_override
+        
         # Get user data (SpO2 and notes) from user_data table
         spo2_series = get_user_data('activity_spo2', activity['activity_id'])
         activity_notes = get_user_data('activity_notes', activity['activity_id'])
@@ -740,6 +746,234 @@ def download_activity_hr_csv(activity_id):
     )
     
     return response
+
+@app.route('/api/activity/<activity_id>/hr-csv-upload', methods=['POST'])
+def upload_activity_hr_csv(activity_id):
+    """Upload HR CSV data for a specific activity."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    logger.info(f"CSV upload request for activity {activity_id}")
+    
+    # Check if file was uploaded
+    if 'file' not in request.files:
+        logger.error("No file in request.files")
+        return jsonify({'error': 'No file uploaded'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        logger.error("Empty filename")
+        return jsonify({'error': 'No file selected'}), 400
+    
+    logger.info(f"Processing file: {file.filename}")
+    
+    # Validate file extension
+    if not file.filename.lower().endswith('.csv'):
+        logger.error(f"Invalid file extension: {file.filename}")
+        return jsonify({'error': 'File must be a CSV'}), 400
+    
+    try:
+        # Read and parse CSV
+        import io
+        import csv
+        
+        # Read file content
+        content = file.read().decode('utf-8')
+        logger.info(f"CSV content length: {len(content)} characters")
+        logger.info(f"First 200 chars of CSV: {content[:200]}")
+        
+        csv_file = io.StringIO(content)
+        reader = csv.reader(csv_file)
+        
+        # Parse CSV data
+        hr_series = []
+        header_skipped = False
+        row_count = 0
+        valid_rows = 0
+        
+        for row in reader:
+            row_count += 1
+            logger.info(f"Processing row {row_count}: {row}")
+            
+            if not header_skipped:
+                # Skip header row
+                header_skipped = True
+                logger.info("Skipping header row")
+                continue
+            
+            if len(row) >= 2:
+                try:
+                    timestamp = float(row[0])
+                    hr = int(row[1])
+                    hr_series.append([timestamp, hr])
+                    valid_rows += 1
+                    logger.info(f"Valid row: timestamp={timestamp}, hr={hr}")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid row {row_count}: {row}, error: {e}")
+                    continue  # Skip invalid rows
+            else:
+                logger.warning(f"Row {row_count} has insufficient columns: {row}")
+        
+        logger.info(f"CSV processing complete: {row_count} total rows, {valid_rows} valid rows, {len(hr_series)} HR points")
+        
+        if not hr_series:
+            logger.error("No valid HR data found in CSV")
+            return jsonify({'error': 'No valid HR data found in CSV'}), 400
+        
+        # Sort by timestamp
+        hr_series.sort(key=lambda x: x[0])
+        logger.info(f"Sorted HR series: {len(hr_series)} points, first: {hr_series[0] if hr_series else 'None'}, last: {hr_series[-1] if hr_series else 'None'}")
+        
+        # Save to user_data table
+        from database import save_user_data
+        logger.info(f"Saving CSV override to database for activity {activity_id}")
+        save_user_data('activity_hr_csv', activity_id, hr_series)
+        
+        # Recalculate TRIMP and update activity data
+        logger.info(f"Recalculating TRIMP for activity {activity_id}")
+        recalculate_activity_trimp(activity_id, hr_series)
+        
+        logger.info(f"CSV upload successful for activity {activity_id}")
+        return jsonify({'success': True, 'message': 'CSV uploaded successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error processing CSV for activity {activity_id}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': f'Error processing CSV: {str(e)}'}), 500
+
+@app.route('/api/activity/<activity_id>/hr-csv-clear', methods=['POST'])
+def clear_activity_hr_csv(activity_id):
+    """Clear uploaded HR CSV data for a specific activity."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        # Delete from user_data table
+        from database import delete_user_data
+        delete_user_data('activity_hr_csv', activity_id)
+        
+        # Recalculate TRIMP using original activity data
+        recalculate_activity_trimp(activity_id, None)
+        
+        return jsonify({'success': True, 'message': 'CSV data cleared successfully'})
+        
+    except Exception as e:
+        return jsonify({'error': f'Error clearing CSV data: {str(e)}'}), 500
+
+@app.route('/api/activity/<activity_id>/hr-csv-status')
+def get_activity_hr_csv_status(activity_id):
+    """Check if activity has uploaded CSV data."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    from database import get_user_data
+    csv_data = get_user_data('activity_hr_csv', activity_id)
+    
+    return jsonify({
+        'success': True,
+        'has_csv_override': csv_data is not None
+    })
+
+def recalculate_activity_trimp(activity_id, hr_series_override=None):
+    """Recalculate TRIMP for an activity using either override or original data."""
+    logger.info(f"Recalculating TRIMP for activity {activity_id}, override provided: {hr_series_override is not None}")
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Get activity data
+    cur.execute("""
+        SELECT activity_name, heart_rate_series, breathing_rate_series, start_time_local, duration_seconds
+        FROM activity_data 
+        WHERE activity_id = ?
+    """, (activity_id,))
+    
+    activity = cur.fetchone()
+    if not activity:
+        logger.error(f"Activity {activity_id} not found in database")
+        cur.close()
+        conn.close()
+        return
+    
+    logger.info(f"Found activity: {activity['activity_name']}")
+    
+    # Use override data if provided, otherwise use original
+    if hr_series_override is not None:
+        hr_series = hr_series_override
+        logger.info(f"Using override HR series: {len(hr_series)} points")
+    else:
+        hr_series = json.loads(activity['heart_rate_series']) if activity['heart_rate_series'] else []
+        logger.info(f"Using original HR series: {len(hr_series)} points")
+    
+    breathing_series = json.loads(activity['breathing_rate_series']) if activity['breathing_rate_series'] else []
+    logger.info(f"Breathing series: {len(breathing_series)} points")
+    
+    # Calculate TRIMP using the same logic as in jobs.py
+    from jobs import calculate_trimp_from_timeseries
+    
+    logger.info(f"Calculating TRIMP for {len(hr_series)} HR points")
+    trimp_results = calculate_trimp_from_timeseries(hr_series)
+    logger.info(f"TRIMP results: {trimp_results}")
+    
+    # Update activity data - but DON'T overwrite the original heart_rate_series
+    # Only update the TRIMP data and total_trimp
+    logger.info(f"Updating activity TRIMP data: {trimp_results.get('total_trimp', 0.0)}")
+    cur.execute("""
+        UPDATE activity_data 
+        SET trimp_data = ?, total_trimp = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE activity_id = ?
+    """, (
+        json.dumps(trimp_results),
+        trimp_results.get('total_trimp', 0.0),
+        activity_id
+    ))
+    
+    # Update daily data to reflect the change
+    # Get the date from the activity data instead of trying to parse it from activity_id
+    start_time = activity['start_time_local']
+    logger.info(f"Activity start_time_local: {start_time}")
+    
+    # Extract date from start_time_local - handle different formats
+    date = None
+    if start_time:
+        if ' ' in start_time:
+            # Format: "2025-07-08 07:14:25"
+            date = start_time.split(' ')[0]
+        elif 'T' in start_time:
+            # Format: "2025-07-08T07:14:25.0"
+            date = start_time.split('T')[0]
+        else:
+            # Assume it's already a date
+            date = start_time
+    
+    if date:
+        logger.info(f"Extracted date: {date}")
+        # Rebuild daily HR series and TRIMP
+        from jobs import build_daily_hr_timeseries, calculate_trimp_from_timeseries
+        
+        daily_hr_series = build_daily_hr_timeseries(date, conn, cur)
+        logger.info(f"Daily HR series: {len(daily_hr_series)} points")
+        daily_trimp_results = calculate_trimp_from_timeseries(daily_hr_series)
+        logger.info(f"Daily TRIMP results: {daily_trimp_results}")
+        
+        cur.execute("""
+            UPDATE daily_data 
+            SET heart_rate_series = ?, trimp_data = ?, total_trimp = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE date = ?
+        """, (
+            json.dumps(daily_hr_series),
+            json.dumps(daily_trimp_results),
+            daily_trimp_results.get('total_trimp', 0.0),
+            date
+        ))
+    else:
+        logger.warning(f"Could not extract date from activity start_time_local: {activity['start_time_local']}")
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    logger.info(f"TRIMP recalculation complete for activity {activity_id}")
 
 @app.route('/api/weekly-data/<start_date>')
 def get_weekly_data(start_date):

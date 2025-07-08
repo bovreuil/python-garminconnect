@@ -689,6 +689,14 @@ def build_daily_hr_timeseries(target_date, conn, cur):
         
         for activity in activities:
             activity_hr_series = json.loads(activity['heart_rate_series'])
+            
+            # Check for CSV override
+            from database import get_user_data
+            csv_override = get_user_data('activity_hr_csv', activity['activity_id'])
+            if csv_override:
+                activity_hr_series = csv_override
+                logger.info(f"build_daily_hr_timeseries: Using CSV override for activity {activity['activity_id']}")
+            
             if activity_hr_series:
                 # Find continuous segments in activity HR data
                 segments = find_continuous_segments(activity_hr_series)
@@ -714,6 +722,13 @@ def build_daily_hr_timeseries(target_date, conn, cur):
         for activity in activities:
             activity_id = activity['activity_id']
             activity_hr_series = json.loads(activity['heart_rate_series'])
+            
+            # Check for CSV override
+            from database import get_user_data
+            csv_override = get_user_data('activity_hr_csv', activity_id)
+            if csv_override:
+                activity_hr_series = csv_override
+                logger.info(f"build_daily_hr_timeseries: Using CSV override for activity {activity_id}")
             
             if not activity_hr_series:
                 continue

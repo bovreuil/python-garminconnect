@@ -108,6 +108,9 @@
                                     <button type="button" class="btn btn-sm btn-outline-primary" id="downloadActivityCsv">
                                         <span>📥 CSV</span>
                                     </button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning" id="uploadActivityCsv">
+                                        <span id="csvIcon">📤 CSV</span>
+                                    </button>
                                     <button type="button" class="btn btn-sm btn-outline-info" id="editSpo2">
                                         <span>🩸 SpO2</span>
                                     </button>
@@ -219,6 +222,47 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-outline-danger" id="clearTrimpOverrides">Clear Overrides</button>
                 <button type="button" class="btn btn-primary" id="saveTrimpOverrides">Save TRIMP Overrides</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CSV Upload Modal -->
+<div class="modal fade" id="csvUploadModal" tabindex="-1" aria-labelledby="csvUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="csvUploadModalLabel">Upload HR CSV Data</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <p class="text-muted">Upload a CSV file with corrected heart rate data. The file should have two columns: timestamp and hr. This will override the activity's original HR data.</p>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="csvFile" class="form-label">Select CSV File</label>
+                    <input type="file" class="form-control" id="csvFile" accept=".csv">
+                </div>
+                
+                <div class="alert alert-info">
+                    <strong>Instructions:</strong>
+                    <ul class="mb-0">
+                        <li>Download the current CSV first to see the format</li>
+                        <li>Edit the HR values in your preferred spreadsheet software</li>
+                        <li>Save as CSV and upload here</li>
+                        <li>The system will recalculate TRIMP and update all views</li>
+                    </ul>
+                </div>
+                
+                <div id="csvStatus" class="mt-3">
+                    <!-- Status messages will appear here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-danger" id="clearCsvOverride">Clear Override</button>
+                <button type="button" class="btn btn-primary" id="uploadCsv">Upload CSV</button>
             </div>
         </div>
     </div>
@@ -397,6 +441,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('editTrimp').addEventListener('click', openTrimpEditor);
     document.getElementById('saveTrimpOverrides').addEventListener('click', saveTrimpOverrides);
     document.getElementById('clearTrimpOverrides').addEventListener('click', clearTrimpOverrides);
+    document.getElementById('uploadActivityCsv').addEventListener('click', openCsvUploadEditor);
+    document.getElementById('uploadCsv').addEventListener('click', uploadCsvData);
+    document.getElementById('clearCsvOverride').addEventListener('click', clearCsvOverride);
     
     // Start with today's view
     goToToday();
@@ -1648,6 +1695,204 @@ function checkTrimpOverrides(dateLabel) {
             console.error('Error checking TRIMP overrides:', error);
             updateTrimpIcon(false);
         });
+}
+
+// CSV Upload Functions
+function openCsvUploadEditor() {
+    if (!selectedActivity) {
+        console.error('No activity selected for CSV upload');
+        return;
+    }
+    
+    // Check current CSV override status
+    checkCsvOverrideStatus();
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('csvUploadModal'));
+    modal.show();
+}
+
+function checkCsvOverrideStatus() {
+    if (!selectedActivity) return;
+    
+    fetch(`/api/activity/${selectedActivity.activity_id}/hr-csv-status`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateCsvIcon(data.has_csv_override);
+                updateCsvStatus(data.has_csv_override);
+            }
+        })
+        .catch(error => {
+            console.error('Error checking CSV override status:', error);
+            updateCsvIcon(false);
+            updateCsvStatus(false);
+        });
+}
+
+function updateCsvIcon(hasOverride) {
+    const icon = document.getElementById('csvIcon');
+    if (hasOverride) {
+        icon.innerHTML = '📤 CSV*'; // Show override indicator
+    } else {
+        icon.innerHTML = '📤 CSV'; // Show default icon
+    }
+}
+
+function updateCsvStatus(hasOverride) {
+    const statusDiv = document.getElementById('csvStatus');
+    if (hasOverride) {
+        statusDiv.innerHTML = '<div class="alert alert-warning">This activity has uploaded CSV data that overrides the original HR data.</div>';
+    } else {
+        statusDiv.innerHTML = '<div class="alert alert-info">No CSV override is currently active for this activity.</div>';
+    }
+}
+
+function uploadCsvData() {
+    if (!selectedActivity) {
+        console.error('No activity selected for CSV upload');
+        return;
+    }
+    
+    console.log('Starting CSV upload for activity:', selectedActivity.activity_id);
+    
+    const fileInput = document.getElementById('csvFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a CSV file to upload');
+        return;
+    }
+    
+    console.log('File selected:', file.name, 'Size:', file.size, 'bytes');
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Show loading state
+    const uploadBtn = document.getElementById('uploadCsv');
+    const originalText = uploadBtn.innerHTML;
+    uploadBtn.innerHTML = 'Uploading...';
+    uploadBtn.disabled = true;
+    
+    console.log('Sending request to:', `/api/activity/${selectedActivity.activity_id}/hr-csv-upload`);
+    
+    fetch(`/api/activity/${selectedActivity.activity_id}/hr-csv-upload`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        return response.json();
+    })
+    .then(data => {
+        console.log('Response data:', data);
+        
+        if (data.success) {
+            console.log('CSV upload successful');
+            
+            // Update icon and status
+            updateCsvIcon(true);
+            updateCsvStatus(true);
+            
+            // Refresh the activity view
+            createActivityHeartRateChart(selectedActivity);
+            
+            // Refresh the single date view
+            if (selectedDate) {
+                loadDateData(selectedDate).then(dayData => {
+                    showSingleDateView(selectedDate, dayData);
+                });
+            }
+            
+            // Refresh the two-week chart
+            if (currentStartDate && currentEndDate) {
+                loadTwoWeekData(currentStartDate, currentEndDate);
+            }
+            
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('csvUploadModal'));
+            modal.hide();
+            
+            // Clear the file input
+            fileInput.value = '';
+            
+            alert('CSV uploaded successfully! Activity data has been updated.');
+        } else {
+            console.error('CSV upload failed:', data.error);
+            alert('Error uploading CSV: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error uploading CSV:', error);
+        alert('Error uploading CSV');
+    })
+    .finally(() => {
+        // Restore button state
+        uploadBtn.innerHTML = originalText;
+        uploadBtn.disabled = false;
+    });
+}
+
+function clearCsvOverride() {
+    if (!selectedActivity) {
+        console.error('No activity selected for clearing CSV override');
+        return;
+    }
+    
+    if (!confirm('Are you sure you want to clear the CSV override? This will restore the original HR data.')) {
+        return;
+    }
+    
+    // Show loading state
+    const clearBtn = document.getElementById('clearCsvOverride');
+    const originalText = clearBtn.innerHTML;
+    clearBtn.innerHTML = 'Clearing...';
+    clearBtn.disabled = true;
+    
+    fetch(`/api/activity/${selectedActivity.activity_id}/hr-csv-clear`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update icon and status
+            updateCsvIcon(false);
+            updateCsvStatus(false);
+            
+            // Refresh the activity view
+            createActivityHeartRateChart(selectedActivity);
+            
+            // Refresh the single date view
+            if (selectedDate) {
+                loadDateData(selectedDate).then(dayData => {
+                    showSingleDateView(selectedDate, dayData);
+                });
+            }
+            
+            // Refresh the two-week chart
+            if (currentStartDate && currentEndDate) {
+                loadTwoWeekData(currentStartDate, currentEndDate);
+            }
+            
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('csvUploadModal'));
+            modal.hide();
+            
+            alert('CSV override cleared successfully! Original HR data has been restored.');
+        } else {
+            alert('Error clearing CSV override: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error clearing CSV override:', error);
+        alert('Error clearing CSV override');
+    })
+    .finally(() => {
+        // Restore button state
+        clearBtn.innerHTML = originalText;
+        clearBtn.disabled = false;
+    });
 }
 
 // Load activities for a specific date label
