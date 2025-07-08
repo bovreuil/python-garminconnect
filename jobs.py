@@ -549,7 +549,15 @@ def collect_activities_for_date(api, target_date: str, conn, cur):
                         
                         # Calculate TRIMP for activity using the new function
                         if hr_series:
-                            trimp_results = calculate_trimp_from_timeseries(hr_series)
+                            # Check for CSV override before calculating TRIMP
+                            from database import get_user_data
+                            csv_override = get_user_data('activity_hr_csv', activity_id)
+                            if csv_override:
+                                logger.info(f"collect_activities_for_date: Using CSV override for TRIMP calculation of activity {activity_id}")
+                                trimp_results = calculate_trimp_from_timeseries(csv_override)
+                            else:
+                                trimp_results = calculate_trimp_from_timeseries(hr_series)
+                            
                             trimp_data = {
                                 'presentation_buckets': trimp_results['presentation_buckets'],
                                 'total_trimp': trimp_results['total_trimp']
@@ -693,6 +701,7 @@ def build_daily_hr_timeseries(target_date, conn, cur):
             # Check for CSV override
             from database import get_user_data
             csv_override = get_user_data('activity_hr_csv', activity['activity_id'])
+            logger.info(f"build_daily_hr_timeseries: Checking CSV override for activity {activity['activity_id']}, found: {csv_override is not None}")
             if csv_override:
                 activity_hr_series = csv_override
                 logger.info(f"build_daily_hr_timeseries: Using CSV override for activity {activity['activity_id']}")
@@ -726,9 +735,10 @@ def build_daily_hr_timeseries(target_date, conn, cur):
             # Check for CSV override
             from database import get_user_data
             csv_override = get_user_data('activity_hr_csv', activity_id)
+            logger.info(f"build_daily_hr_timeseries: Checking CSV override for activity {activity_id}, found: {csv_override is not None}")
             if csv_override:
                 activity_hr_series = csv_override
-                logger.info(f"build_daily_hr_timeseries: Using CSV override for activity {activity_id}")
+                logger.info(f"build_daily_hr_timeseries: Using CSV override for activity {activity_id} with {len(csv_override)} points")
             
             if not activity_hr_series:
                 continue
