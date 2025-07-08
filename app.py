@@ -8,6 +8,7 @@ import os
 import json
 import logging
 import math
+import threading
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
@@ -16,8 +17,6 @@ from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
 import sqlite3
-from rq import Queue
-from redis import Redis
 import garminconnect
 import random
 import time
@@ -48,10 +47,6 @@ load_dotenv('env.local')
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
-
-# Redis and RQ setup
-redis_conn = Redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379'))
-queue = Queue(connection=redis_conn)
 
 # Google OAuth configuration
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_ID', '')
@@ -452,7 +447,9 @@ def collect_data():
     if start_date == end_date:
         # Single date - create one job
         job_id = create_background_job('collect_data', target_date=start_date)
-        job = queue.enqueue(collect_garmin_data_job, start_date, job_id)
+        # Run the job in a separate thread
+        thread = threading.Thread(target=collect_garmin_data_job, args=(start_date, job_id), daemon=True)
+        thread.start()
         
         logger.info(f"collect_data: Created single job {job_id} for {start_date}")
         
@@ -479,7 +476,9 @@ def collect_data():
             
             while current_date <= end:
                 job_id = create_background_job('collect_data', target_date=current_date.isoformat())
-                job = queue.enqueue(collect_garmin_data_job, current_date.isoformat(), job_id)
+                # Run the job in a separate thread
+                thread = threading.Thread(target=collect_garmin_data_job, args=(current_date.isoformat(), job_id), daemon=True)
+                thread.start()
                 job_ids.append(job_id)
                 logger.info(f"collect_data: Created job {job_id} for {current_date.isoformat()}")
                 current_date += timedelta(days=1)
