@@ -994,6 +994,66 @@ def daily_notes(date):
             logger.error(f"Error loading daily notes for {date}: {e}")
             return jsonify({'error': f'Error loading notes: {str(e)}'}), 500
 
+@app.route('/api/data/<date>/trimp-overrides', methods=['GET', 'POST'])
+def daily_trimp_overrides(date):
+    """Get or update TRIMP overrides for a specific date label."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Treat date as a string label, not a real date
+    # Validate format: YYYY-MM-DD
+    if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
+        return jsonify({'error': 'Invalid date label format. Expected YYYY-MM-DD'}), 400
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            trimp_overrides = data.get('trimp_overrides', {})
+            
+            # Validate TRIMP overrides - ensure all values are positive numbers
+            for zone, value in trimp_overrides.items():
+                if value is not None and value != '':
+                    try:
+                        float_value = float(value)
+                        if float_value < 0:
+                            return jsonify({'error': f'TRIMP value for zone {zone} must be positive'}), 400
+                        trimp_overrides[zone] = float_value
+                    except (ValueError, TypeError):
+                        return jsonify({'error': f'Invalid TRIMP value for zone {zone}'}), 400
+            
+            # Save TRIMP overrides to user_data table
+            # If we have overrides object with any keys, save it (even if all values are 0)
+            if trimp_overrides and len(trimp_overrides) > 0:
+                save_user_data('daily_trimp_overrides', date, json.dumps(trimp_overrides))
+            else:
+                # Delete existing overrides if empty
+                delete_user_data('daily_trimp_overrides', date)
+            
+            return jsonify({
+                'success': True,
+                'message': 'TRIMP overrides saved successfully',
+                'trimp_overrides': trimp_overrides
+            })
+            
+        except Exception as e:
+            logger.error(f"Error saving TRIMP overrides for {date}: {e}")
+            return jsonify({'error': f'Error saving TRIMP overrides: {str(e)}'}), 500
+    
+    else:  # GET
+        try:
+            # Get current TRIMP overrides from user_data table
+            overrides_json = get_user_data('daily_trimp_overrides', date)
+            trimp_overrides = json.loads(overrides_json) if overrides_json else {}
+            
+            return jsonify({
+                'success': True,
+                'trimp_overrides': trimp_overrides
+            })
+            
+        except Exception as e:
+            logger.error(f"Error loading TRIMP overrides for {date}: {e}")
+            return jsonify({'error': f'Error loading TRIMP overrides: {str(e)}'}), 500
+
 @app.route('/api/data/<date>/hr-csv')
 def download_daily_hr_csv(date):
     """Download HR data for a specific date label as CSV."""

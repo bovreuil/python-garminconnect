@@ -54,6 +54,9 @@
                     <button type="button" class="btn btn-sm btn-outline-primary" id="downloadDailyCsv">
                         <span>📥 CSV</span>
                     </button>
+                    <button type="button" class="btn btn-sm btn-outline-warning" id="editTrimp">
+                        <span id="trimpIcon">📊</span>
+                    </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="closeSingleDate">
                         <span>×</span>
                     </button>
@@ -182,6 +185,40 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="saveSpo2">Save SpO2 Data</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TRIMP Editor Modal -->
+<div class="modal fade" id="trimpModal" tabindex="-1" aria-labelledby="trimpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="trimpModalLabel">Edit TRIMP Overrides</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <p class="text-muted">Enter TRIMP values for each heart rate zone. Leave fields empty to use calculated values. Total will be calculated automatically.</p>
+                </div>
+                
+                <div id="trimpOverridesForm">
+                    <!-- TRIMP override fields will be added here dynamically -->
+                </div>
+                
+                <div class="mt-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Total TRIMP: <span id="totalTrimpOverride">0.0</span></h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-danger" id="clearTrimpOverrides">Clear Overrides</button>
+                <button type="button" class="btn btn-primary" id="saveTrimpOverrides">Save TRIMP Overrides</button>
             </div>
         </div>
     </div>
@@ -357,6 +394,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('editSpo2').addEventListener('click', openSpo2Editor);
     document.getElementById('addSpo2Entry').addEventListener('click', addSpo2Entry);
     document.getElementById('saveSpo2').addEventListener('click', saveSpo2Data);
+    document.getElementById('editTrimp').addEventListener('click', openTrimpEditor);
+    document.getElementById('saveTrimpOverrides').addEventListener('click', saveTrimpOverrides);
+    document.getElementById('clearTrimpOverrides').addEventListener('click', clearTrimpOverrides);
     
     // Start with today's view
     goToToday();
@@ -493,10 +533,69 @@ function loadDateData(dateLabel) {
         .then(data => {
             if (data) {
                 console.log(`Data for ${dateLabel}:`, data.total_trimp, data.presentation_buckets ? Object.keys(data.presentation_buckets) : 'no buckets');
+                
+                // Load TRIMP overrides for this date
+                return fetch(`/api/data/${dateLabel}/trimp-overrides`)
+                    .then(response => response.json())
+                    .then(overridesData => {
+                        if (overridesData.success && overridesData.trimp_overrides && Object.keys(overridesData.trimp_overrides).length > 0) {
+                            // Apply TRIMP overrides (even if all values are 0)
+                            data.trimp_overrides = overridesData.trimp_overrides;
+                            
+                            // Update total TRIMP if we're viewing TRIMP metric
+                            if (currentMetric === 'trimp') {
+                                let totalOverride = 0;
+                                Object.values(overridesData.trimp_overrides).forEach(value => {
+                                    totalOverride += value;
+                                });
+                                data.total_trimp = totalOverride;
+                            }
+                            
+                            // For minutes view, set minutes to 0 when overrides exist
+                            if (currentMetric === 'minutes' && data.presentation_buckets) {
+                                Object.keys(data.presentation_buckets).forEach(zone => {
+                                    data.presentation_buckets[zone].minutes = 0;
+                                });
+                            }
+                        }
+                        return data;
+                    })
+                    .catch(error => {
+                        console.error(`Error loading TRIMP overrides for ${dateLabel}:`, error);
+                        return data;
+                    });
             } else {
                 console.log(`No data for ${dateLabel}`);
+                
+                // Check for TRIMP overrides even when there's no HR data
+                return fetch(`/api/data/${dateLabel}/trimp-overrides`)
+                    .then(response => response.json())
+                    .then(overridesData => {
+                        if (overridesData.success && overridesData.trimp_overrides && Object.keys(overridesData.trimp_overrides).length > 0) {
+                            // Create minimal data structure with overrides
+                            const overrideData = {
+                                total_trimp: Object.values(overridesData.trimp_overrides).reduce((sum, value) => sum + value, 0),
+                                trimp_overrides: overridesData.trimp_overrides,
+                                presentation_buckets: {} // Empty buckets for zones
+                            };
+                            
+                            // Create empty buckets for all zones
+                            zoneOrder.forEach(zone => {
+                                overrideData.presentation_buckets[zone] = {
+                                    minutes: 0,
+                                    trimp: 0
+                                };
+                            });
+                            
+                            return overrideData;
+                        }
+                        return null;
+                    })
+                    .catch(error => {
+                        console.error(`Error loading TRIMP overrides for ${dateLabel}:`, error);
+                        return null;
+                    });
             }
-            return data;
         })
         .catch(error => {
             console.error(`Error loading data for ${dateLabel}:`, error);
@@ -541,9 +640,19 @@ function updateTwoWeekChart(dateLabels, dataResults) {
             }
             
             if (currentMetric === 'trimp') {
-                return dayData.presentation_buckets[zone].trimp || 0;
+                // Use override values if available, otherwise use calculated values
+                if (dayData.trimp_overrides && dayData.trimp_overrides[zone] !== undefined) {
+                    return dayData.trimp_overrides[zone];
+                } else {
+                    return dayData.presentation_buckets[zone].trimp || 0;
+                }
             } else {
-                return dayData.presentation_buckets[zone].minutes || 0;
+                // For minutes view, show 0 if overrides exist
+                if (dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0) {
+                    return 0;
+                } else {
+                    return dayData.presentation_buckets[zone].minutes || 0;
+                }
             }
         });
         
@@ -561,11 +670,18 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     dataResults.forEach((dayData, index) => {
         if (dayData) {
             if (currentMetric === 'trimp') {
-                maxValue = Math.max(maxValue, dayData.total_trimp || 0);
+                // Use override total if available, otherwise use calculated total
+                let trimpTotal = dayData.total_trimp || 0;
+                if (dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0) {
+                    trimpTotal = Object.values(dayData.trimp_overrides).reduce((sum, value) => sum + value, 0);
+                }
+                maxValue = Math.max(maxValue, trimpTotal);
             } else {
-                // Calculate total minutes for this day
+                // Calculate total minutes for this day (0 if overrides exist)
                 let totalMinutes = 0;
-                if (dayData.presentation_buckets) {
+                if (dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0) {
+                    totalMinutes = 0;
+                } else if (dayData.presentation_buckets) {
                     Object.values(dayData.presentation_buckets).forEach(bucket => {
                         totalMinutes += bucket.minutes || 0;
                     });
@@ -624,7 +740,10 @@ function updateTwoWeekChart(dateLabels, dataResults) {
                     
                     if (clickIndex >= 0 && clickIndex < dateLabels.length) {
                         const dateLabel = dateLabels[clickIndex];
-                        showSingleDateView(dateLabel, dataResults[clickIndex]);
+                        // Reload the data for this specific date to ensure we have the latest overrides
+                        loadDateData(dateLabel).then(dayData => {
+                            showSingleDateView(dateLabel, dayData);
+                        });
                     }
                 }
             },
@@ -784,21 +903,31 @@ function showSingleDateView(dateLabel, dayData) {
         let detailsHtml = '<div class="row">';
         
         if (dayData.total_trimp !== undefined) {
+            const hasOverrides = dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0;
+            const trimpValue = hasOverrides ? 
+                Object.values(dayData.trimp_overrides).reduce((sum, value) => sum + value, 0) : 
+                dayData.total_trimp;
+            const trimpLabel = hasOverrides ? 'Override TRIMP' : 'Total TRIMP';
+            
             detailsHtml += `
                 <div class="col-6">
                     <div class="text-center p-3 bg-light rounded">
-                        <h4 class="text-primary mb-1">${dayData.total_trimp.toFixed(1)}</h4>
-                        <small class="text-muted">Total TRIMP</small>
+                        <h4 class="text-primary mb-1">${trimpValue.toFixed(1)}</h4>
+                        <small class="text-muted">${trimpLabel}</small>
                     </div>
                 </div>
             `;
         }
         
         if (dayData.presentation_buckets) {
+            const hasOverrides = dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0;
             let totalMinutes = 0;
-            Object.values(dayData.presentation_buckets).forEach(bucket => {
-                totalMinutes += bucket.minutes || 0;
-            });
+            
+            if (!hasOverrides) {
+                Object.values(dayData.presentation_buckets).forEach(bucket => {
+                    totalMinutes += bucket.minutes || 0;
+                });
+            }
             
             detailsHtml += `
                 <div class="col-6">
@@ -824,8 +953,11 @@ function showSingleDateView(dateLabel, dayData) {
         
         document.getElementById('dateDetails').innerHTML = detailsHtml;
         
-        // Load notes for this date
-        loadDailyNotes(dateLabel);
+            // Load notes for this date
+    loadDailyNotes(dateLabel);
+    
+    // Check for TRIMP overrides and update icon
+    checkTrimpOverrides(dateLabel);
         
         // Display zone breakdown
         if (dayData.presentation_buckets) {
@@ -843,17 +975,23 @@ function showSingleDateView(dateLabel, dayData) {
                 totalTrimp += bucket.trimp || 0;
             });
             
+            // Check if TRIMP overrides are active
+            const hasOverrides = dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0;
+            
             // Display each zone
             sortedZones.forEach(zone => {
                 const bucket = dayData.presentation_buckets[zone];
-                const minutes = bucket.minutes || 0;
-                const trimp = bucket.trimp || 0;
+                const minutes = hasOverrides ? 0 : (bucket.minutes || 0);
+                const trimp = hasOverrides ? (dayData.trimp_overrides[zone] || 0) : (bucket.trimp || 0);
                 const percentage = totalMinutes > 0 ? ((minutes / totalMinutes) * 100).toFixed(1) : '0.0';
+                
+                // Use grey color if overrides are active, otherwise use zone color
+                const badgeColor = hasOverrides ? '#6c757d' : zoneColors[zone];
                 
                 zoneHtml += `
                     <tr>
                         <td>
-                            <span class="badge" style="background-color: ${zoneColors[zone]}; color: white;">${zone}</span>
+                            <span class="badge" style="background-color: ${badgeColor}; color: white;">${zone}</span>
                         </td>
                         <td>${minutes.toFixed(0)}</td>
                         <td>${trimp.toFixed(1)}</td>
@@ -1238,6 +1376,278 @@ function saveSpo2Data() {
         console.error('Error saving SpO2 data:', error);
         alert('Error saving SpO2 data');
     });
+}
+
+// TRIMP Editor Functions
+let currentTrimpOverrides = {};
+let currentDayData = null;
+
+function openTrimpEditor() {
+    if (!selectedDate) {
+        console.error('No date selected for TRIMP editing');
+        return;
+    }
+    
+    // Load current day data and TRIMP overrides
+    loadTrimpOverrides(selectedDate);
+}
+
+function loadTrimpOverrides(dateLabel) {
+    // First, get the current day data to show calculated TRIMP values
+    fetch(`/api/data/${dateLabel}`)
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            return null;
+        })
+        .then(dayData => {
+            currentDayData = dayData;
+            
+            // Then load existing TRIMP overrides
+            return fetch(`/api/data/${dateLabel}/trimp-overrides`);
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentTrimpOverrides = data.trimp_overrides || {};
+            } else {
+                currentTrimpOverrides = {};
+            }
+            
+            // Populate the modal
+            populateTrimpOverridesForm();
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('trimpModal'));
+            modal.show();
+        })
+        .catch(error => {
+            console.error('Error loading TRIMP overrides:', error);
+            currentDayData = null;
+            currentTrimpOverrides = {};
+            populateTrimpOverridesForm();
+            
+            const modal = new bootstrap.Modal(document.getElementById('trimpModal'));
+            modal.show();
+        });
+}
+
+function populateTrimpOverridesForm() {
+    const container = document.getElementById('trimpOverridesForm');
+    container.innerHTML = '';
+    
+    // Add column headers
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'row mb-2 fw-bold';
+    headerDiv.innerHTML = `
+        <div class="col-md-3">Zone</div>
+        <div class="col-md-3">Calculated</div>
+        <div class="col-md-6">Override</div>
+    `;
+    container.appendChild(headerDiv);
+    
+    // Create form for each zone (reverse order to match HR Zones section)
+    zoneOrder.slice().reverse().forEach(zone => {
+        const calculatedTrimp = currentDayData && currentDayData.presentation_buckets && 
+                               currentDayData.presentation_buckets[zone] ? 
+                               currentDayData.presentation_buckets[zone].trimp || 0 : 0;
+        // Check if we have any overrides at all (binary system)
+        const hasAnyOverrides = Object.keys(currentTrimpOverrides).length > 0;
+        const overrideValue = currentTrimpOverrides[zone];
+        
+        // If we have overrides, use them (including 0), otherwise use calculated
+        const displayValue = hasAnyOverrides ? (overrideValue !== undefined ? overrideValue : 0) : calculatedTrimp.toFixed(1);
+        
+        const zoneDiv = document.createElement('div');
+        zoneDiv.className = 'row mb-3 align-items-center';
+        zoneDiv.innerHTML = `
+            <div class="col-md-3">
+                <span class="badge" style="background-color: ${zoneColors[zone]}; color: white;">${zone}</span>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted">${calculatedTrimp.toFixed(1)}</small>
+            </div>
+            <div class="col-md-6">
+                <input type="number" class="form-control trimp-override-input" 
+                       min="0" step="0.1"
+                       value="${displayValue}"
+                       data-zone="${zone}"
+                       onchange="updateTrimpOverride('${zone}', this.value)">
+            </div>
+        `;
+        container.appendChild(zoneDiv);
+    });
+    
+    updateTotalTrimpOverride();
+}
+
+function updateTrimpOverride(zone, value) {
+    if (value === '' || value === null || value === undefined) {
+        currentTrimpOverrides[zone] = 0;
+    } else {
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue) && numValue >= 0) {
+            currentTrimpOverrides[zone] = numValue;
+        } else {
+            currentTrimpOverrides[zone] = 0;
+        }
+    }
+    
+    // Ensure all zones are included in overrides (binary system)
+    zoneOrder.forEach(zoneName => {
+        if (!(zoneName in currentTrimpOverrides)) {
+            // Get the current value from the form field
+            const formField = document.querySelector(`input[data-zone="${zoneName}"]`);
+            if (formField) {
+                const fieldValue = parseFloat(formField.value) || 0;
+                currentTrimpOverrides[zoneName] = fieldValue;
+            } else {
+                currentTrimpOverrides[zoneName] = 0;
+            }
+        }
+    });
+    
+    updateTotalTrimpOverride();
+}
+
+function updateTotalTrimpOverride() {
+    const total = Object.values(currentTrimpOverrides).reduce((sum, value) => sum + value, 0);
+    document.getElementById('totalTrimpOverride').textContent = total.toFixed(1);
+}
+
+function clearTrimpOverrides() {
+    if (!selectedDate) {
+        console.error('No date selected for clearing TRIMP overrides');
+        return;
+    }
+    
+    // Delete overrides from server
+    fetch(`/api/data/${selectedDate}/trimp-overrides`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            trimp_overrides: {}
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the icon to show overrides are cleared
+            updateTrimpIcon(false);
+            
+            // Refresh the two-week chart to show calculated values
+            if (currentStartDate && currentEndDate) {
+                loadTwoWeekData(currentStartDate, currentEndDate);
+            }
+            
+            // Refresh the single date view if it's open
+            if (selectedDate) {
+                loadDateData(selectedDate).then(dayData => {
+                    showSingleDateView(selectedDate, dayData);
+                });
+            }
+            
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('trimpModal'));
+            modal.hide();
+        } else {
+            alert('Error clearing TRIMP overrides: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error clearing TRIMP overrides:', error);
+        alert('Error clearing TRIMP overrides');
+    });
+}
+
+function saveTrimpOverrides() {
+    if (!selectedDate) {
+        console.error('No date selected for saving TRIMP overrides');
+        return;
+    }
+    
+    // Save exactly what's in the form fields (binary system)
+    const completeOverrides = {};
+    zoneOrder.forEach(zone => {
+        completeOverrides[zone] = currentTrimpOverrides[zone] || 0;
+    });
+    
+    // Send data to server
+    fetch(`/api/data/${selectedDate}/trimp-overrides`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            trimp_overrides: completeOverrides
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the icon to show overrides are active
+            updateTrimpIcon(true);
+            
+            // Refresh the two-week chart to show overrides
+            if (currentStartDate && currentEndDate) {
+                loadTwoWeekData(currentStartDate, currentEndDate);
+            }
+            
+            // Refresh the single date view if it's open
+            if (selectedDate) {
+                loadDateData(selectedDate).then(dayData => {
+                    showSingleDateView(selectedDate, dayData);
+                });
+            }
+            
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('trimpModal'));
+            modal.hide();
+        } else {
+            alert('Error saving TRIMP overrides: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving TRIMP overrides:', error);
+        alert('Error saving TRIMP overrides');
+    });
+}
+
+function updateTrimpIcon(hasOverrides) {
+    const icon = document.getElementById('trimpIcon');
+    // Always show the colored bars icon
+    icon.innerHTML = createTrimpIcon();
+}
+
+function createTrimpIcon() {
+    // Create an SVG icon with 9 colored bars representing the zones (vertical stacking)
+    // Midnight blue (80-89) at bottom, hot red (160+) at top
+    const barWidth = 12;
+    const barHeight = 2;
+    const totalHeight = barHeight * 9;
+    
+    return `<svg width="${barWidth}" height="${totalHeight}" viewBox="0 0 ${barWidth} ${totalHeight}">
+        ${zoneOrder.slice().reverse().map((zone, index) => {
+            const y = index * barHeight;
+            return `<rect x="0" y="${y}" width="${barWidth}" height="${barHeight}" fill="${zoneColors[zone]}"/>`;
+        }).join('')}
+    </svg>`;
+}
+
+function checkTrimpOverrides(dateLabel) {
+    fetch(`/api/data/${dateLabel}/trimp-overrides`)
+        .then(response => response.json())
+        .then(data => {
+            const hasOverrides = data.success && data.trimp_overrides && Object.keys(data.trimp_overrides).length > 0;
+            updateTrimpIcon(hasOverrides);
+        })
+        .catch(error => {
+            console.error('Error checking TRIMP overrides:', error);
+            updateTrimpIcon(false);
+        });
 }
 
 // Load activities for a specific date label
