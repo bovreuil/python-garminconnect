@@ -2190,7 +2190,7 @@ function createActivityHeartRateChart(activity) {
             });
             
             datasets.push({
-                label: 'Breathing Rate (BPM)',
+                                        label: 'Breathing Rate (BRPM)',
                 data: breathingDataPoints,
                 borderColor: '#87CEEB', // Light blue
                 backgroundColor: 'transparent',
@@ -2278,8 +2278,8 @@ function createActivityHeartRateChart(activity) {
                                 // Show tooltip for heart rate, breathing rate, and SpO2 data
                                 if (context.dataset.label === 'Heart Rate (BPM)') {
                                     return `Heart Rate: ${context.parsed.y} BPM`;
-                                } else if (context.dataset.label === 'Breathing Rate (BPM)') {
-                                    return `Breathing Rate: ${context.parsed.y} BPM`;
+                                } else if (context.dataset.label === 'Breathing Rate (BRPM)') {
+                                    return `Breathing Rate: ${context.parsed.y.toFixed(1)} BRPM`;
                                 } else if (context.dataset.label === 'SpO2 (%)') {
                                     return `SpO2: ${context.parsed.y}%`;
                                 }
@@ -2393,7 +2393,7 @@ function createActivityHeartRateChart(activity) {
                         position: 'right',
                         title: {
                             display: false, // Hide the title
-                            text: 'Breathing Rate (BPM)'
+                            text: 'Breathing Rate (BRPM)'
                         },
                         min: 0,
                         max: 60, // Typical breathing rate range
