@@ -578,7 +578,7 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     // Calculate a proper max that aligns with Chart.js tick intervals
     let yAxisMax;
     if (maxValue === 0) {
-        yAxisMax = 10; // Default for no data
+        yAxisMax = 500; // Default minimum for consistency
     } else {
         // Determine step size based on the range
         let step;
@@ -590,6 +590,9 @@ function updateTwoWeekChart(dateLabels, dataResults) {
         
         // Add one extra step for label space
         yAxisMax = Math.ceil(maxValue / step) * step + step;
+        
+        // Ensure minimum y-axis maximum of 500 for consistency across weeks
+        yAxisMax = Math.max(yAxisMax, 500);
     }
     
     twoWeekChart = new Chart(ctx, {
