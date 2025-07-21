@@ -544,7 +544,28 @@ def get_data(date):
             'activity_type': data['activity_type']
         })
     else:
-        return jsonify({'error': 'No data found for this date'}), 404
+        # Check if there are TRIMP overrides for this date (even without daily data)
+        trimp_overrides = get_user_data('daily_trimp_overrides', date)
+        if trimp_overrides:
+            # Parse the TRIMP overrides
+            try:
+                overrides_data = json.loads(trimp_overrides)
+                # Calculate total TRIMP from overrides
+                total_trimp = sum(float(value) for value in overrides_data.values() if value is not None and value != '')
+                
+                return jsonify({
+                    'date': date,
+                    'heart_rate_values': [],  # No HR data
+                    'presentation_buckets': overrides_data,
+                    'total_trimp': total_trimp,
+                    'daily_score': None,
+                    'activity_type': None
+                })
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.error(f"Error parsing TRIMP overrides for {date}: {e}")
+                return jsonify({'error': 'No data found for this date'}), 404
+        else:
+            return jsonify({'error': 'No data found for this date'}), 404
 
 @app.route('/api/activities/<date>')
 def get_activities(date):
