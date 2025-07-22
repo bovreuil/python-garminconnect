@@ -207,6 +207,7 @@ def create_background_job(job_type: str, target_date: Optional[str] = None, star
 # Routes
 @app.route('/')
 def index():
+    app.logger.info(f"Index route called with path: {request.path}")
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template('dashboard.html')
@@ -242,20 +243,27 @@ def activity_view(date, activity_id):
 @app.route('/<period>/<date>')
 def period_date_view(period, date):
     """Route for specific two-week period and date navigation."""
+    app.logger.info(f"period_date_view called with period={period}, date={date}")
+    app.logger.info(f"Session keys: {list(session.keys())}")
+    
     if 'user_id' not in session:
+        app.logger.info("No user_id in session, redirecting to login")
         return redirect(url_for('login'))
     
     # Validate period format (YYYY-MM-DD-YYYY-MM-DD)
     try:
-        start_date, end_date = period.split('-', 4)[:4], period.split('-', 4)[4:]
-        start_str = '-'.join(start_date)
-        end_str = '-'.join(end_date)
+        parts = period.split('-')
+        start_str = '-'.join(parts[:3])
+        end_str = '-'.join(parts[3:6])
         datetime.strptime(start_str, '%Y-%m-%d')
         datetime.strptime(end_str, '%Y-%m-%d')
         datetime.strptime(date, '%Y-%m-%d')
-    except (ValueError, IndexError):
+        app.logger.info(f"Period validation successful: {start_str} to {end_str}, date: {date}")
+    except (ValueError, IndexError) as e:
+        app.logger.info(f"Period validation failed: {e}")
         return redirect(url_for('index'))
     
+    app.logger.info(f"Rendering dashboard with initial_period={period}, initial_date={date}")
     return render_template('dashboard.html', initial_period=period, initial_date=date)
 
 @app.route('/<period>/<date>/<activity_id>')
@@ -266,9 +274,9 @@ def period_activity_view(period, date, activity_id):
     
     # Validate period format (YYYY-MM-DD-YYYY-MM-DD)
     try:
-        start_date, end_date = period.split('-', 4)[:4], period.split('-', 4)[4:]
-        start_str = '-'.join(start_date)
-        end_str = '-'.join(end_date)
+        parts = period.split('-')
+        start_str = '-'.join(parts[:3])
+        end_str = '-'.join(parts[3:6])
         datetime.strptime(start_str, '%Y-%m-%d')
         datetime.strptime(end_str, '%Y-%m-%d')
         datetime.strptime(date, '%Y-%m-%d')
