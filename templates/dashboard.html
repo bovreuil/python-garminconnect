@@ -3,7 +3,7 @@
 {% block title %}Dashboard - Garmin Heart Rate Analyzer{% endblock %}
 
 {% block head %}
-<script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
+
 {% endblock %}
 
 {% block content %}
@@ -340,10 +340,7 @@ function calculateTwoWeekPeriod(targetDate) {
     return { startDate, endDate };
 }
 
-function handleInitialNavigation() {
-    // Simple initialization - just go to today
-    goToToday();
-}
+
 
 // Chart.js configuration
 Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
@@ -411,11 +408,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('uploadCsv').addEventListener('click', uploadCsvData);
     document.getElementById('clearCsvOverride').addEventListener('click', clearCsvOverride);
     
-    // Handle initial navigation based on current URL
-    handleInitialNavigation();
+    // Initialize by going to today
+    goToToday();
 });
 
-// Use the tested getTwoWeekPeriod function from navigation.js
+
 
 // Navigate by one week
 function navigateWeek(direction) {
@@ -441,18 +438,14 @@ function goToToday() {
     closeSingleActivityView();
     
     const today = new Date();
-    console.log('Today:', today);
     const { startDate, endDate } = calculateTwoWeekPeriod(today);
-    console.log('Calculated period:', startDate, 'to', endDate);
     
     loadTwoWeekData(startDate, endDate);
 }
 
 // Navigate single day left or right
 function navigateSingleDay(direction) {
-    console.log('navigateSingleDay called with direction:', direction, 'selectedDate:', selectedDate);
     if (!selectedDate) {
-        console.log('No selectedDate, returning');
         return;
     }
     
@@ -464,12 +457,9 @@ function navigateSingleDay(direction) {
     const newDate = new Date(currentDate);
     newDate.setDate(currentDate.getDate() + direction);
     
-    console.log('Current date:', currentDate, 'New date:', newDate);
-    
     // Check if the new date is outside the current period
     if (currentStartDate && currentEndDate) {
         if (newDate < currentStartDate || newDate > currentEndDate) {
-            console.log('New date outside current period, adjusting period');
             // Need to adjust the period
             const { startDate, endDate } = calculateTwoWeekPeriod(newDate);
             loadTwoWeekData(startDate, endDate);
@@ -549,7 +539,6 @@ function loadDateData(dateLabel) {
     
     return fetch(`/api/data/${dateLabel}`)
         .then(response => {
-            console.log(`Response for ${dateLabel}:`, response.status, response.ok);
             if (!response.ok) {
                 // Return null for dates with no data
                 return null;
@@ -558,7 +547,6 @@ function loadDateData(dateLabel) {
         })
         .then(data => {
             if (data) {
-                console.log(`Data for ${dateLabel}:`, data.total_trimp, data.presentation_buckets ? Object.keys(data.presentation_buckets) : 'no buckets');
                 
                 // Load TRIMP overrides for this date
                 return fetch(`/api/data/${dateLabel}/trimp-overrides`)
@@ -591,8 +579,6 @@ function loadDateData(dateLabel) {
                         return data;
                     });
             } else {
-                console.log(`No data for ${dateLabel}`);
-                
                 // Check for TRIMP overrides even when there's no HR data
                 return fetch(`/api/data/${dateLabel}/trimp-overrides`)
                     .then(response => response.json())
@@ -2104,8 +2090,6 @@ function createActivitiesChart(activities) {
 
 // Create 24-hour heart rate chart
 function createHeartRateChart(dateLabel, dayData) {
-    console.log('Creating heart rate chart for date label:', dateLabel);
-    console.log('Day data:', dayData);
     
     const chartElement = document.getElementById('hrChart');
     const chartContainer = chartElement.parentElement;
@@ -2125,7 +2109,6 @@ function createHeartRateChart(dateLabel, dayData) {
     
     // Check if we have heart rate values
     if (!dayData.heart_rate_values || !Array.isArray(dayData.heart_rate_values) || dayData.heart_rate_values.length === 0) {
-        console.log('No heart rate values available');
         // No raw data available - show message
         hrChart = new Chart(ctx, {
             type: 'line',
@@ -2169,14 +2152,9 @@ function createHeartRateChart(dateLabel, dayData) {
     
     // Process heart rate values
     const hrData = dayData.heart_rate_values;
-    console.log('Heart rate values length:', hrData.length);
-    console.log('First few data points:', hrData.slice(0, 5));
     
     // Get the date from the selected date label
     const chartDate = new Date(dateLabel + 'T00:00:00');
-    console.log('dateLabel:', dateLabel);
-    console.log('chartDate:', chartDate);
-    console.log('chartDate.isValid:', !isNaN(chartDate.getTime()));
     
     // Create evenly spaced 24-hour timeline (every 1 minute for high resolution)
     const labels = [];
@@ -2198,7 +2176,7 @@ function createHeartRateChart(dateLabel, dayData) {
         return timestampA - timestampB;
     });
     
-    console.log('Sorted data length:', sortedData.length);
+
     
     // Map heart rate data to the 24-hour timeline
     sortedData.forEach(point => {
@@ -2234,10 +2212,7 @@ function createHeartRateChart(dateLabel, dayData) {
         }
     });
     
-    console.log('Processed labels length:', labels.length);
-    console.log('Processed data length:', data.length);
-    console.log('First few labels:', labels.slice(0, 5));
-    console.log('First few data points:', data.slice(0, 5));
+
     
     // Create a smart dataset that only includes null values for actual gaps
     const chartLabels = [];
@@ -2281,11 +2256,6 @@ function createHeartRateChart(dateLabel, dayData) {
             }
         }
     }
-    
-    console.log('Chart labels length:', chartLabels.length);
-    console.log('Chart data length:', chartData.length);
-    console.log('First few chart labels:', chartLabels.slice(0, 5));
-    console.log('First few chart data points:', chartData.slice(0, 5));
     
     // Small delay to ensure DOM is ready
     setTimeout(() => {
@@ -2445,8 +2415,7 @@ function createHeartRateChart(dateLabel, dayData) {
             }
         });
         
-        console.log('Chart created successfully:', hrChart);
-        console.log('Chart dimensions after creation:', chartElement.offsetWidth, 'x', chartElement.offsetHeight);
+        
     }, 100);
 }
 
@@ -3234,10 +3203,6 @@ function cancelActivityNotes(activityId) {
     loadActivityNotes(activityId);
 }
 
-// Initialize navigation when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    // Simple initialization - just go to today
-    handleInitialNavigation();
-});
+
 </script>
 {% endblock %} 
