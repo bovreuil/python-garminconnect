@@ -2100,7 +2100,16 @@ function createActivitiesChart(activities) {
 function createHeartRateChart(dateLabel, dayData) {
     
     const chartElement = document.getElementById('hrChart');
+    if (!chartElement) {
+        console.error('hrChart element not found');
+        return;
+    }
+    
     const chartContainer = chartElement.parentElement;
+    if (!chartContainer) {
+        console.error('Chart container not found');
+        return;
+    }
     
     console.log('Chart element:', chartElement);
     console.log('Chart container:', chartContainer);
@@ -2109,6 +2118,13 @@ function createHeartRateChart(dateLabel, dayData) {
     
     const ctx = chartElement.getContext('2d');
     console.log('Chart context:', ctx);
+    
+    // Clean up any existing message overlay and restore canvas visibility
+    const existingMessage = document.getElementById('hrChartMessage');
+    if (existingMessage) {
+        existingMessage.remove();
+    }
+    chartElement.style.display = 'block';
     
     // Destroy existing chart if it exists
     if (hrChart) {
@@ -2153,8 +2169,13 @@ function createHeartRateChart(dateLabel, dayData) {
             }
         });
         
-        // Add a message overlay
-        chartContainer.innerHTML = '<div class="d-flex align-items-center justify-content-center h-100"><p class="text-muted">No heart rate time-series data available</p></div>';
+        // Hide the canvas and show a message overlay
+        chartElement.style.display = 'none';
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'd-flex align-items-center justify-content-center h-100';
+        messageDiv.innerHTML = '<p class="text-muted">No heart rate time-series data available</p>';
+        messageDiv.id = 'hrChartMessage';
+        chartContainer.appendChild(messageDiv);
         return;
     }
     
