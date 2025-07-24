@@ -463,6 +463,18 @@ function goToToday() {
     loadTwoWeekData(startDate, endDate);
 }
 
+// Navigate to a specific week in the two-week view
+function navigateToWeek(targetDate) {
+    // Close single date view and single activity view when navigating
+    closeSingleDateView();
+    closeSingleActivityView();
+    
+    // Calculate the two-week period with the target date in the second week
+    const { startDate, endDate } = calculateTwoWeekPeriod(targetDate, true);
+    
+    loadTwoWeekData(startDate, endDate);
+}
+
 // Navigate single day left or right
 function navigateSingleDay(direction) {
     if (!selectedDate) {
@@ -1010,6 +1022,52 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: function(event, elements) {
+                const canvas = event.native.target;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.native.x - rect.left;
+                const y = event.native.y - rect.top;
+                
+                // Get the chart area
+                const chartArea = fourteenWeekChart.chartArea;
+                if (!chartArea) return;
+                
+                // Check if click is within the chart area (excluding axes)
+                if (x >= chartArea.left && x <= chartArea.right && 
+                    y >= chartArea.top && y <= chartArea.bottom) {
+                    
+                    // Calculate which week column was clicked based on x-coordinate
+                    const xAxis = fourteenWeekChart.scales.x;
+                    const clickIndex = xAxis.getValueForPixel(x);
+                    
+                    if (clickIndex >= 0 && clickIndex < weekLabels.length) {
+                        // Get the week start date (Monday) for this week
+                        const weekStartDate = new Date(dateLabels[clickIndex * 7]);
+                        const monday = getWeekStart(weekStartDate);
+                        
+                        // Navigate to this week in the two-week view
+                        navigateToWeek(monday);
+                    }
+                }
+            },
+            onHover: function(event, elements) {
+                const canvas = event.native.target;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.native.x - rect.left;
+                const y = event.native.y - rect.top;
+                
+                // Get the chart area
+                const chartArea = fourteenWeekChart.chartArea;
+                if (!chartArea) return;
+                
+                // Check if hover is within the chart area (excluding axes)
+                if (x >= chartArea.left && x <= chartArea.right && 
+                    y >= chartArea.top && y <= chartArea.bottom) {
+                    canvas.style.cursor = 'pointer';
+                } else {
+                    canvas.style.cursor = 'default';
+                }
+            },
             plugins: {
                 legend: {
                     display: true,
