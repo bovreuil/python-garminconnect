@@ -27,7 +27,7 @@
                 <h5 class="mb-0" id="fourteenWeekTitle">14 Week Overview</h5>
             </div>
             <div class="card-body">
-                <div id="fourteenWeekChartContainer" class="chart-container" style="height: 400px;">
+                <div id="fourteenWeekChartContainer" class="chart-container" style="height: 360px;">
                     <canvas id="fourteenWeekChart"></canvas>
                 </div>
             </div>
@@ -54,7 +54,7 @@
                 </div>
             </div>
             <div class="card-body">
-                <div id="chartContainer" class="chart-container">
+                <div id="chartContainer" class="chart-container" style="height: 360px;">
                     <canvas id="twoWeekChart"></canvas>
                 </div>
             </div>
@@ -120,7 +120,7 @@
                 <div class="row mb-4">
                     <div class="col-12">
                         <h6>Activities</h6>
-                        <div class="chart-container" id="activitiesChartContainer" style="height: 400px;">
+                        <div class="chart-container" id="activitiesChartContainer" style="height: 280px;">
                             <canvas id="activitiesChart"></canvas>
                         </div>
                     </div>
@@ -2263,19 +2263,14 @@ function createActivitiesChart(activities) {
     }
     
     // Calculate dynamic height based on number of activities
-    // Each bar should be about 50px thick, plus some padding for labels and spacing
-    const barHeight = 80; // Increased from 50 to give more space per bar
-    const padding = 40; // Increased padding for better spacing
-    const legendHeight = 50; // Increased legend space
+    // Each bar should be about 40px thick, plus some padding for labels and spacing
+    const barHeight = 56;
+    const padding = 40;
+    const legendHeight = 50;
     const totalHeight = (activities.length * barHeight) + padding + legendHeight;
-    
-    // Set minimum and maximum heights
-    const minHeight = 200; // Increased minimum height
-    const maxHeight = 800; // Increased maximum height
-    const dynamicHeight = Math.max(minHeight, Math.min(maxHeight, totalHeight));
-    
+        
     // Update the container height
-    chartContainer.style.height = dynamicHeight + 'px';
+    chartContainer.style.height = totalHeight + 'px';
     
     // Prepare data for horizontal stacked bar chart
     const labels = activities.map(activity => {
