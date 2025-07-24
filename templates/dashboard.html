@@ -10,34 +10,48 @@
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>Dashboard</h1>
-            <div class="d-flex align-items-center gap-3">
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-outline-primary" id="prevWeek">
-                        <span>←</span>
-                    </button>
-                    <button type="button" class="btn btn-primary" id="todayBtn">Today</button>
-                    <button type="button" class="btn btn-outline-primary" id="nextWeek">
-                        <span>→</span>
-                    </button>
-                </div>
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-outline-secondary active" id="trimpBtn">TRIMP</button>
-                    <button type="button" class="btn btn-outline-secondary" id="minutesBtn">Minutes</button>
-                </div>
+            <h1>Welcome, {{ session.user_name }}!</h1>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-secondary active" id="trimpBtn">TRIMP</button>
+                <button type="button" class="btn btn-outline-secondary" id="minutesBtn">Minutes</button>
             </div>
         </div>
-        
-        <p class="text-muted mb-4">Welcome, {{ session.user_name }}! ({{ session.user_role }})</p>
     </div>
 </div>
 
-<!-- Two Week Chart Section -->
+<!-- 14 Week Chart Section -->
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
+                <h5 class="mb-0" id="fourteenWeekTitle">14 Week Overview</h5>
+            </div>
+            <div class="card-body">
+                <div id="fourteenWeekChartContainer" class="chart-container" style="height: 400px;">
+                    <canvas id="fourteenWeekChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Two Week Chart Section -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0" id="twoWeekTitle">Two Week Overview</h5>
+                <div class="d-flex gap-2">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="prevWeek">
+                            <span>←</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-primary" id="todayBtn">Today</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="nextWeek">
+                            <span>→</span>
+                        </button>
+                    </div>
+                </div>
             </div>
             <div class="card-body">
                 <div id="chartContainer" class="chart-container">
@@ -378,6 +392,7 @@ const zoneOrder = [
 ];
 
 let twoWeekChart = null;
+let fourteenWeekChart = null;
 let hrChart = null;
 let activitiesChart = null;
 let activityHrChart = null;
@@ -412,7 +427,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('uploadCsv').addEventListener('click', uploadCsvData);
     document.getElementById('clearCsvOverride').addEventListener('click', clearCsvOverride);
     
-    // Initialize by going to today
+    // Initialize by loading 14-week data and going to today
+    loadFourteenWeekData();
     goToToday();
 });
 
@@ -490,7 +506,10 @@ function switchMetric(metric) {
     document.getElementById('trimpBtn').classList.toggle('active', metric === 'trimp');
     document.getElementById('minutesBtn').classList.toggle('active', metric === 'minutes');
     
-    // Reload data with new metric
+    // Reload 14-week data with new metric
+    loadFourteenWeekData();
+    
+    // Reload two-week data with new metric
     if (currentStartDate && currentEndDate) {
         loadTwoWeekData(currentStartDate, currentEndDate);
     }
@@ -871,6 +890,245 @@ function updateDateRange() {
     
     // Update the two week title with the date range
     document.getElementById('twoWeekTitle').textContent = `${startStr} - ${endStr}`;
+}
+
+// Load 14 weeks of data
+function loadFourteenWeekData() {
+    showLoading();
+    
+    // Calculate the 14-week period ending with the current week
+    const today = new Date();
+    const currentWeekStart = getWeekStart(today);
+    const fourteenWeekStart = new Date(currentWeekStart);
+    fourteenWeekStart.setDate(currentWeekStart.getDate() - (13 * 7)); // Go back 13 weeks
+    
+    // Generate array of 98 date labels (14 weeks × 7 days)
+    const dateLabels = [];
+    const currentDate = new Date(fourteenWeekStart);
+    for (let i = 0; i < 98; i++) {
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        dateLabels.push(`${year}-${month}-${day}`);
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Load data for all date labels
+    Promise.all(dateLabels.map(dateLabel => loadDateData(dateLabel)))
+        .then(results => {
+            updateFourteenWeekChart(dateLabels, results);
+            hideLoading();
+        })
+        .catch(error => {
+            console.error('Error loading 14 week data:', error);
+            hideLoading();
+        });
+}
+
+// Get the start of the week (Monday) for a given date
+function getWeekStart(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+    return new Date(d.setDate(diff));
+}
+
+// Update 14-week chart
+function updateFourteenWeekChart(dateLabels, dataResults) {
+    const ctx = document.getElementById('fourteenWeekChart').getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (fourteenWeekChart) {
+        fourteenWeekChart.destroy();
+    }
+    
+    // Group data by week (Monday to Sunday)
+    const weeklyData = [];
+    const weekLabels = [];
+    
+    for (let week = 0; week < 14; week++) {
+        const weekStart = week * 7;
+        const weekEnd = weekStart + 7;
+        const weekDates = dateLabels.slice(weekStart, weekEnd);
+        const weekData = dataResults.slice(weekStart, weekEnd);
+        
+        // Aggregate data for this week
+        const weekAggregated = aggregateWeekData(weekData);
+        weeklyData.push(weekAggregated);
+        
+        // Create week label (e.g., "Apr 7")
+        const firstDate = new Date(weekDates[0] + 'T00:00:00');
+        const weekLabel = firstDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+        });
+        weekLabels.push(weekLabel);
+    }
+    
+    // Create datasets for each zone
+    const datasets = zoneOrder.map(zone => ({
+        label: zone,
+        data: weeklyData.map(weekData => weekData[zone] || 0),
+        backgroundColor: zoneColors[zone],
+        borderColor: zoneColors[zone],
+        borderWidth: 1
+    }));
+    
+    // Calculate the maximum value for Y-axis scaling
+    let maxValue = 0;
+    weeklyData.forEach(weekData => {
+        const weekTotal = Object.values(weekData).reduce((sum, value) => sum + value, 0);
+        maxValue = Math.max(maxValue, weekTotal);
+    });
+    
+    // Calculate a proper max that aligns with Chart.js tick intervals
+    let yAxisMax;
+    if (maxValue === 0) {
+        yAxisMax = 10; // Default for no data
+    } else {
+        // Determine step size based on the range
+        let step;
+        if (maxValue <= 50) step = 10;
+        else if (maxValue <= 100) step = 20;
+        else if (maxValue <= 200) step = 20;
+        else if (maxValue <= 500) step = 50;
+        else if (maxValue <= 1000) step = 100;
+        else if (maxValue <= 2000) step = 200;
+        else if (maxValue <= 5000) step = 500;
+        else step = 1000;
+        
+        // Add one extra step for label space
+        yAxisMax = Math.ceil(maxValue / step) * step + step;
+    }
+    
+    fourteenWeekChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: weekLabels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        afterBody: function(context) {
+                            const weekIndex = context[0].dataIndex;
+                            const weekData = weeklyData[weekIndex];
+                            const total = Object.values(weekData).reduce((sum, value) => sum + value, 0);
+                            return `Total: ${total.toFixed(1)}`;
+                        }
+                    }
+                },
+                datalabels: {
+                    display: function(context) {
+                        // Only show labels for the top dataset (last in the stack)
+                        return context.datasetIndex === datasets.length - 1;
+                    },
+                    anchor: 'end',
+                    align: 'top',
+                    formatter: function(value, context) {
+                        // Calculate total for this week
+                        const weekIndex = context.dataIndex;
+                        const weekData = weeklyData[weekIndex];
+                        const total = Object.values(weekData).reduce((sum, value) => sum + value, 0);
+                        return total > 0 ? total.toFixed(1) : '0';
+                    },
+                    color: '#2c3e50',
+                    font: {
+                        weight: 'bold',
+                        size: 11
+                    },
+                    offset: 4
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    title: {
+                        display: true,
+                        text: 'Week Starting'
+                    }
+                },
+                y: {
+                    stacked: true,
+                    title: {
+                        display: true,
+                        text: currentMetric === 'trimp' ? 'TRIMP' : 'Minutes'
+                    },
+                    max: yAxisMax
+                }
+            }
+        }
+    });
+    
+    // Update the 14-week title with the date range
+    const startDate = new Date(dateLabels[0] + 'T00:00:00');
+    const endDate = new Date(dateLabels[dateLabels.length - 1] + 'T00:00:00');
+    const startStr = startDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+    });
+    const endStr = endDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+    });
+    
+    document.getElementById('fourteenWeekTitle').textContent = `${startStr} - ${endStr}`;
+}
+
+// Aggregate data for a week
+function aggregateWeekData(weekData) {
+    const aggregated = {};
+    
+    // Initialize all zones with 0
+    zoneOrder.forEach(zone => {
+        aggregated[zone] = 0;
+    });
+    
+    // Aggregate data for each day in the week
+    weekData.forEach(dayData => {
+        if (dayData) {
+            if (currentMetric === 'trimp') {
+                // Handle TRIMP data
+                if (dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0) {
+                    // Use override values
+                    Object.keys(dayData.trimp_overrides).forEach(zone => {
+                        if (zoneOrder.includes(zone)) {
+                            aggregated[zone] += dayData.trimp_overrides[zone] || 0;
+                        }
+                    });
+                } else if (dayData.presentation_buckets) {
+                    // Use calculated TRIMP values
+                    Object.keys(dayData.presentation_buckets).forEach(zone => {
+                        if (zoneOrder.includes(zone)) {
+                            aggregated[zone] += dayData.presentation_buckets[zone].trimp || 0;
+                        }
+                    });
+                }
+            } else {
+                // Handle minutes data
+                if (dayData.presentation_buckets) {
+                    const hasOverrides = dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0;
+                    if (!hasOverrides) {
+                        Object.keys(dayData.presentation_buckets).forEach(zone => {
+                            if (zoneOrder.includes(zone)) {
+                                aggregated[zone] += dayData.presentation_buckets[zone].minutes || 0;
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    });
+    
+    return aggregated;
 }
 
 // Show/hide loading
