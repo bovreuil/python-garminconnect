@@ -20,6 +20,7 @@ import sqlite3
 import garminconnect
 import random
 import time
+import re
 
 # Import database functions
 from database import (
@@ -1374,6 +1375,277 @@ def download_daily_hr_csv(date):
     )
     
     return response
+
+@app.route('/api/data/<date>/manual-activity', methods=['POST'])
+def create_manual_activity(date):
+    """Create a manual activity for a specific date."""
+    logger.info(f"create_manual_activity: Starting for date {date}")
+    
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Validate date format
+    if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
+        return jsonify({'error': 'Invalid date format. Expected YYYY-MM-DD'}), 400
+    
+    try:
+        data = request.get_json()
+        start_time = data.get('start_time')  # Format: "HH:MM" in local time
+        end_time = data.get('end_time')      # Format: "HH:MM" in local time
+        heart_rate = data.get('heart_rate')  # Integer HR value
+        
+        # Validate inputs
+        if not start_time or not end_time or heart_rate is None:
+            return jsonify({'error': 'Missing required fields: start_time, end_time, heart_rate'}), 400
+        
+        # Validate time format (HH:MM)
+        time_pattern = re.compile(r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$')
+        if not time_pattern.match(start_time) or not time_pattern.match(end_time):
+            return jsonify({'error': 'Invalid time format. Use HH:MM (24-hour format)'}), 400
+        
+        # Validate heart rate
+        try:
+            heart_rate = int(heart_rate)
+            if heart_rate < 0 or heart_rate > 300:
+                return jsonify({'error': 'Heart rate must be between 0 and 300'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Heart rate must be a valid integer'}), 400
+        
+        # Parse start and end times
+        start_hour, start_minute = map(int, start_time.split(':'))
+        end_hour, end_minute = map(int, end_time.split(':'))
+        
+        # Convert to datetime objects for the target date
+        from datetime import datetime, timedelta
+        import pytz
+        
+        # Create datetime objects in local timezone
+        local_tz = pytz.timezone('Europe/London')  # Adjust for your timezone
+        start_datetime = local_tz.localize(datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M"))
+        end_datetime = local_tz.localize(datetime.strptime(f"{date} {end_time}", "%Y-%m-%d %H:%M"))
+        
+        # Validate that end time is after start time
+        if end_datetime <= start_datetime:
+            return jsonify({'error': 'End time must be after start time'}), 400
+        
+        # Calculate duration in seconds
+        duration_seconds = int((end_datetime - start_datetime).total_seconds())
+        
+        # Generate activity ID
+        import time
+        timestamp = int(time.time())
+        activity_id = f"manual_{date.replace('-', '')}_{start_time.replace(':', '')}_{timestamp}"
+        
+        logger.info(f"Creating manual activity: {activity_id}")
+        
+        # Generate HR time series with 30-second intervals
+        hr_series = []
+        current_time = start_datetime
+        logger.info(f"Starting HR series generation from {start_datetime} to {end_datetime}")
+        logger.info(f"Start timestamp: {int(start_datetime.timestamp())}")
+        logger.info(f"End timestamp: {int(end_datetime.timestamp())}")
+        
+        while current_time <= end_datetime:
+            # Convert to Unix timestamp (seconds since epoch)
+            timestamp_unix = int(current_time.timestamp())
+            hr_series.append([timestamp_unix, heart_rate])
+            current_time += timedelta(seconds=30)
+        
+        logger.info(f"First timestamp in series: {hr_series[0][0] if hr_series else 'None'}")
+        logger.info(f"Last timestamp in series: {hr_series[-1][0] if hr_series else 'None'}")
+        logger.info(f"Number of points: {len(hr_series)}")
+        logger.info(f"Expected number of points: {int((end_datetime - start_datetime).total_seconds() / 30) + 1}")
+        
+        logger.info(f"Generated HR series with {len(hr_series)} points")
+        
+        # Calculate TRIMP for this activity
+        from jobs import calculate_trimp_from_timeseries
+        trimp_results = calculate_trimp_from_timeseries(hr_series)
+        logger.info(f"Calculated TRIMP: {trimp_results}")
+        
+        # Store in database
+        logger.info(f"Opening database connection for insert")
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            INSERT INTO activity_data 
+            (activity_id, date, activity_name, activity_type, start_time_local, duration_seconds,
+             heart_rate_series, trimp_data, total_trimp, average_hr, max_hr)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            activity_id,
+            date,
+            f"Manual Activity ({start_time}-{end_time})",
+            'manual',
+            start_datetime.isoformat(),
+            duration_seconds,
+            json.dumps(hr_series),
+            json.dumps(trimp_results),
+            float(trimp_results['total_trimp']),
+            heart_rate,
+            heart_rate
+        ))
+        
+        logger.info(f"Committing insert")
+        conn.commit()
+        logger.info(f"Closing database connection")
+        cur.close()
+        conn.close()
+        
+        # Rebuild the daily HR time series to include this manual activity
+        logger.info(f"Starting daily HR series rebuild")
+        from jobs import build_daily_hr_timeseries
+        
+        try:
+            logger.info(f"Opening second database connection for rebuild")
+            conn2 = get_db_connection()
+            cur2 = conn2.cursor()
+            
+            logger.info(f"Calling build_daily_hr_timeseries")
+            final_hr_series = build_daily_hr_timeseries(date, conn2, cur2)
+            
+            if final_hr_series:
+                # Recalculate TRIMP for the day
+                trimp_results = calculate_trimp_from_timeseries(final_hr_series)
+                
+                # Update daily data
+                cur2.execute("DELETE FROM daily_data WHERE date = ?", (date,))
+                cur2.execute("""
+                    INSERT INTO daily_data 
+                    (date, heart_rate_series, trimp_data, total_trimp, daily_score, activity_type)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    date,
+                    json.dumps(final_hr_series),
+                    json.dumps(trimp_results),
+                    float(trimp_results['total_trimp']),
+                    0.0,
+                    'mixed'
+                ))
+                
+                conn2.commit()
+            
+            cur2.close()
+            conn2.close()
+        except Exception as e:
+            logger.error(f"Error rebuilding daily HR series after creating manual activity for {date}: {e}")
+            # Don't fail the create operation if rebuild fails
+            try:
+                if 'cur2' in locals():
+                    cur2.close()
+                if 'conn2' in locals():
+                    conn2.close()
+            except:
+                pass
+        
+        logger.info(f"Created manual activity {activity_id} for {date}")
+        return jsonify({
+            'success': True,
+            'activity_id': activity_id,
+            'message': 'Manual activity created successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating manual activity for {date}: {e}")
+        return jsonify({'error': f'Error creating manual activity: {str(e)}'}), 500
+
+@app.route('/api/activity/<activity_id>', methods=['DELETE'])
+def delete_activity(activity_id):
+    """Delete an activity (including manual activities)."""
+    logger.info(f"delete_activity: Starting for activity {activity_id}")
+    
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        logger.info(f"Opening database connection for delete")
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Get the activity to find its date
+        logger.info(f"Looking up activity {activity_id}")
+        cur.execute("SELECT date FROM activity_data WHERE activity_id = ?", (activity_id,))
+        activity = cur.fetchone()
+        
+        if not activity:
+            logger.warning(f"Activity {activity_id} not found")
+            return jsonify({'error': 'Activity not found'}), 404
+        
+        date = activity['date']
+        logger.info(f"Found activity for date {date}")
+        
+        # Delete the activity
+        logger.info(f"Deleting activity from database")
+        cur.execute("DELETE FROM activity_data WHERE activity_id = ?", (activity_id,))
+        
+        # Also delete any associated user data
+        logger.info(f"Deleting associated user data")
+        cur.execute("DELETE FROM user_data WHERE data_type = ? AND target_id = ?", ('activity_hr_csv', activity_id))
+        cur.execute("DELETE FROM user_data WHERE data_type = ? AND target_id = ?", ('activity_spo2', activity_id))
+        cur.execute("DELETE FROM user_data WHERE data_type = ? AND target_id = ?", ('activity_notes', activity_id))
+        
+        logger.info(f"Committing delete")
+        conn.commit()
+        logger.info(f"Closing database connection")
+        cur.close()
+        conn.close()
+        
+        # Rebuild the daily HR time series without this activity
+        logger.info(f"Starting daily HR series rebuild after delete")
+        from jobs import build_daily_hr_timeseries, calculate_trimp_from_timeseries
+        
+        try:
+            logger.info(f"Opening second database connection for rebuild")
+            conn2 = get_db_connection()
+            cur2 = conn2.cursor()
+            
+            logger.info(f"Calling build_daily_hr_timeseries")
+            final_hr_series = build_daily_hr_timeseries(date, conn2, cur2)
+            
+            if final_hr_series:
+                # Recalculate TRIMP for the day
+                trimp_results = calculate_trimp_from_timeseries(final_hr_series)
+                
+                # Update daily data
+                cur2.execute("DELETE FROM daily_data WHERE date = ?", (date,))
+                cur2.execute("""
+                    INSERT INTO daily_data 
+                    (date, heart_rate_series, trimp_data, total_trimp, daily_score, activity_type)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    date,
+                    json.dumps(final_hr_series),
+                    json.dumps(trimp_results),
+                    float(trimp_results['total_trimp']),
+                    0.0,
+                    'mixed'
+                ))
+                
+                conn2.commit()
+            
+            cur2.close()
+            conn2.close()
+        except Exception as e:
+            logger.error(f"Error rebuilding daily HR series after deleting activity {activity_id}: {e}")
+            # Don't fail the delete operation if rebuild fails
+            try:
+                if 'cur2' in locals():
+                    cur2.close()
+                if 'conn2' in locals():
+                    conn2.close()
+            except:
+                pass
+        
+        logger.info(f"Deleted activity {activity_id}")
+        return jsonify({
+            'success': True,
+            'message': 'Activity deleted successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting activity {activity_id}: {e}")
+        return jsonify({'error': f'Error deleting activity: {str(e)}'}), 500
 
 if __name__ == '__main__':
     init_database()
