@@ -1858,6 +1858,9 @@ function clearTrimpOverrides() {
                 loadTwoWeekData(currentStartDate, currentEndDate);
             }
             
+            // Refresh the 14-week chart to show calculated values
+            loadFourteenWeekData();
+            
             // Refresh the single date view if it's open
             if (selectedDate) {
                 loadDateData(selectedDate).then(dayData => {
@@ -1910,6 +1913,9 @@ function saveTrimpOverrides() {
             if (currentStartDate && currentEndDate) {
                 loadTwoWeekData(currentStartDate, currentEndDate);
             }
+            
+            // Refresh the 14-week chart to show overrides
+            loadFourteenWeekData();
             
             // Refresh the single date view if it's open
             if (selectedDate) {
