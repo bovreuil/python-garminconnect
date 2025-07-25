@@ -532,21 +532,28 @@ def get_data(date):
     """, (date,))
     
     data = cur.fetchone()
-    cur.close()
-    conn.close()
     
     if data:
-        # Convert from new schema format
-        heart_rate_series = json.loads(data['heart_rate_series']) if data['heart_rate_series'] else []
+        # Get enriched HR series at read time
+        from jobs import build_daily_hr_timeseries
+        
+        # Get the enriched HR series (original daily + activity data)
+        enriched_hr_series = build_daily_hr_timeseries(date, conn, cur)
+        
+        # Use enriched data for display, but keep original TRIMP calculation
         trimp_data = json.loads(data['trimp_data']) if data['trimp_data'] else {}
         
         # Debug logging
         print(f"API DEBUG: trimp_data keys: {list(trimp_data.keys())}")
         print(f"API DEBUG: trimp_data has presentation_buckets: {'presentation_buckets' in trimp_data}")
         
+        # Close connection after enrichment
+        cur.close()
+        conn.close()
+        
         return jsonify({
             'date': date,
-            'heart_rate_values': heart_rate_series,
+            'heart_rate_values': enriched_hr_series,
             'presentation_buckets': trimp_data.get('presentation_buckets', {}),
             'total_trimp': data['total_trimp'],
             'daily_score': data['daily_score'],
@@ -1493,12 +1500,12 @@ def create_manual_activity(date):
         cur.close()
         conn.close()
         
-        # Rebuild the daily HR time series to include this manual activity
-        logger.info(f"Starting daily HR series rebuild")
-        from jobs import build_daily_hr_timeseries
+        # Recalculate TRIMP for the day with the new manual activity
+        logger.info(f"Recalculating TRIMP for the day")
+        from jobs import build_daily_hr_timeseries, calculate_trimp_from_timeseries
         
         try:
-            logger.info(f"Opening second database connection for rebuild")
+            logger.info(f"Opening second database connection for TRIMP calculation")
             conn2 = get_db_connection()
             cur2 = conn2.cursor()
             
@@ -1509,28 +1516,23 @@ def create_manual_activity(date):
                 # Recalculate TRIMP for the day
                 trimp_results = calculate_trimp_from_timeseries(final_hr_series)
                 
-                # Update daily data
-                cur2.execute("DELETE FROM daily_data WHERE date = ?", (date,))
-                cur2.execute("""
-                    INSERT INTO daily_data 
-                    (date, heart_rate_series, trimp_data, total_trimp, daily_score, activity_type)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    date,
-                    json.dumps(final_hr_series),
+                # Update only the TRIMP data, not the HR series
+                cur2.execute("UPDATE daily_data SET trimp_data = ?, total_trimp = ? WHERE date = ?", (
                     json.dumps(trimp_results),
                     float(trimp_results['total_trimp']),
-                    0.0,
-                    'mixed'
+                    date
                 ))
                 
                 conn2.commit()
+                logger.info(f"Updated TRIMP for {date}")
+            else:
+                logger.warning(f"No HR series returned for TRIMP calculation for {date}")
             
             cur2.close()
             conn2.close()
         except Exception as e:
-            logger.error(f"Error rebuilding daily HR series after creating manual activity for {date}: {e}")
-            # Don't fail the create operation if rebuild fails
+            logger.error(f"Error recalculating TRIMP after creating manual activity for {date}: {e}")
+            # Don't fail the create operation if TRIMP calculation fails
             try:
                 if 'cur2' in locals():
                     cur2.close()
@@ -1591,12 +1593,12 @@ def delete_activity(activity_id):
         cur.close()
         conn.close()
         
-        # Rebuild the daily HR time series without this activity
-        logger.info(f"Starting daily HR series rebuild after delete")
+        # Recalculate TRIMP for the day without this activity
+        logger.info(f"Recalculating TRIMP for the day after delete")
         from jobs import build_daily_hr_timeseries, calculate_trimp_from_timeseries
         
         try:
-            logger.info(f"Opening second database connection for rebuild")
+            logger.info(f"Opening second database connection for TRIMP calculation")
             conn2 = get_db_connection()
             cur2 = conn2.cursor()
             
@@ -1607,28 +1609,23 @@ def delete_activity(activity_id):
                 # Recalculate TRIMP for the day
                 trimp_results = calculate_trimp_from_timeseries(final_hr_series)
                 
-                # Update daily data
-                cur2.execute("DELETE FROM daily_data WHERE date = ?", (date,))
-                cur2.execute("""
-                    INSERT INTO daily_data 
-                    (date, heart_rate_series, trimp_data, total_trimp, daily_score, activity_type)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    date,
-                    json.dumps(final_hr_series),
+                # Update only the TRIMP data, not the HR series
+                cur2.execute("UPDATE daily_data SET trimp_data = ?, total_trimp = ? WHERE date = ?", (
                     json.dumps(trimp_results),
                     float(trimp_results['total_trimp']),
-                    0.0,
-                    'mixed'
+                    date
                 ))
                 
                 conn2.commit()
+                logger.info(f"Updated TRIMP for {date}")
+            else:
+                logger.warning(f"No HR series returned for TRIMP calculation for {date}")
             
             cur2.close()
             conn2.close()
         except Exception as e:
-            logger.error(f"Error rebuilding daily HR series after deleting activity {activity_id}: {e}")
-            # Don't fail the delete operation if rebuild fails
+            logger.error(f"Error recalculating TRIMP after deleting activity {activity_id}: {e}")
+            # Don't fail the delete operation if TRIMP calculation fails
             try:
                 if 'cur2' in locals():
                     cur2.close()
