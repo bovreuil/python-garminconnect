@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+
+{% block title %}Resting HR - Garmin HR Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Resting HR (04:00-05:00 Average)</h3>
+                    <p class="text-muted">Last 8 weeks of average heart rate from 04:00-05:00 local time</p>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 400px;">
+                        <canvas id="restingHrChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Daily Detail Chart (hidden by default) -->
+    <div class="row" id="dailyDetailSection" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0" id="dailyDetailTitle">Daily HR Detail</h5>
+                    <div class="d-flex gap-2">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="prevDetailDay">
+                                <span>←</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="nextDetailDay">
+                                <span>→</span>
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="hideDailyDetail()">
+                            <span>×</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Summary Stats -->
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5 class="text-muted">Readings</h5>
+                                <h3 id="readingsCount">-</h3>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5 class="text-muted">Average HR</h5>
+                                <h3 id="avgHr">-</h3>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5 class="text-muted">Max HR</h5>
+                                <h3 id="maxHr">-</h3>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5 class="text-muted">Min HR</h5>
+                                <h3 id="minHr">-</h3>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Detail Chart -->
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="dailyDetailChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let restingHrChart;
+let dailyDetailChart;
+let currentDetailDate = null;
+let allDates = [];
+let allAvgValues = [];
+
+async function loadRestingHrData() {
+    try {
+        const response = await fetch('/api/resting-hr-data');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        if (data.success) {
+            // Store data for navigation
+            allDates = data.data.dates;
+            allAvgValues = data.data.avg_values;
+            updateRestingHrChart(data.data);
+        } else {
+            console.error('Error loading resting HR data:', data.error);
+        }
+    } catch (error) {
+        console.error('Error loading resting HR data:', error);
+    }
+}
+
+function updateRestingHrChart(data) {
+    const ctx = document.getElementById('restingHrChart').getContext('2d');
+    
+    if (restingHrChart) {
+        restingHrChart.destroy();
+    }
+    
+    const chartData = {
+        labels: data.dates,
+        datasets: [
+            {
+                label: 'Average HR (04:00-05:00)',
+                data: data.avg_values,
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                borderWidth: 3,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            },
+            {
+                label: 'Max HR',
+                data: data.max_values,
+                borderColor: 'rgba(120,120,120,0.7)',
+                backgroundColor: 'rgba(120,120,120,0.1)',
+                borderWidth: 1.5,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 2,
+                pointHoverRadius: 4,
+                borderDash: [4,2]
+            },
+            {
+                label: 'Min HR',
+                data: data.min_values,
+                borderColor: 'rgba(120,120,120,0.7)',
+                backgroundColor: 'rgba(120,120,120,0.1)',
+                borderWidth: 1.5,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 2,
+                pointHoverRadius: 4,
+                borderDash: [4,2]
+            }
+        ]
+    };
+    
+    const config = {
+        type: 'line',
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Heart Rate (bpm)'
+                    },
+                    min: 40,
+                    max: 100,
+                    beginAtZero: false
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            },
+            onClick: function(event, elements) {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const value = data.avg_values[index];
+                    const date = data.dates[index];
+                    if (value !== null) {
+                        loadDailyDetail(date);
+                    }
+                }
+            }
+        }
+    };
+    
+    restingHrChart = new Chart(ctx, config);
+}
+
+async function loadDailyDetail(date) {
+    try {
+        const response = await fetch(`/api/resting-hr-detail/${date}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        if (data.success) {
+            showDailyDetail(date, data.data);
+        } else {
+            console.error('Error loading daily detail:', data.error);
+        }
+    } catch (error) {
+        console.error('Error loading daily detail:', error);
+    }
+}
+
+function showDailyDetail(date, data) {
+    // Store current date for navigation
+    currentDetailDate = date;
+    
+    // Update title
+    document.getElementById('dailyDetailTitle').textContent = `Daily HR Detail - ${date}`;
+    
+    // Update summary stats
+    document.getElementById('readingsCount').textContent = data.readings_count;
+    document.getElementById('avgHr').textContent = data.avg_hr ? data.avg_hr.toFixed(1) : '-';
+    document.getElementById('maxHr').textContent = data.max_hr || '-';
+    document.getElementById('minHr').textContent = data.min_hr || '-';
+    
+    // Show the section
+    document.getElementById('dailyDetailSection').style.display = 'block';
+    
+    // Update detail chart
+    updateDailyDetailChart(data);
+    
+    // Update navigation button states
+    updateNavigationButtons();
+}
+
+function updateDailyDetailChart(data) {
+    const ctx = document.getElementById('dailyDetailChart').getContext('2d');
+    
+    if (dailyDetailChart) {
+        dailyDetailChart.destroy();
+    }
+    
+    // Convert timestamps to time labels
+    const timeLabels = data.timestamps.map(timestamp => {
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString('en-GB', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: false 
+        });
+    });
+    
+    const chartData = {
+        labels: timeLabels,
+        datasets: [{
+            label: 'Heart Rate',
+            data: data.values,
+            borderColor: 'rgb(255, 99, 132)',
+            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 2,
+            pointHoverRadius: 4
+        }]
+    };
+    
+    const config = {
+        type: 'line',
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Time (04:00-05:00)'
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Heart Rate (bpm)'
+                    },
+                    min: 40,
+                    max: 100,
+                    beginAtZero: false
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    };
+    
+    dailyDetailChart = new Chart(ctx, config);
+}
+
+function hideDailyDetail() {
+    document.getElementById('dailyDetailSection').style.display = 'none';
+    if (dailyDetailChart) {
+        dailyDetailChart.destroy();
+        dailyDetailChart = null;
+    }
+    currentDetailDate = null;
+}
+
+function updateNavigationButtons() {
+    if (!currentDetailDate || allDates.length === 0) return;
+    
+    const currentIndex = allDates.indexOf(currentDetailDate);
+    const prevBtn = document.getElementById('prevDetailDay');
+    const nextBtn = document.getElementById('nextDetailDay');
+    
+    // Check if previous day has data
+    const prevIndex = currentIndex - 1;
+    const prevHasData = prevIndex >= 0 && allAvgValues[prevIndex] !== null;
+    prevBtn.disabled = !prevHasData;
+    
+    // Check if next day has data
+    const nextIndex = currentIndex + 1;
+    const nextHasData = nextIndex < allDates.length && allAvgValues[nextIndex] !== null;
+    nextBtn.disabled = !nextHasData;
+}
+
+function navigateDetailDay(direction) {
+    if (!currentDetailDate || allDates.length === 0) return;
+    
+    const currentIndex = allDates.indexOf(currentDetailDate);
+    let targetIndex;
+    
+    if (direction === 'prev') {
+        targetIndex = currentIndex - 1;
+    } else {
+        targetIndex = currentIndex + 1;
+    }
+    
+    // Check bounds and data availability
+    if (targetIndex < 0 || targetIndex >= allDates.length || allAvgValues[targetIndex] === null) {
+        return;
+    }
+    
+    const targetDate = allDates[targetIndex];
+    loadDailyDetail(targetDate);
+}
+
+// Load data when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadRestingHrData();
+    
+    // Add navigation event listeners
+    document.getElementById('prevDetailDay').addEventListener('click', () => navigateDetailDay('prev'));
+    document.getElementById('nextDetailDay').addEventListener('click', () => navigateDetailDay('next'));
+});
+</script>
+{% endblock %} 

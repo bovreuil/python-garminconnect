@@ -1075,6 +1075,106 @@ def hr_parameters():
         resting_hr, max_hr = get_user_hr_parameters()
         return jsonify({'resting_hr': resting_hr, 'max_hr': max_hr})
 
+@app.route('/resting-hr')
+def resting_hr():
+    """Resting HR page showing 8 weeks of 04:00-05:00 average HR data."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    return render_template('resting_hr.html')
+
+@app.route('/api/resting-hr-data')
+def get_resting_hr_data():
+    """Get resting HR data for the last 8 weeks (04:00-05:00 average, max, min) using only raw daily HR data."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        from datetime import datetime, timedelta
+        import pytz
+        
+        local_tz = pytz.timezone('Europe/London')
+        now = local_tz.localize(datetime.now())
+        
+        # If current time is before 06:00, use yesterday as the end date
+        if now.hour < 6:
+            end_date = now.date() - timedelta(days=1)
+        else:
+            end_date = now.date()
+        
+        # Calculate start date (8 weeks = 56 days)
+        start_date = end_date - timedelta(days=55)
+        
+        logger.info(f"Resting HR data range: {start_date} to {end_date}")
+        
+        # Prepare date labels and values
+        dates = []
+        avg_values = []
+        max_values = []
+        min_values = []
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.strftime('%Y-%m-%d')
+            dates.append(date_str)
+            
+            # Get raw daily HR data for this day
+            cur.execute("SELECT heart_rate_series FROM daily_data WHERE date = ?", (date_str,))
+            row = cur.fetchone()
+            if row and row['heart_rate_series']:
+                try:
+                    hr_series = json.loads(row['heart_rate_series'])
+                except Exception as e:
+                    logger.error(f"Error parsing HR series for {date_str}: {e}")
+                    hr_series = []
+            else:
+                hr_series = []
+            
+            if hr_series:
+                # Filter for 04:00-05:00 window (local time)
+                start_time_local = local_tz.localize(datetime.combine(current_date, datetime.min.time().replace(hour=4)))
+                end_time_local = local_tz.localize(datetime.combine(current_date, datetime.min.time().replace(hour=5)))
+                start_timestamp = int(start_time_local.timestamp() * 1000)
+                end_timestamp = int(end_time_local.timestamp() * 1000)
+                window_data = [hr for timestamp, hr in hr_series if start_timestamp <= timestamp < end_timestamp and hr is not None]
+                if window_data:
+                    avg_hr = sum(window_data) / len(window_data)
+                    max_hr = max(window_data)
+                    min_hr = min(window_data)
+                    avg_values.append(round(avg_hr, 1))
+                    max_values.append(max_hr)
+                    min_values.append(min_hr)
+                else:
+                    avg_values.append(None)
+                    max_values.append(None)
+                    min_values.append(None)
+            else:
+                avg_values.append(None)
+                max_values.append(None)
+                min_values.append(None)
+            
+            current_date += timedelta(days=1)
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'dates': dates,
+                'avg_values': avg_values,
+                'max_values': max_values,
+                'min_values': min_values
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting resting HR data: {e}")
+        return jsonify({'error': f'Error getting resting HR data: {str(e)}'}), 500
+
 @app.route('/setup-hr-parameters', methods=['GET', 'POST'])
 def setup_hr_parameters():
     """Setup page for HR parameters."""
@@ -1643,6 +1743,84 @@ def delete_activity(activity_id):
     except Exception as e:
         logger.error(f"Error deleting activity {activity_id}: {e}")
         return jsonify({'error': f'Error deleting activity: {str(e)}'}), 500
+
+@app.route('/api/resting-hr-detail/<date>')
+def get_resting_hr_detail(date):
+    """Get detailed HR data for the 04:00-05:00 window of a specific day."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        from datetime import datetime
+        import pytz
+        
+        local_tz = pytz.timezone('Europe/London')
+        
+        # Get raw daily HR data for this day
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("SELECT heart_rate_series FROM daily_data WHERE date = ?", (date,))
+        row = cur.fetchone()
+        
+        if not row or not row['heart_rate_series']:
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'No HR data available for this date'}), 404
+        
+        try:
+            hr_series = json.loads(row['heart_rate_series'])
+        except Exception as e:
+            logger.error(f"Error parsing HR series for {date}: {e}")
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'Invalid HR data format'}), 500
+        
+        cur.close()
+        conn.close()
+        
+        # Filter for 04:00-05:00 window (local time)
+        start_time_local = local_tz.localize(datetime.strptime(f"{date} 04:00", "%Y-%m-%d %H:%M"))
+        end_time_local = local_tz.localize(datetime.strptime(f"{date} 05:00", "%Y-%m-%d %H:%M"))
+        start_timestamp = int(start_time_local.timestamp() * 1000)
+        end_timestamp = int(end_time_local.timestamp() * 1000)
+        
+        # Filter and sort data for the window
+        window_data = []
+        for timestamp, hr in hr_series:
+            if start_timestamp <= timestamp < end_timestamp and hr is not None:
+                window_data.append([timestamp, hr])
+        
+        window_data.sort(key=lambda x: x[0])  # Sort by timestamp
+        
+        if not window_data:
+            return jsonify({'error': 'No HR data available in 04:00-05:00 window for this date'}), 404
+        
+        # Extract timestamps and values
+        timestamps = [item[0] for item in window_data]
+        values = [item[1] for item in window_data]
+        
+        # Calculate summary statistics
+        readings_count = len(values)
+        avg_hr = sum(values) / len(values)
+        max_hr = max(values)
+        min_hr = min(values)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'timestamps': timestamps,
+                'values': values,
+                'readings_count': readings_count,
+                'avg_hr': round(avg_hr, 1),
+                'max_hr': max_hr,
+                'min_hr': min_hr
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting resting HR detail for {date}: {e}")
+        return jsonify({'error': f'Error getting resting HR detail: {str(e)}'}), 500
 
 if __name__ == '__main__':
     init_database()
