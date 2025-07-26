@@ -1453,8 +1453,8 @@ def create_manual_activity(date):
         logger.info(f"End timestamp: {int(end_datetime.timestamp())}")
         
         while current_time <= end_datetime:
-            # Convert to Unix timestamp (seconds since epoch)
-            timestamp_unix = int(current_time.timestamp())
+            # Convert to Unix timestamp (milliseconds since epoch - Garmin format)
+            timestamp_unix = int(current_time.timestamp() * 1000)
             hr_series.append([timestamp_unix, heart_rate])
             current_time += timedelta(seconds=30)
         
