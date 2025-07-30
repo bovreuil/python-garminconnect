@@ -520,6 +520,12 @@ function goToToday() {
     const { startDate, endDate } = calculateTwoWeekPeriod(today);
     
     loadTwoWeekData(startDate, endDate);
+    
+    // Also open single day view for today
+    const todayString = today.toISOString().split('T')[0];
+    loadDateData(todayString).then(dayData => {
+        showSingleDateView(todayString, dayData);
+    });
 }
 
 // Navigate to a specific week in the two-week view
