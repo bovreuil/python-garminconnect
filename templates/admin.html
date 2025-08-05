@@ -257,10 +257,26 @@ function viewJobDetails(jobId) {
     });
 }
 
+// Load latest data date and set as default start date
+async function loadLatestDataDate() {
+    try {
+        const response = await fetch('/api/latest-data-date');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                document.getElementById('startDate').value = data.latest_date;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading latest data date:', error);
+    }
+}
+
 // Auto-refresh jobs every 10 seconds
 setInterval(refreshJobs, 10000);
 
 // Initial load
 refreshJobs();
+loadLatestDataDate();
 </script>
 {% endblock %} 

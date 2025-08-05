@@ -1822,6 +1822,41 @@ def get_resting_hr_detail(date):
         logger.error(f"Error getting resting HR detail for {date}: {e}")
         return jsonify({'error': f'Error getting resting HR detail: {str(e)}'}), 500
 
+@app.route('/api/latest-data-date')
+def get_latest_data_date():
+    """Get the latest date for which we have single day data."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Get the latest date from daily_data table
+        cur.execute("SELECT MAX(date) as latest_date FROM daily_data")
+        result = cur.fetchone()
+        
+        cur.close()
+        conn.close()
+        
+        if result and result['latest_date']:
+            return jsonify({
+                'success': True,
+                'latest_date': result['latest_date']
+            })
+        else:
+            # If no data exists, return today's date
+            from datetime import datetime
+            today = datetime.now().strftime('%Y-%m-%d')
+            return jsonify({
+                'success': True,
+                'latest_date': today
+            })
+        
+    except Exception as e:
+        logger.error(f"Error getting latest data date: {e}")
+        return jsonify({'error': f'Error getting latest data date: {str(e)}'}), 500
+
 if __name__ == '__main__':
     init_database()
     app.run(debug=SERVER_CONFIG['DEBUG'], host=SERVER_CONFIG['HOST'], port=SERVER_CONFIG['DEFAULT_PORT']) 
