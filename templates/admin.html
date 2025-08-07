@@ -103,6 +103,24 @@
     </div>
 </div>
 
+<!-- Database Backup Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Database Backup</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-3">Create a timestamped backup of the database and save to Dropbox.</p>
+                <button type="button" class="btn btn-warning" onclick="createBackup()">
+                    <i class="fas fa-download"></i> Create Backup
+                </button>
+                <div id="backupStatus" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endif %}
 
 <script>
@@ -269,6 +287,48 @@ async function loadLatestDataDate() {
         }
     } catch (error) {
         console.error('Error loading latest data date:', error);
+    }
+}
+
+// Create database backup
+async function createBackup() {
+    const backupStatus = document.getElementById('backupStatus');
+    const backupButton = document.querySelector('button[onclick="createBackup()"]');
+    
+    // Disable button and show loading state
+    backupButton.disabled = true;
+    backupButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Backup...';
+    backupStatus.innerHTML = '<div class="alert alert-info">Creating backup...</div>';
+    
+    try {
+        const response = await fetch('/api/backup-database', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            backupStatus.innerHTML = `<div class="alert alert-success">
+                <strong>Backup Created Successfully!</strong><br>
+                File: ${data.filename}<br>
+                Location: ~/Dropbox/PetesRehab/
+            </div>`;
+        } else {
+            backupStatus.innerHTML = `<div class="alert alert-danger">
+                <strong>Backup Failed:</strong> ${data.error}
+            </div>`;
+        }
+    } catch (error) {
+        backupStatus.innerHTML = `<div class="alert alert-danger">
+            <strong>Backup Failed:</strong> ${error.message}
+        </div>`;
+    } finally {
+        // Re-enable button
+        backupButton.disabled = false;
+        backupButton.innerHTML = '<i class="fas fa-download"></i> Create Backup';
     }
 }
 

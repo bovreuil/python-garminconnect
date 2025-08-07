@@ -1857,6 +1857,50 @@ def get_latest_data_date():
         logger.error(f"Error getting latest data date: {e}")
         return jsonify({'error': f'Error getting latest data date: {str(e)}'}), 500
 
+@app.route('/api/backup-database', methods=['POST'])
+def backup_database():
+    """Create a backup of the database and save to Dropbox."""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
+    
+    try:
+        import os
+        import shutil
+        from datetime import datetime
+        
+        # Create timestamp for backup filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_filename = f'garmin_hr_backup_{timestamp}.db'
+        
+        # Source database path
+        source_db = 'garmin_hr.db'
+        
+        # Dropbox destination path
+        dropbox_dir = os.path.expanduser('~/Dropbox/PetesRehab/')
+        dropbox_backup_path = os.path.join(dropbox_dir, backup_filename)
+        
+        # Ensure Dropbox directory exists
+        os.makedirs(dropbox_dir, exist_ok=True)
+        
+        # Copy database to Dropbox
+        shutil.copy2(source_db, dropbox_backup_path)
+        
+        app.logger.info(f"Database backup created: {backup_filename}")
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Database backup created successfully: {backup_filename}',
+            'filename': backup_filename
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error creating database backup: {str(e)}")
+        return jsonify({'success': False, 'error': f'Backup failed: {str(e)}'}), 500
+
 if __name__ == '__main__':
     init_database()
     app.run(debug=SERVER_CONFIG['DEBUG'], host=SERVER_CONFIG['HOST'], port=SERVER_CONFIG['DEFAULT_PORT']) 
