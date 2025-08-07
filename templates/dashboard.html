@@ -2507,6 +2507,21 @@ function createActivitiesChart(activities) {
         };
     });
     
+    // Calculate x-axis maximum with minimum of 100
+    let maxValue = 0;
+    activities.forEach(activity => {
+        if (activity.presentation_buckets) {
+            let activityTotal = 0;
+            Object.values(activity.presentation_buckets).forEach(bucket => {
+                activityTotal += currentMetric === 'trimp' ? (bucket.trimp || 0) : (bucket.minutes || 0);
+            });
+            maxValue = Math.max(maxValue, activityTotal);
+        }
+    });
+    
+    // Ensure minimum x-axis maximum of 100
+    const xAxisMax = Math.max(maxValue, 100);
+    
     // Create the chart
     activitiesChart = new Chart(ctx, {
         type: 'bar',
@@ -2600,7 +2615,8 @@ function createActivitiesChart(activities) {
                     title: {
                         display: true,
                         text: currentMetric === 'trimp' ? 'TRIMP' : 'Minutes'
-                    }
+                    },
+                    max: xAxisMax
                 },
                 y: {
                     stacked: true
