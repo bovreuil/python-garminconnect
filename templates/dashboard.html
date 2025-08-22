@@ -98,6 +98,9 @@
                 <div class="row mb-4">
                     <div class="col-12">
                         <h6>24-Hour Heart Rate</h6>
+                        <div id="spo2ChartContainer" class="chart-container" style="height: 0px; margin-bottom: 5px; display: none;">
+                            <canvas id="spo2Chart"></canvas>
+                        </div>
                         <div class="chart-container" style="height: 300px;">
                             <canvas id="hrChart"></canvas>
                         </div>
@@ -158,6 +161,9 @@
                                 <div class="row mb-4">
                                     <div class="col-12">
                                         <h6 id="activityTitle">Activity Heart Rate</h6>
+                                        <div id="activitySpo2ChartContainer" class="chart-container" style="height: 0px; margin-bottom: 5px; display: none;">
+                                            <canvas id="activitySpo2Chart"></canvas>
+                                        </div>
                                         <div class="chart-container" style="height: 300px;">
                                             <canvas id="activityHrChart"></canvas>
                                         </div>
@@ -428,6 +434,18 @@ const zoneColors = {
     '160+': '#dc3545'      // Hot red
 };
 
+// SpO2 zone colors
+const spo2ZoneColors = {
+    '80-82.5': '#dc3545',   // Hot red
+    '82.5-85': '#dc3545',   // Hot red
+    '85-87.5': '#e74c3c',   // Red
+    '87.5-90': '#fd7e14',   // Orange
+    '90-92.5': '#ffc107',   // Yellow
+    '92.5-95': '#9acd32',   // Yellow-green
+    '95-97.5': '#28a745',   // Green
+    '97.5-100': '#28a745'   // Green
+};
+
 // Zone order for stacking (bottom to top)
 const zoneOrder = [
     '80-89',
@@ -444,8 +462,10 @@ const zoneOrder = [
 let twoWeekChart = null;
 let fourteenWeekChart = null;
 let hrChart = null;
+let spo2Chart = null;
 let activitiesChart = null;
 let activityHrChart = null;
+let activitySpo2Chart = null;
 let currentStartDate = null;
 let currentEndDate = null;
 let currentMetric = 'trimp'; // 'trimp' or 'minutes'
@@ -453,8 +473,29 @@ let currentDataResults = []; // Store the current data results for click handlin
 let selectedDate = null; // Track the currently selected date for single date view
 let selectedActivity = null; // Track the currently selected activity
 
-// Initialize the dashboard
-document.addEventListener('DOMContentLoaded', function() {
+    // Initialize the dashboard
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add window resize listener to keep charts aligned
+        window.addEventListener('resize', function() {
+            setTimeout(() => {
+                if (spo2Chart && hrChart) {
+                    const hrContainer = document.querySelector('.chart-container canvas#hrChart').parentElement;
+                    const spo2Container = document.querySelector('.chart-container canvas#spo2Chart').parentElement;
+                    if (hrContainer && spo2Container) {
+                        spo2Container.style.width = hrContainer.offsetWidth + 'px';
+                        spo2Chart.resize();
+                    }
+                }
+                if (activitySpo2Chart && activityHrChart) {
+                    const hrContainer = document.querySelector('.chart-container canvas#activityHrChart').parentElement;
+                    const spo2Container = document.querySelector('.chart-container canvas#activitySpo2Chart').parentElement;
+                    if (hrContainer && spo2Container) {
+                        spo2Container.style.width = hrContainer.offsetWidth + 'px';
+                        activitySpo2Chart.resize();
+                    }
+                }
+            }, 100);
+        });
     // Set up event listeners
     document.getElementById('prevWeek').addEventListener('click', () => navigateWeek(-1));
     document.getElementById('nextWeek').addEventListener('click', () => navigateWeek(1));
@@ -1289,10 +1330,14 @@ function showSingleDateView(dateLabel, dayData) {
         document.getElementById('dateDetails').innerHTML = '<p class="text-muted">No data available for this date</p>';
         document.getElementById('zoneBreakdown').innerHTML = '<p class="text-muted">No zone data available</p>';
         // Clear heart rate chart
-        if (hrChart) {
-            hrChart.destroy();
-            hrChart = null;
-        }
+            if (hrChart) {
+        hrChart.destroy();
+        hrChart = null;
+    }
+    if (spo2Chart) {
+        spo2Chart.destroy();
+        spo2Chart = null;
+    }
     } else {
         // Create 24-hour heart rate chart
         createHeartRateChart(dateLabel, dayData);
@@ -1578,6 +1623,10 @@ function closeSingleActivityView() {
     if (activityHrChart) {
         activityHrChart.destroy();
         activityHrChart = null;
+    }
+    if (activitySpo2Chart) {
+        activitySpo2Chart.destroy();
+        activitySpo2Chart = null;
     }
     
     // Clear the chart container to ensure clean state
@@ -2632,6 +2681,510 @@ function createActivitiesChart(activities) {
     });
 }
 
+// Create SpO2 chart for daily view
+function createSpo2Chart(dateLabel, spo2Data, chartId, containerId) {
+    const chartElement = document.getElementById(chartId);
+    const containerElement = document.getElementById(containerId);
+    
+    if (!chartElement || !containerElement) {
+        console.error('SpO2 chart elements not found');
+        return;
+    }
+    
+    // Destroy existing chart if it exists
+    const existingChart = chartId === 'spo2Chart' ? spo2Chart : activitySpo2Chart;
+    if (existingChart) {
+        existingChart.destroy();
+    }
+    
+    // Check if we have SpO2 data
+    if (!spo2Data || spo2Data.length === 0) {
+        containerElement.style.display = 'none';
+        containerElement.style.height = '0px';
+        return;
+    }
+    
+    // Show container and set height
+    containerElement.style.display = 'block';
+    containerElement.style.height = '120px'; // Proportional to HR chart
+    
+    const ctx = chartElement.getContext('2d');
+    
+    // Get the date from the selected date label
+    const chartDate = new Date(dateLabel + 'T00:00:00');
+    
+    // Create evenly spaced 24-hour timeline (every 1 minute for high resolution)
+    const labels = [];
+    for (let hour = 0; hour < 24; hour++) {
+        for (let minute = 0; minute < 60; minute += 1) {
+            const timestamp = new Date(chartDate);
+            timestamp.setHours(hour, minute, 0, 0);
+            labels.push(timestamp);
+        }
+    }
+    
+    // Process SpO2 data
+    const chartLabels = [];
+    const chartData = [];
+    
+    // Sort SpO2 data by timestamp
+    const sortedSpo2Data = spo2Data.sort((a, b) => a.x.getTime() - b.x.getTime());
+    
+    // Add data points and insert null values for gaps > 5 minutes
+    for (let i = 0; i < sortedSpo2Data.length; i++) {
+        const currentPoint = sortedSpo2Data[i];
+        
+        // Add the current data point
+        chartLabels.push(currentPoint.x);
+        chartData.push(currentPoint.y);
+        
+        // Check if there's a gap to the next point
+        if (i < sortedSpo2Data.length - 1) {
+            const nextPoint = sortedSpo2Data[i + 1];
+            const gapMinutes = (nextPoint.x.getTime() - currentPoint.x.getTime()) / (1000 * 60);
+            
+            // If gap is > 5 minutes, add a null point to create a visual break
+            if (gapMinutes > 5) {
+                // Add a null point 1 minute after the current segment
+                const gapTimestamp = new Date(currentPoint.x.getTime() + (1 * 60 * 1000));
+                chartLabels.push(gapTimestamp);
+                chartData.push(null);
+                
+                // Add a null point 1 minute before the next segment
+                const nextGapTimestamp = new Date(nextPoint.x.getTime() - (1 * 60 * 1000));
+                chartLabels.push(nextGapTimestamp);
+                chartData.push(null);
+            }
+        }
+    }
+    
+    // Create the chart
+    const newChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                // Background dataset with SpO2 color bands
+                {
+                    label: 'Background',
+                    data: labels.map(label => ({ x: label, y: 100 })),
+                    borderColor: 'transparent',
+                    backgroundColor: function(context) {
+                        const chart = context.chart;
+                        const {ctx, chartArea} = chart;
+                        
+                        if (!chartArea) {
+                            return 'transparent';
+                        }
+                        
+                        // Create gradient for SpO2 zones
+                        const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                        
+                        // Add color stops for 8 equal SpO2 bands (top to bottom)
+                        gradient.addColorStop(0, '#28a745');     // Band 1: Green (top)
+                        gradient.addColorStop(0.25, '#28a745');  // Band 2: Green
+                        gradient.addColorStop(0.25, '#9acd32');  // Band 3: Yellow-Green
+                        gradient.addColorStop(0.375, '#9acd32'); // Band 4: Yellow
+                        gradient.addColorStop(0.375, '#ffc107'); // Band 5: Orange
+                        gradient.addColorStop(0.5, '#ffc107');   // Band 6: Red
+                        gradient.addColorStop(0.5, '#fd7e14');   // Band 7: Hot Red
+                        gradient.addColorStop(0.625, '#fd7e14'); // Band 8: Hot Red
+                        gradient.addColorStop(0.625, '#e74c3c'); // Band 8: Hot Red
+                        gradient.addColorStop(0.75, '#e74c3c');  // Band 8: Hot Red
+                        gradient.addColorStop(0.75, '#dc3545');  // Band 8: Hot Red
+                        gradient.addColorStop(1, '#dc3545');     // Band 8: Hot Red (bottom)
+                        
+                        return gradient;
+                    },
+                    borderWidth: 0,
+                    fill: true,
+                    tension: 0,
+                    pointRadius: 0,
+                    order: 100
+                },
+                // SpO2 line on top
+                {
+                    label: 'SpO2 (%)',
+                    data: chartLabels.map((label, index) => ({ x: label, y: chartData[index] })),
+                    borderColor: '#000080',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: '#000080',
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            spanGaps: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'nearest',
+                    intersect: false,
+                    callbacks: {
+                        title: function(context) {
+                            const rawData = context[0].raw;
+                            if (rawData && rawData.x) {
+                                const date = new Date(rawData.x);
+                                const year = date.getFullYear();
+                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                const day = String(date.getDate()).padStart(2, '0');
+                                const hour = String(date.getHours()).padStart(2, '0');
+                                const minute = String(date.getMinutes()).padStart(2, '0');
+                                return `Time: ${year}-${month}-${day} ${hour}:${minute}`;
+                            }
+                            return `Time: ${context[0].label}`;
+                        },
+                        label: function(context) {
+                            if (context.dataset.label === 'SpO2 (%)') {
+                                return `SpO2: ${context.parsed.y}%`;
+                            }
+                            return null;
+                        }
+                    }
+                },
+                datalabels: {
+                    display: false
+                }
+            },
+                            scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'hour',
+                            displayFormats: {
+                                hour: 'HH:mm'
+                            }
+                        },
+                        display: true, // Show x-axis for gridlines
+                        min: new Date(chartDate.getFullYear(), chartDate.getMonth(), chartDate.getDate(), 0, 0, 0),
+                        max: new Date(chartDate.getFullYear(), chartDate.getMonth(), chartDate.getDate(), 23, 59, 0),
+                        ticks: {
+                            display: false, // Hide tick labels but keep gridlines
+                            maxRotation: 0,
+                            stepSize: 2,
+                            source: 'auto'
+                        },
+                        grid: {
+                            display: true,
+                            color: 'rgba(0, 0, 0, 0.3)', // Same as HR chart
+                            drawBorder: false,
+                            z: 1 // Try to ensure gridlines are drawn above background
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'SpO2 (%)'
+                        },
+                        min: 80,
+                        max: 100,
+                        ticks: {
+                            stepSize: 5
+                        }
+                    }
+                },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    });
+    
+    // Store the chart reference
+    if (chartId === 'spo2Chart') {
+        spo2Chart = newChart;
+        // Force resize to match HR chart container
+        setTimeout(() => {
+            if (spo2Chart && hrChart) {
+                // Copy the HR chart's width to ensure perfect alignment
+                const hrContainer = document.querySelector('.chart-container canvas#hrChart').parentElement;
+                const spo2Container = document.querySelector('.chart-container canvas#spo2Chart').parentElement;
+                if (hrContainer && spo2Container) {
+                    spo2Container.style.width = hrContainer.offsetWidth + 'px';
+                    spo2Chart.resize();
+                }
+            }
+        }, 100);
+    } else {
+        activitySpo2Chart = newChart;
+        // Force resize to match HR chart container
+        setTimeout(() => {
+            if (activitySpo2Chart && activityHrChart) {
+                // Copy the HR chart's width to ensure perfect alignment
+                const hrContainer = document.querySelector('.chart-container canvas#activityHrChart').parentElement;
+                const spo2Container = document.querySelector('.chart-container canvas#activitySpo2Chart').parentElement;
+                if (hrContainer && spo2Container) {
+                    spo2Container.style.width = hrContainer.offsetWidth + 'px';
+                    activitySpo2Chart.resize();
+                }
+            }
+        }, 100);
+    }
+}
+
+// Create SpO2 chart for activity view
+function createActivitySpo2Chart(activity, spo2Data, chartId, containerId) {
+    const chartElement = document.getElementById(chartId);
+    const containerElement = document.getElementById(containerId);
+    
+    if (!chartElement || !containerElement) {
+        console.error('Activity SpO2 chart elements not found');
+        return;
+    }
+    
+    // Destroy existing chart if it exists
+    if (activitySpo2Chart) {
+        activitySpo2Chart.destroy();
+    }
+    
+    // Check if we have SpO2 data
+    if (!spo2Data || spo2Data.length === 0) {
+        containerElement.style.display = 'none';
+        containerElement.style.height = '0px';
+        return;
+    }
+    
+    // Show container and set height
+    containerElement.style.display = 'block';
+    containerElement.style.height = '120px'; // Proportional to HR chart
+    
+    const ctx = chartElement.getContext('2d');
+    
+    // Sort SpO2 data by timestamp
+    const sortedSpo2Data = spo2Data.sort((a, b) => a.x.getTime() - b.x.getTime());
+    
+    // Get activity start and end times
+    const startTime = sortedSpo2Data[0].x;
+    const endTime = sortedSpo2Data[sortedSpo2Data.length - 1].x;
+    
+    // Create timeline based on activity duration
+    const activityDurationMs = endTime.getTime() - startTime.getTime();
+    const activityDurationMinutes = activityDurationMs / (1000 * 60);
+    
+    // Create evenly spaced timeline for the activity duration
+    const labels = [];
+    const stepMinutes = Math.max(1, Math.ceil(activityDurationMinutes / 1440)); // Max 1440 points (1 per minute for 24h)
+    
+    for (let i = 0; i <= activityDurationMinutes; i += stepMinutes) {
+        const timestamp = new Date(startTime.getTime() + (i * 60 * 1000));
+        labels.push(timestamp);
+    }
+    
+    // Process SpO2 data
+    const chartLabels = [];
+    const chartData = [];
+    
+    // Add data points and insert null values for gaps > 5 minutes
+    for (let i = 0; i < sortedSpo2Data.length; i++) {
+        const currentPoint = sortedSpo2Data[i];
+        
+        // Add the current data point
+        chartLabels.push(currentPoint.x);
+        chartData.push(currentPoint.y);
+        
+        // Check if there's a gap to the next point
+        if (i < sortedSpo2Data.length - 1) {
+            const nextPoint = sortedSpo2Data[i + 1];
+            const gapMinutes = (nextPoint.x.getTime() - currentPoint.x.getTime()) / (1000 * 60);
+            
+            // If gap is > 5 minutes, add a null point to create a visual break
+            if (gapMinutes > 5) {
+                // Add a null point 1 minute after the current segment
+                const gapTimestamp = new Date(currentPoint.x.getTime() + (1 * 60 * 1000));
+                chartLabels.push(gapTimestamp);
+                chartData.push(null);
+                
+                // Add a null point 1 minute before the next segment
+                const nextGapTimestamp = new Date(nextPoint.x.getTime() - (1 * 60 * 1000));
+                chartLabels.push(nextGapTimestamp);
+                chartData.push(null);
+            }
+        }
+    }
+    
+    // Create the chart
+    const newChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                // Background dataset with SpO2 color bands
+                {
+                    label: 'Background',
+                    data: labels.map(label => ({ x: label, y: 100 })),
+                    borderColor: 'transparent',
+                    backgroundColor: function(context) {
+                        const chart = context.chart;
+                        const {ctx, chartArea} = chart;
+                        
+                        if (!chartArea) {
+                            return 'transparent';
+                        }
+                        
+                        // Create gradient for SpO2 zones
+                        const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                        
+                        // Add color stops for 8 equal SpO2 bands (top to bottom)
+                        gradient.addColorStop(0, '#28a745');     // Band 1: Green (top)
+                        gradient.addColorStop(0.25, '#28a745');  // Band 2: Green
+                        gradient.addColorStop(0.25, '#9acd32');  // Band 3: Yellow-Green
+                        gradient.addColorStop(0.375, '#9acd32'); // Band 4: Yellow
+                        gradient.addColorStop(0.375, '#ffc107'); // Band 5: Orange
+                        gradient.addColorStop(0.5, '#ffc107');   // Band 6: Red
+                        gradient.addColorStop(0.5, '#fd7e14');   // Band 7: Hot Red
+                        gradient.addColorStop(0.625, '#fd7e14'); // Band 8: Hot Red
+                        gradient.addColorStop(0.625, '#e74c3c'); // Band 8: Hot Red
+                        gradient.addColorStop(0.75, '#e74c3c');  // Band 8: Hot Red
+                        gradient.addColorStop(0.75, '#dc3545');  // Band 8: Hot Red
+                        gradient.addColorStop(1, '#dc3545');     // Band 8: Hot Red (bottom)
+                        
+                        return gradient;
+                    },
+                    borderWidth: 0,
+                    fill: true,
+                    tension: 0,
+                    pointRadius: 0,
+                    order: 100
+                },
+                // SpO2 line on top
+                {
+                    label: 'SpO2 (%)',
+                    data: chartLabels.map((label, index) => ({ x: label, y: chartData[index] })),
+                    borderColor: '#000080',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: '#000080',
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            spanGaps: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'nearest',
+                    intersect: false,
+                    callbacks: {
+                        title: function(context) {
+                            const rawData = context[0].raw;
+                            if (rawData && rawData.x) {
+                                const date = new Date(rawData.x);
+                                const timeSinceStart = date.getTime() - startTime.getTime();
+                                const totalMinutes = timeSinceStart / (1000 * 60);
+                                
+                                if (activityDurationMinutes <= 60) {
+                                    // For activities <= 1 hour: use m:ss format
+                                    const minutes = Math.floor(totalMinutes);
+                                    const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                                    return `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                                } else {
+                                    // For activities > 1 hour: use h:mm format
+                                    const hours = Math.floor(totalMinutes / 60);
+                                    const minutes = Math.floor(totalMinutes % 60);
+                                    return `Time: ${hours}:${minutes.toString().padStart(2, '0')}`;
+                                }
+                            }
+                            return `Time: ${context[0].label}`;
+                        },
+                        label: function(context) {
+                            if (context.dataset.label === 'SpO2 (%)') {
+                                return `SpO2: ${context.parsed.y}%`;
+                            }
+                            return null;
+                        }
+                    }
+                },
+                datalabels: {
+                    display: false
+                }
+            },
+                            scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: activityDurationMinutes <= 60 ? 'minute' : 'hour',
+                            displayFormats: {
+                                minute: 'mm:ss',
+                                hour: 'HH:mm'
+                            }
+                        },
+                        display: true, // Show x-axis for gridlines
+                        min: startTime,
+                        max: endTime,
+                        ticks: {
+                            display: false, // Hide tick labels but keep gridlines
+                            maxRotation: 0,
+                            stepSize: 2,
+                            source: 'auto'
+                        },
+                        grid: {
+                            display: true,
+                            color: 'rgba(0, 0, 0, 0.3)', // Same as HR chart
+                            drawBorder: false,
+                            z: 1 // Try to ensure gridlines are drawn above background
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'SpO2 (%)'
+                        },
+                        min: 80,
+                        max: 100,
+                        ticks: {
+                            stepSize: 5
+                        }
+                    }
+                },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    });
+    
+    // Store the chart reference
+    activitySpo2Chart = newChart;
+    // Force resize to match HR chart container
+    setTimeout(() => {
+        if (activitySpo2Chart && activityHrChart) {
+            // Copy the HR chart's width to ensure perfect alignment
+            const hrContainer = document.querySelector('.chart-container canvas#activityHrChart').parentElement;
+            const spo2Container = document.querySelector('.chart-container canvas#activitySpo2Chart').parentElement;
+            if (hrContainer && spo2Container) {
+                spo2Container.style.width = hrContainer.offsetWidth + 'px';
+                activitySpo2Chart.resize();
+            }
+        }
+    }, 100);
+}
+
 // Create 24-hour heart rate chart
 function createHeartRateChart(dateLabel, dayData) {
     
@@ -2841,9 +3394,12 @@ function createHeartRateChart(dateLabel, dayData) {
         });
     }
     
+    // Create SpO2 chart if data exists
+    createSpo2Chart(dateLabel, spo2Data, 'spo2Chart', 'spo2ChartContainer');
+    
     // Small delay to ensure DOM is ready
     setTimeout(() => {
-        // Create datasets array
+        // Create datasets array (HR only - SpO2 is in separate chart)
         const datasets = [
             // Single background dataset with gradient
             {
@@ -2904,25 +3460,6 @@ function createHeartRateChart(dateLabel, dayData) {
                 order: 0
             }
         ];
-        
-        // Add SpO2 dataset if available
-        if (spo2Data.length > 0) {
-            datasets.push({
-                label: 'SpO2 (%)',
-                data: spo2Data,
-                borderColor: '#000080', // Deep blue (same as activity chart)
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                fill: false,
-                tension: 0.1,
-                pointRadius: 0,
-                pointHoverRadius: 6,
-                hitRadius: 50,
-                pointHoverBackgroundColor: '#000080',
-                order: 1,
-                yAxisID: 'y2' // Secondary y-axis for SpO2
-            });
-        }
         
         // Create the chart
         hrChart = new Chart(ctx, {
@@ -3013,24 +3550,7 @@ function createHeartRateChart(dateLabel, dayData) {
                         ticks: {
                             stepSize: 20
                         }
-                    },
-                                         y2: {
-                         type: 'linear',
-                         display: spo2Data.length > 0, // Only show if we have SpO2 data
-                         position: 'right',
-                         title: {
-                             display: true,
-                             text: 'SpO2 (%)'
-                         },
-                         min: 70,
-                         max: 100,
-                         ticks: {
-                             stepSize: 5
-                         },
-                         grid: {
-                             drawOnChartArea: false // Only show grid for primary y-axis
-                         }
-                     }
+                    }
                 },
                 interaction: {
                     mode: 'nearest',
@@ -3055,15 +3575,23 @@ function createActivityHeartRateChart(activity) {
         return;
     }
     
-    // Ensure we have a clean canvas element
+    // Ensure we have clean canvas elements
     const chartContainer = document.querySelector('#singleActivitySection .chart-container');
+    const spo2ChartContainer = document.getElementById('activitySpo2ChartContainer');
+    
     if (!chartContainer) {
         console.error('Activity chart container not found');
         return;
     }
     
-    // Clear the container and recreate the canvas
+    if (!spo2ChartContainer) {
+        console.error('Activity SpO2 chart container not found');
+        return;
+    }
+    
+    // Clear the containers and recreate the canvases
     chartContainer.innerHTML = '<canvas id="activityHrChart"></canvas>';
+    spo2ChartContainer.innerHTML = '<canvas id="activitySpo2Chart"></canvas>';
     
     const chartElement = document.getElementById('activityHrChart');
     if (!chartElement) {
@@ -3085,6 +3613,10 @@ function createActivityHeartRateChart(activity) {
     if (activityHrChart) {
         activityHrChart.destroy();
         activityHrChart = null;
+    }
+    if (activitySpo2Chart) {
+        activitySpo2Chart.destroy();
+        activitySpo2Chart = null;
     }
     
     // Check if we have heart rate values for this activity
@@ -3136,6 +3668,7 @@ function createActivityHeartRateChart(activity) {
             
             // Add a message overlay
             chartContainer.innerHTML = '<div class="d-flex align-items-center justify-content-center h-100"><p class="text-muted">No heart rate time-series data available for this activity</p></div>';
+            spo2ChartContainer.innerHTML = '<canvas id="activitySpo2Chart"></canvas>';
         }, 100);
         return;
     }
@@ -3144,6 +3677,21 @@ function createActivityHeartRateChart(activity) {
     const hrData = activity.heart_rate_values;
     const breathingData = activity.breathing_rate_values || [];
     console.log('Activity heart rate values length:', hrData.length);
+    
+    // Process SpO2 data if available
+    const spo2Data = [];
+    if (activity.spo2_values && activity.spo2_values.length > 0) {
+        console.log('Processing SpO2 data for activity:', activity.spo2_values.length, 'points');
+        activity.spo2_values.forEach(spo2Point => {
+            spo2Data.push({
+                x: new Date(spo2Point[0]),
+                y: spo2Point[1]
+            });
+        });
+    }
+    
+    // Create SpO2 chart if data exists
+    createActivitySpo2Chart(activity, spo2Data, 'activitySpo2Chart', 'activitySpo2ChartContainer');
     console.log('Activity breathing rate values length:', breathingData.length);
     console.log('First few HR data points:', hrData.slice(0, 5));
     console.log('First few breathing data points:', breathingData.slice(0, 5));
@@ -3343,50 +3891,50 @@ function createActivityHeartRateChart(activity) {
                     // Create gradient
                     const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
                     
-                    // Add color stops for each zone
-                    gradient.addColorStop(0, '#e74c3c'); // 160+ Red
-                    gradient.addColorStop(1/12, '#e74c3c'); // 150-159 Red
-                    gradient.addColorStop(1/12, '#fd7e14'); // 150-159 Orange
-                    gradient.addColorStop(1/6, '#fd7e14'); // 140-149 Orange
-                    gradient.addColorStop(1/6, '#ffc107'); // 140-149 Yellow
-                    gradient.addColorStop(3/12, '#ffc107'); // 130-139 Yellow
-                    gradient.addColorStop(3/12, '#9acd32'); // 130-139 Yellow-green
-                    gradient.addColorStop(1/3, '#9acd32'); // 120-129 Yellow-green
-                    gradient.addColorStop(1/3, '#28a745'); // 120-129 Green
-                    gradient.addColorStop(5/12, '#28a745'); // 110-119 Green
-                    gradient.addColorStop(5/12, '#006d5b'); // 110-119 Deep teal
-                    gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
-                    gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
-                    gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
-                    gradient.addColorStop(7/12, '#002040'); // 80-89 Midnight
-                            gradient.addColorStop(2/3, '#002040'); // 80-89 Midnight
-                            gradient.addColorStop(2/3, '#000000'); // 80-89 Black
-                            gradient.addColorStop(1, '#000000'); // Below 80 Black
-                            
-                            return gradient;
-                        },
-                        borderWidth: 0,
-                        fill: true,
-                        tension: 0,
-                        pointRadius: 0,
-                        order: 2
-                    },
-                    // Heart rate line on top
-                    {
-                        label: 'Heart Rate (BPM)',
-                        data: chartLabels.map((timestamp, index) => ({ x: timestamp, y: chartData[index] })),
-                        borderColor: '#e74c3c',
-                        backgroundColor: 'transparent',
-                        borderWidth: 2,
-                        fill: false,
-                        tension: 0.1,
-                        pointRadius: 0,
-                        pointHoverRadius: 4,
-                        pointHoverBackgroundColor: '#e74c3c',
-                        order: 0,
-                        yAxisID: 'y'
-                    }
-                ];
+                                         // Add color stops for each zone
+                     gradient.addColorStop(0, '#e74c3c'); // 160+ Red
+                     gradient.addColorStop(1/12, '#e74c3c'); // 150-159 Red
+                     gradient.addColorStop(1/12, '#fd7e14'); // 150-159 Orange
+                     gradient.addColorStop(1/6, '#fd7e14'); // 140-149 Orange
+                     gradient.addColorStop(1/6, '#ffc107'); // 140-149 Yellow
+                     gradient.addColorStop(3/12, '#ffc107'); // 130-139 Yellow
+                     gradient.addColorStop(3/12, '#9acd32'); // 130-139 Yellow-green
+                     gradient.addColorStop(1/3, '#9acd32'); // 120-129 Yellow-green
+                     gradient.addColorStop(1/3, '#28a745'); // 120-129 Green
+                     gradient.addColorStop(5/12, '#28a745'); // 110-119 Green
+                     gradient.addColorStop(5/12, '#006d5b'); // 110-119 Deep teal
+                     gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
+                     gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
+                     gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
+                     gradient.addColorStop(7/12, '#002040'); // 80-89 Midnight
+                     gradient.addColorStop(2/3, '#002040'); // 80-89 Midnight
+                     gradient.addColorStop(2/3, '#000000'); // 80-89 Black
+                     gradient.addColorStop(1, '#000000'); // Below 80 Black
+                     
+                     return gradient;
+                 },
+                 borderWidth: 0,
+                 fill: true,
+                 tension: 0,
+                 pointRadius: 0,
+                 order: 2
+             },
+             // Heart rate line on top
+             {
+                 label: 'Heart Rate (BPM)',
+                 data: chartLabels.map((timestamp, index) => ({ x: timestamp, y: chartData[index] })),
+                 borderColor: '#e74c3c',
+                 backgroundColor: 'transparent',
+                 borderWidth: 2,
+                 fill: false,
+                 tension: 0.1,
+                 pointRadius: 0,
+                 pointHoverRadius: 4,
+                 pointHoverBackgroundColor: '#e74c3c',
+                 order: 0,
+                 yAxisID: 'y'
+             }
+        ];
         
         // Add breathing rate dataset if available
         if (breathingValues.length > 0) {
@@ -3415,38 +3963,8 @@ function createActivityHeartRateChart(activity) {
             });
         }
         
-        // Add SpO2 dataset if available
-        console.log('Activity SpO2 data:', activity.spo2_values);
-        if (activity.spo2_values && activity.spo2_values.length > 0) {
-            console.log('Adding SpO2 dataset with', activity.spo2_values.length, 'points');
-            // Create SpO2 data points only for actual SpO2 readings
-            const spo2DataPoints = activity.spo2_values.map(spo2Point => {
-                return { 
-                    x: new Date(spo2Point[0]), 
-                    y: spo2Point[1] 
-                };
-            });
-            
-            console.log('SpO2 data points:', spo2DataPoints);
-            
-            datasets.push({
-                label: 'SpO2 (%)',
-                data: spo2DataPoints,
-                borderColor: '#000080', // Deep blue
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                fill: false,
-                tension: 0.1,
-                pointRadius: 0, // No markers
-                pointHoverRadius: 6,
-                hitRadius: 50,
-                pointHoverBackgroundColor: '#000080',
-                order: 1,
-                yAxisID: 'y2' // Third y-axis for SpO2
-            });
-        } else {
-            console.log('No SpO2 data available for activity');
-        }
+        // SpO2 is now in separate chart
+        console.log('SpO2 data available for activity:', activity.spo2_values ? activity.spo2_values.length : 0, 'points');
         
         // Create the chart
         activityHrChart = new Chart(ctx, {
@@ -3491,13 +4009,11 @@ function createActivityHeartRateChart(activity) {
                                 return `Time: ${context[0].label}`;
                             },
                             label: function(context) {
-                                // Show tooltip for heart rate, breathing rate, and SpO2 data
+                                // Show tooltip for heart rate and breathing rate data
                                 if (context.dataset.label === 'Heart Rate (BPM)') {
                                     return `Heart Rate: ${context.parsed.y} BPM`;
                                 } else if (context.dataset.label === 'Breathing Rate (BRPM)') {
                                     return `Breathing Rate: ${context.parsed.y.toFixed(1)} BRPM`;
-                                } else if (context.dataset.label === 'SpO2 (%)') {
-                                    return `SpO2: ${context.parsed.y}%`;
                                 }
                                 return null; // Hide background dataset from tooltip
                             }
@@ -3620,23 +4136,7 @@ function createActivityHeartRateChart(activity) {
                             drawOnChartArea: false, // Only want to show grid for primary axis
                         },
                     },
-                    y2: {
-                        type: 'linear',
-                        display: activity.spo2_values && activity.spo2_values.length > 0, // Show only if SpO2 data exists
-                        position: 'right',
-                        title: {
-                            display: activity.spo2_values && activity.spo2_values.length > 0, // Show title only if SpO2 data exists
-                            text: 'SpO2 (%)'
-                        },
-                        min: 70,
-                        max: 100, // SpO2 range
-                        ticks: {
-                            stepSize: 5
-                        },
-                        grid: {
-                            drawOnChartArea: false, // Only want to show grid for primary axis
-                        },
-                    }
+
                 },
                 interaction: {
                     mode: 'nearest',
