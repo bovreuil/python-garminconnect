@@ -84,79 +84,14 @@ logger = logging.getLogger(__name__)
 
 def init_database():
     """Initialize the database with required tables."""
+    # Import and call the proper init_database function from database.py
+    from database import init_database as db_init_database
+    db_init_database()
+    
+    # Ensure we have default HR parameters (only if none exist)
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Users table (simplified for admin/viewer roles)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email VARCHAR(255) UNIQUE,
-            name VARCHAR(255),
-            google_id VARCHAR(255) UNIQUE,
-            role VARCHAR(50),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    # Garmin credentials (single set for the system)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS garmin_credentials (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email VARCHAR(255) NOT NULL,
-            password_encrypted TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    # Heart rate parameters (single set for the system)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS hr_parameters (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            resting_hr INTEGER,
-            max_hr INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    # Heart rate data (no user_id needed - single user system)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS heart_rate_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date DATE UNIQUE,
-            individual_hr_buckets TEXT,
-            presentation_buckets TEXT,
-            trimp_data TEXT,
-            total_trimp REAL,
-            daily_score REAL,
-            activity_type VARCHAR(50),
-            raw_hr_data TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    # Background jobs (no user_id needed - single user system)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS background_jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            job_id VARCHAR(255) UNIQUE,
-            job_type VARCHAR(100),
-            target_date DATE,
-            start_date DATE,
-            end_date DATE,
-            status VARCHAR(50),
-            result TEXT,
-            error_message TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    # Ensure we have default HR parameters (only if none exist)
     cur.execute("SELECT COUNT(*) FROM hr_parameters")
     count = cur.fetchone()[0]
     if count == 0:
@@ -1900,6 +1835,276 @@ def backup_database():
     except Exception as e:
         app.logger.error(f"Error creating database backup: {str(e)}")
         return jsonify({'success': False, 'error': f'Backup failed: {str(e)}'}), 500
+
+# O2Ring Data Management Routes
+@app.route('/admin/o2ring')
+def o2ring_admin():
+    """O2Ring data management page."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        flash('Access denied. Admin privileges required.', 'error')
+        return redirect(url_for('index'))
+    
+    return render_template('o2ring_admin.html')
+
+@app.route('/admin/o2ring/upload', methods=['POST'])
+def o2ring_upload():
+    """Upload O2Ring CSV file."""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
+    
+    try:
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        # Validate file extension
+        if not file.filename.lower().endswith('.csv'):
+            return jsonify({'success': False, 'error': 'File must be a CSV'}), 400
+        
+        # Read and parse CSV
+        import io
+        import csv
+        from datetime import datetime
+        import pytz
+        
+        # Read file content
+        content = file.read().decode('utf-8')
+        csv_file = io.StringIO(content)
+        reader = csv.reader(csv_file)
+        
+        # Validate header
+        header = next(reader)
+        expected_header = ['Time', 'SpO2(%)', 'Pulse Rate(bpm)', 'Motion', 'SpO2 Reminder', 'PR Reminder', '']
+        
+        if header != expected_header:
+            return jsonify({
+                'success': False, 
+                'error': f'Invalid header format. Expected: {expected_header}, Got: {header}'
+            }), 400
+        
+        # Parse CSV data
+        data_points = []
+        first_timestamp = None
+        last_timestamp = None
+        
+        for row_num, row in enumerate(reader, start=2):  # Start at 2 because we skipped header
+            if len(row) < 6:  # Need at least 6 columns
+                logger.warning(f"Skipping row {row_num}: insufficient columns")
+                continue
+            
+            try:
+                # Parse timestamp (format: "10:09:10PM Aug 21, 2025")
+                time_str = row[0].strip()
+                if not time_str:
+                    continue
+                
+                # Parse the timestamp
+                timestamp = parse_o2ring_timestamp(time_str)
+                if timestamp is None:
+                    logger.warning(f"Skipping row {row_num}: invalid timestamp format: {time_str}")
+                    continue
+                
+                # Parse SpO2 value
+                spo2_value = int(row[1])
+                
+                # Parse heart rate
+                heart_rate = int(row[2])
+                
+                # Parse motion warnings
+                motion_warnings = int(row[3])
+                
+                # Parse HR warnings
+                hr_warnings = int(row[4])
+                
+                # Store data point
+                data_points.append({
+                    'timestamp': timestamp,
+                    'spo2_value': spo2_value,
+                    'heart_rate': heart_rate,
+                    'motion_warnings': motion_warnings,
+                    'hr_warnings': hr_warnings
+                })
+                
+                # Track first and last timestamps
+                if first_timestamp is None or timestamp < first_timestamp:
+                    first_timestamp = timestamp
+                if last_timestamp is None or timestamp > last_timestamp:
+                    last_timestamp = timestamp
+                
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Skipping row {row_num}: parsing error: {e}")
+                continue
+        
+        if not data_points:
+            return jsonify({'success': False, 'error': 'No valid data points found in CSV'}), 400
+        
+        # Store in database
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Insert file record
+        cur.execute("""
+            INSERT INTO o2ring_files (filename, first_timestamp, last_timestamp, row_count)
+            VALUES (?, ?, ?, ?)
+        """, (file.filename, first_timestamp, last_timestamp, len(data_points)))
+        
+        file_id = cur.lastrowid
+        
+        # Insert data points
+        for point in data_points:
+            cur.execute("""
+                INSERT INTO o2ring_data (file_id, timestamp, spo2_value, heart_rate, motion_warnings, hr_warnings)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                file_id,
+                point['timestamp'],
+                point['spo2_value'],
+                point['heart_rate'],
+                point['motion_warnings'],
+                point['hr_warnings']
+            ))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        logger.info(f"O2Ring file uploaded successfully: {file.filename}, {len(data_points)} data points")
+        
+        return jsonify({
+            'success': True,
+            'message': f'File uploaded successfully with {len(data_points)} data points',
+            'filename': file.filename,
+            'data_points': len(data_points)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error uploading O2Ring file: {e}")
+        return jsonify({'success': False, 'error': f'Error uploading file: {str(e)}'}), 500
+
+@app.route('/admin/o2ring/files')
+def o2ring_files():
+    """Get list of uploaded O2Ring files."""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT id, filename, first_timestamp, last_timestamp, row_count, uploaded_at
+            FROM o2ring_files
+            ORDER BY first_timestamp DESC
+        """)
+        
+        files = []
+        for row in cur.fetchall():
+            files.append({
+                'id': row['id'],
+                'filename': row['filename'],
+                'first_timestamp': row['first_timestamp'],
+                'last_timestamp': row['last_timestamp'],
+                'row_count': row['row_count'],
+                'uploaded_at': row['uploaded_at']
+            })
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'files': files
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting O2Ring files: {e}")
+        return jsonify({'success': False, 'error': f'Error getting files: {str(e)}'}), 500
+
+@app.route('/admin/o2ring/delete/<int:file_id>', methods=['DELETE'])
+def o2ring_delete_file(file_id):
+    """Delete O2Ring file and all its data."""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if file exists
+        cur.execute("SELECT filename FROM o2ring_files WHERE id = ?", (file_id,))
+        file_record = cur.fetchone()
+        
+        if not file_record:
+            return jsonify({'success': False, 'error': 'File not found'}), 404
+        
+        # Delete associated data first (since foreign keys are disabled)
+        cur.execute("DELETE FROM o2ring_data WHERE file_id = ?", (file_id,))
+        
+        # Then delete the file record
+        cur.execute("DELETE FROM o2ring_files WHERE id = ?", (file_id,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        logger.info(f"O2Ring file deleted: {file_record['filename']}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'File {file_record["filename"]} deleted successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting O2Ring file: {e}")
+        return jsonify({'success': False, 'error': f'Error deleting file: {str(e)}'}), 500
+
+def parse_o2ring_timestamp(time_str):
+    """
+    Parse O2Ring timestamp format: "10:09:10PM Aug 21, 2025"
+    Returns Unix timestamp in milliseconds (same format as Garmin data)
+    """
+    try:
+        from datetime import datetime
+        import pytz
+        
+        # Parse the timestamp string
+        # Format: "10:09:10PM Aug 21, 2025"
+        dt = datetime.strptime(time_str, "%I:%M:%S%p %b %d, %Y")
+        
+        # Assume UK timezone (Europe/London)
+        uk_tz = pytz.timezone('Europe/London')
+        
+        # Localize the datetime to UK timezone
+        dt_uk = uk_tz.localize(dt)
+        
+        # Convert to Unix timestamp in milliseconds
+        timestamp_ms = int(dt_uk.timestamp() * 1000)
+        
+        return timestamp_ms
+        
+    except Exception as e:
+        logger.error(f"Error parsing O2Ring timestamp '{time_str}': {e}")
+        return None
 
 if __name__ == '__main__':
     init_database()

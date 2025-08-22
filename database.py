@@ -271,6 +271,44 @@ def init_database():
         )
     """)
     
+    # Create O2Ring data tables
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS o2ring_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename VARCHAR(255) NOT NULL,
+            first_timestamp BIGINT NOT NULL,  -- Unix timestamp in milliseconds
+            last_timestamp BIGINT NOT NULL,   -- Unix timestamp in milliseconds
+            row_count INTEGER NOT NULL,
+            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS o2ring_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_id INTEGER NOT NULL,
+            timestamp BIGINT NOT NULL,        -- Unix timestamp in milliseconds
+            spo2_value INTEGER NOT NULL,      -- 0-100
+            heart_rate INTEGER NOT NULL,      -- BPM
+            motion_warnings INTEGER NOT NULL, -- Number of low SpO2 warnings
+            hr_warnings INTEGER NOT NULL,     -- Number of HR range warnings
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (file_id) REFERENCES o2ring_files(id) ON DELETE CASCADE
+        )
+    """)
+    
+    # Create index for efficient timestamp queries
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_o2ring_data_timestamp 
+        ON o2ring_data(timestamp)
+    """)
+    
+    # Create index for file-based queries
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_o2ring_data_file_id 
+        ON o2ring_data(file_id)
+    """)
+    
     conn.commit()
     cur.close()
     conn.close() 
