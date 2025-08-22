@@ -2972,14 +2972,8 @@ function createActivitySpo2Chart(activity, spo2Data, chartId, containerId, start
     // Use shared gridline parameters passed from HR chart
     // activityDurationMinutes and optimalInterval are now parameters
     
-    // Create evenly spaced timeline for the standardized activity duration
-    const labels = [];
-    const stepMinutes = Math.max(1, Math.ceil(activityDurationMinutes / 1440)); // Max 1440 points (1 per minute for 24h)
-    
-    for (let i = 0; i <= activityDurationMinutes; i += stepMinutes) {
-        const timestamp = new Date(startTime.getTime() + (i * 60 * 1000));
-        labels.push(timestamp);
-    }
+    // Create evenly spaced timeline for the standardized activity duration - simplified for exact chart area alignment
+    const labels = [startTime, endTime];
     
     // Create the same afterBuildTicks function for consistent gridlines
     function createAfterBuildTicks(startTime, optimalInterval, activityDurationMinutes) {
@@ -3053,7 +3047,10 @@ function createActivitySpo2Chart(activity, spo2Data, chartId, containerId, start
                 // Background dataset with SpO2 color bands
                 {
                     label: 'Background',
-                    data: labels.map(label => ({ x: label, y: 100 })),
+                    data: [
+                        { x: startTime, y: 100 },
+                        { x: endTime, y: 100 }
+                    ],
                     borderColor: 'transparent',
                     backgroundColor: function(context) {
                         const chart = context.chart;
@@ -3100,8 +3097,7 @@ function createActivitySpo2Chart(activity, spo2Data, chartId, containerId, start
                     pointRadius: 0,
                     pointHoverRadius: 4,
                     pointHoverBackgroundColor: '#000080',
-                    order: 0,
-                    yAxisID: 'y'
+                    order: 0
                 }
             ]
         },
@@ -3161,10 +3157,6 @@ function createActivitySpo2Chart(activity, spo2Data, chartId, containerId, start
                             }
                         },
                         display: true, // Show x-axis for gridlines
-                        title: {
-                            display: true,
-                            text: 'Time Since Activity Start'
-                        },
                         min: startTime,
                         max: endTime,
                         ticks: {
