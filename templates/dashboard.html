@@ -2822,73 +2822,114 @@ function createHeartRateChart(dateLabel, dayData) {
         }
     }
     
+    // Process SpO2 data if available
+    const spo2Data = [];
+    if (dayData.spo2_values && Array.isArray(dayData.spo2_values) && dayData.spo2_values.length > 0) {
+        dayData.spo2_values.forEach(spo2Point => {
+            const timestamp = new Date(spo2Point[0]);
+            const spo2Value = spo2Point[1];
+            
+            // Only include SpO2 data for this day
+            if (timestamp.getDate() === chartDate.getDate() && 
+                timestamp.getMonth() === chartDate.getMonth() && 
+                timestamp.getFullYear() === chartDate.getFullYear()) {
+                spo2Data.push({
+                    x: timestamp,
+                    y: spo2Value
+                });
+            }
+        });
+    }
+    
     // Small delay to ensure DOM is ready
     setTimeout(() => {
+        // Create datasets array
+        const datasets = [
+            // Single background dataset with gradient
+            {
+                label: 'Background',
+                data: labels.map(label => ({ x: label, y: 160 })), // Full height background for 24-hour timeline
+                borderColor: 'transparent',
+                backgroundColor: function(context) {
+                    const chart = context.chart;
+                    const {ctx, chartArea} = chart;
+                    
+                    if (!chartArea) {
+                        return 'transparent';
+                    }
+                    
+                    // Create gradient
+                    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                    
+                    // Add color stops for each zone
+                    gradient.addColorStop(0, '#e74c3c'); // 160+ Red
+                    gradient.addColorStop(1/12, '#e74c3c'); // 150-159 Red
+                    gradient.addColorStop(1/12, '#fd7e14'); // 150-159 Orange
+                    gradient.addColorStop(1/6, '#fd7e14'); // 140-149 Orange
+                    gradient.addColorStop(1/6, '#ffc107'); // 140-149 Yellow
+                    gradient.addColorStop(3/12, '#ffc107'); // 130-139 Yellow
+                    gradient.addColorStop(3/12, '#9acd32'); // 130-139 Yellow-green
+                    gradient.addColorStop(1/3, '#9acd32'); // 120-129 Yellow-green
+                    gradient.addColorStop(1/3, '#28a745'); // 120-129 Green
+                    gradient.addColorStop(5/12, '#28a745'); // 110-119 Green
+                    gradient.addColorStop(5/12, '#006d5b'); // 110-119 Deep teal
+                    gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
+                    gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
+                    gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
+                    gradient.addColorStop(7/12, '#002040'); // 80-89 Midnight
+                    gradient.addColorStop(2/3, '#002040'); // 80-89 Midnight
+                    gradient.addColorStop(2/3, '#000000'); // 80-89 Black
+                    gradient.addColorStop(1, '#000000'); // Below 80 Black
+                    
+                    return gradient;
+                },
+                borderWidth: 0,
+                fill: true,
+                tension: 0,
+                pointRadius: 0,
+                order: 100 // Draw background first
+            },
+            // Heart rate line on top
+            {
+                label: 'Heart Rate (BPM)',
+                data: chartLabels.map((label, index) => ({ x: label, y: chartData[index] })), // Use data with null values for gaps
+                borderColor: '#e74c3c',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                pointHoverBackgroundColor: '#e74c3c',
+                order: 0
+            }
+        ];
+        
+        // Add SpO2 dataset if available
+        if (spo2Data.length > 0) {
+            datasets.push({
+                label: 'SpO2 (%)',
+                data: spo2Data,
+                borderColor: '#000080', // Deep blue (same as activity chart)
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 6,
+                hitRadius: 50,
+                pointHoverBackgroundColor: '#000080',
+                order: 1,
+                yAxisID: 'y2' // Secondary y-axis for SpO2
+            });
+        }
+        
         // Create the chart
         hrChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels, // Use full 24-hour timeline for consistent x-axis
-                datasets: [
-                    // Single background dataset with gradient
-                    {
-                        label: 'Background',
-                        data: labels.map(label => ({ x: label, y: 160 })), // Full height background for 24-hour timeline
-                        borderColor: 'transparent',
-                        backgroundColor: function(context) {
-                            const chart = context.chart;
-                            const {ctx, chartArea} = chart;
-                            
-                            if (!chartArea) {
-                                return 'transparent';
-                            }
-                            
-                            // Create gradient
-                            const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                            
-                            // Add color stops for each zone
-                            gradient.addColorStop(0, '#e74c3c'); // 160+ Red
-                            gradient.addColorStop(1/12, '#e74c3c'); // 150-159 Red
-                            gradient.addColorStop(1/12, '#fd7e14'); // 150-159 Orange
-                            gradient.addColorStop(1/6, '#fd7e14'); // 140-149 Orange
-                            gradient.addColorStop(1/6, '#ffc107'); // 140-149 Yellow
-                            gradient.addColorStop(3/12, '#ffc107'); // 130-139 Yellow
-                            gradient.addColorStop(3/12, '#9acd32'); // 130-139 Yellow-green
-                            gradient.addColorStop(1/3, '#9acd32'); // 120-129 Yellow-green
-                            gradient.addColorStop(1/3, '#28a745'); // 120-129 Green
-                            gradient.addColorStop(5/12, '#28a745'); // 110-119 Green
-                            gradient.addColorStop(5/12, '#006d5b'); // 110-119 Deep teal
-                            gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
-                            gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
-                            gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
-                            gradient.addColorStop(7/12, '#002040'); // 80-89 Midnight
-                            gradient.addColorStop(2/3, '#002040'); // 80-89 Midnight
-                            gradient.addColorStop(2/3, '#000000'); // 80-89 Black
-                            gradient.addColorStop(1, '#000000'); // Below 80 Black
-                            
-                            return gradient;
-                        },
-                        borderWidth: 0,
-                        fill: true,
-                        tension: 0,
-                        pointRadius: 0,
-                        order: 100 // Draw background first
-                    },
-                    // Heart rate line on top
-                    {
-                        label: 'Heart Rate (BPM)',
-                        data: chartLabels.map((label, index) => ({ x: label, y: chartData[index] })), // Use data with null values for gaps
-                        borderColor: '#e74c3c',
-                        backgroundColor: 'transparent',
-                        borderWidth: 2,
-                        fill: false,
-                        tension: 0.1,
-                        pointRadius: 0,
-                        pointHoverRadius: 4,
-                        pointHoverBackgroundColor: '#e74c3c',
-                        order: 0
-                    }
-                ]
+                datasets: datasets
             },
             options: {
                 responsive: true,
@@ -2918,9 +2959,11 @@ function createHeartRateChart(dateLabel, dayData) {
                                 return `Time: ${context[0].label}`;
                             },
                             label: function(context) {
-                                // Only show tooltip for heart rate data, not background
+                                // Show tooltip for heart rate and SpO2 data
                                 if (context.dataset.label === 'Heart Rate (BPM)') {
                                     return `Heart Rate: ${context.parsed.y} BPM`;
+                                } else if (context.dataset.label === 'SpO2 (%)') {
+                                    return `SpO2: ${context.parsed.y}%`;
                                 }
                                 return null; // Hide background dataset from tooltip
                             }
@@ -2970,7 +3013,24 @@ function createHeartRateChart(dateLabel, dayData) {
                         ticks: {
                             stepSize: 20
                         }
-                    }
+                    },
+                                         y2: {
+                         type: 'linear',
+                         display: spo2Data.length > 0, // Only show if we have SpO2 data
+                         position: 'right',
+                         title: {
+                             display: true,
+                             text: 'SpO2 (%)'
+                         },
+                         min: 70,
+                         max: 100,
+                         ticks: {
+                             stepSize: 5
+                         },
+                         grid: {
+                             drawOnChartArea: false // Only show grid for primary y-axis
+                         }
+                     }
                 },
                 interaction: {
                     mode: 'nearest',
@@ -3356,7 +3416,9 @@ function createActivityHeartRateChart(activity) {
         }
         
         // Add SpO2 dataset if available
+        console.log('Activity SpO2 data:', activity.spo2_values);
         if (activity.spo2_values && activity.spo2_values.length > 0) {
+            console.log('Adding SpO2 dataset with', activity.spo2_values.length, 'points');
             // Create SpO2 data points only for actual SpO2 readings
             const spo2DataPoints = activity.spo2_values.map(spo2Point => {
                 return { 
@@ -3364,6 +3426,8 @@ function createActivityHeartRateChart(activity) {
                     y: spo2Point[1] 
                 };
             });
+            
+            console.log('SpO2 data points:', spo2DataPoints);
             
             datasets.push({
                 label: 'SpO2 (%)',
@@ -3380,6 +3444,8 @@ function createActivityHeartRateChart(activity) {
                 order: 1,
                 yAxisID: 'y2' // Third y-axis for SpO2
             });
+        } else {
+            console.log('No SpO2 data available for activity');
         }
         
         // Create the chart
@@ -3539,10 +3605,10 @@ function createActivityHeartRateChart(activity) {
                     },
                     y1: {
                         type: 'linear',
-                        display: false, // Hide the entire axis
+                        display: breathingValues.length > 0, // Show only if breathing data exists
                         position: 'right',
                         title: {
-                            display: false, // Hide the title
+                            display: breathingValues.length > 0, // Show title only if breathing data exists
                             text: 'Breathing Rate (BRPM)'
                         },
                         min: 0,
@@ -3556,16 +3622,16 @@ function createActivityHeartRateChart(activity) {
                     },
                     y2: {
                         type: 'linear',
-                        display: false, // Hide the entire axis
+                        display: activity.spo2_values && activity.spo2_values.length > 0, // Show only if SpO2 data exists
                         position: 'right',
                         title: {
-                            display: false, // Hide the title
+                            display: activity.spo2_values && activity.spo2_values.length > 0, // Show title only if SpO2 data exists
                             text: 'SpO2 (%)'
                         },
-                        min: 0,
+                        min: 70,
                         max: 100, // SpO2 range
                         ticks: {
-                            stepSize: 10
+                            stepSize: 5
                         },
                         grid: {
                             drawOnChartArea: false, // Only want to show grid for primary axis

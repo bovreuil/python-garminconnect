@@ -482,6 +482,20 @@ def get_data(date):
         print(f"API DEBUG: trimp_data keys: {list(trimp_data.keys())}")
         print(f"API DEBUG: trimp_data has presentation_buckets: {'presentation_buckets' in trimp_data}")
         
+        # Get O2Ring data for this date
+        from datetime import datetime
+        import pytz
+        
+        # Convert date string to start and end timestamps for the day
+        uk_tz = pytz.timezone('Europe/London')
+        start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
+        end_of_day = start_of_day + timedelta(days=1)
+        
+        start_timestamp = int(start_of_day.timestamp() * 1000)
+        end_timestamp = int(end_of_day.timestamp() * 1000)
+        
+        o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
+        
         # Close connection after enrichment
         cur.close()
         conn.close()
@@ -492,7 +506,8 @@ def get_data(date):
             'presentation_buckets': trimp_data.get('presentation_buckets', {}),
             'total_trimp': data['total_trimp'],
             'daily_score': data['daily_score'],
-            'activity_type': data['activity_type']
+            'activity_type': data['activity_type'],
+            'spo2_values': o2ring_data
         })
     else:
         # Check if there are TRIMP overrides for this date (even without daily data)
@@ -563,6 +578,60 @@ def get_activities(date):
         spo2_series = get_user_data('activity_spo2', activity['activity_id'])
         activity_notes = get_user_data('activity_notes', activity['activity_id'])
         
+        # Get O2Ring data for this activity's time period
+        o2ring_data = []
+        if activity['start_time_local'] and activity['duration_seconds']:
+            try:
+                from datetime import datetime
+                import pytz
+                
+                # Parse activity start time
+                start_time_str = activity['start_time_local']
+                
+                # Handle different timestamp formats
+                if start_time_str.endswith('.0'):
+                    # Remove the .0 suffix
+                    start_time_str = start_time_str[:-2]
+                
+                # Try to parse with timezone info first
+                try:
+                    start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                except ValueError:
+                    # If that fails, try parsing without timezone and assume UK time
+                    start_time = datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S')
+                    uk_tz = pytz.timezone('Europe/London')
+                    start_time = uk_tz.localize(start_time)
+                
+                if start_time.tzinfo is None:
+                    # If still no timezone info, assume UK time
+                    uk_tz = pytz.timezone('Europe/London')
+                    start_time = uk_tz.localize(start_time)
+                
+                # Calculate end time
+                end_time = start_time + timedelta(seconds=activity['duration_seconds'])
+                
+                # Convert to timestamps
+                start_timestamp = int(start_time.timestamp() * 1000)
+                end_timestamp = int(end_time.timestamp() * 1000)
+                
+                o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
+            except Exception as e:
+                logger.error(f"Error getting O2Ring data for activity {activity['activity_id']}: {e}")
+        
+        # Combine manual SpO2 data with O2Ring data (manual takes precedence)
+        combined_spo2 = spo2_series or []
+        if o2ring_data:
+            # Create a map of timestamps to manual SpO2 values for quick lookup
+            manual_spo2_map = {point[0]: point[1] for point in combined_spo2}
+            
+            # Add O2Ring data, but skip if manual data exists for that timestamp
+            for o2ring_point in o2ring_data:
+                if o2ring_point[0] not in manual_spo2_map:
+                    combined_spo2.append(o2ring_point)
+            
+            # Sort by timestamp
+            combined_spo2.sort(key=lambda x: x[0])
+        
         activities_list.append({
             'activity_id': activity['activity_id'],
             'activity_name': activity['activity_name'],
@@ -579,7 +648,7 @@ def get_activities(date):
             'total_trimp': activity['total_trimp'],
             'heart_rate_values': heart_rate_series,
             'breathing_rate_values': breathing_rate_series,
-            'spo2_values': spo2_series or []
+            'spo2_values': combined_spo2
         })
     
     return jsonify(activities_list)
@@ -2077,6 +2146,41 @@ def o2ring_delete_file(file_id):
     except Exception as e:
         logger.error(f"Error deleting O2Ring file: {e}")
         return jsonify({'success': False, 'error': f'Error deleting file: {str(e)}'}), 500
+
+def get_o2ring_data_for_period(start_timestamp, end_timestamp):
+    """
+    Get O2Ring data for a specific time period.
+    
+    Args:
+        start_timestamp: Start timestamp in milliseconds
+        end_timestamp: End timestamp in milliseconds
+        
+    Returns:
+        List of [timestamp, spo2_value] pairs
+    """
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT timestamp, spo2_value
+            FROM o2ring_data 
+            WHERE timestamp >= ? AND timestamp <= ?
+            ORDER BY timestamp
+        """, (start_timestamp, end_timestamp))
+        
+        data_points = []
+        for row in cur.fetchall():
+            data_points.append([row['timestamp'], row['spo2_value']])
+        
+        cur.close()
+        conn.close()
+        
+        return data_points
+        
+    except Exception as e:
+        logger.error(f"Error getting O2Ring data for period {start_timestamp}-{end_timestamp}: {e}")
+        return []
 
 def parse_o2ring_timestamp(time_str):
     """
