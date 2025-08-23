@@ -3826,16 +3826,16 @@ function createHeartRateChart(dateLabel, dayData) {
                     y: spo2Value
                 });
                 
-                // Add alert data (87 if reminder > 0, null otherwise)
-                const alertValue = spo2Reminder > 0 ? 87 : null;
+                // Add alert data (87 if SpO2 <= 87, null otherwise)
+                const alertValue = spo2Value <= 87 ? 87 : null;
                 spo2Alerts.push({
                     x: timestamp,
                     y: alertValue
                 });
                 
-                if (spo2Reminder > 0) {
+                if (spo2Value <= 87) {
                     alertCount++;
-                    console.log('Found SpO2 alert at:', timestamp, 'SpO2:', spo2Value, 'Reminder:', spo2Reminder);
+                    console.log('Found SpO2 alert at:', timestamp, 'SpO2:', spo2Value);
                 }
             }
         });
@@ -4175,16 +4175,16 @@ function createActivityHeartRateChart(activity) {
                     y: spo2Value
                 });
                 
-                // Add alert data (87 if reminder > 0, null otherwise)
-                const alertValue = spo2Reminder > 0 ? 87 : null;
+                // Add alert data (87 if SpO2 <= 87, null otherwise)
+                const alertValue = spo2Value <= 87 ? 87 : null;
                 spo2Alerts.push({
                     x: spo2Timestamp,
                     y: alertValue
                 });
                 
-                if (spo2Reminder > 0) {
+                if (spo2Value <= 87) {
                     alertCount++;
-                    console.log('Found activity SpO2 alert at:', spo2Timestamp, 'SpO2:', spo2Value, 'Reminder:', spo2Reminder);
+                    console.log('Found activity SpO2 alert at:', spo2Timestamp, 'SpO2:', spo2Value);
                 }
             }
         });
