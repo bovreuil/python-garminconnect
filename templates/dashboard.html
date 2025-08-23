@@ -2739,35 +2739,68 @@ function createSpo2Chart(dateLabel, spo2Data, chartId, containerId) {
         }
     }
     
-    // Process SpO2 data
+    // Process SpO2 data with smoothing (one point per minute, averaged from raw data)
     const chartLabels = [];
     const chartData = [];
     
     // Sort SpO2 data by timestamp
     const sortedSpo2Data = spo2Data.sort((a, b) => a.x.getTime() - b.x.getTime());
     
-    // Add data points and insert null values for gaps > 5 minutes
-    for (let i = 0; i < sortedSpo2Data.length; i++) {
-        const currentPoint = sortedSpo2Data[i];
+    // First, create averaged data points for each minute
+    const averagedDataPoints = [];
+    
+    // Process each minute
+    for (let hour = 0; hour < 24; hour++) {
+        for (let minute = 0; minute < 60; minute += 1) {
+            const minuteStart = new Date(chartDate);
+            minuteStart.setHours(hour, minute, 0, 0);
+            
+            const minuteEnd = new Date(chartDate);
+            minuteEnd.setHours(hour, minute, 59, 999);
+            
+            // Find all data points within this minute
+            const pointsInMinute = sortedSpo2Data.filter(point => {
+                const pointTime = point.x.getTime();
+                return pointTime >= minuteStart.getTime() && pointTime <= minuteEnd.getTime();
+            });
+            
+            if (pointsInMinute.length > 0) {
+                // Calculate average of all points in this minute
+                const sum = pointsInMinute.reduce((acc, point) => acc + point.y, 0);
+                const average = sum / pointsInMinute.length;
+                
+                // Add the average point at the middle of the minute
+                const minuteMiddle = new Date(minuteStart.getTime() + 30 * 1000); // 30 seconds into the minute
+                averagedDataPoints.push({
+                    timestamp: minuteMiddle,
+                    value: average
+                });
+            }
+        }
+    }
+    
+    // Add data points and insert null values for gaps > 5 minutes (same logic as HR chart)
+    for (let i = 0; i < averagedDataPoints.length; i++) {
+        const currentPoint = averagedDataPoints[i];
         
         // Add the current data point
-        chartLabels.push(currentPoint.x);
-        chartData.push(currentPoint.y);
+        chartLabels.push(currentPoint.timestamp);
+        chartData.push(currentPoint.value);
         
         // Check if there's a gap to the next point
-        if (i < sortedSpo2Data.length - 1) {
-            const nextPoint = sortedSpo2Data[i + 1];
-            const gapMinutes = (nextPoint.x.getTime() - currentPoint.x.getTime()) / (1000 * 60);
+        if (i < averagedDataPoints.length - 1) {
+            const nextPoint = averagedDataPoints[i + 1];
+            const gapMinutes = (nextPoint.timestamp.getTime() - currentPoint.timestamp.getTime()) / (1000 * 60);
             
             // If gap is > 5 minutes, add a null point to create a visual break
             if (gapMinutes > 5) {
                 // Add a null point 1 minute after the current segment
-                const gapTimestamp = new Date(currentPoint.x.getTime() + (1 * 60 * 1000));
+                const gapTimestamp = new Date(currentPoint.timestamp.getTime() + (1 * 60 * 1000)); // 1 minute after current
                 chartLabels.push(gapTimestamp);
                 chartData.push(null);
                 
                 // Add a null point 1 minute before the next segment
-                const nextGapTimestamp = new Date(nextPoint.x.getTime() - (1 * 60 * 1000));
+                const nextGapTimestamp = new Date(nextPoint.timestamp.getTime() - (1 * 60 * 1000)); // 1 minute before next
                 chartLabels.push(nextGapTimestamp);
                 chartData.push(null);
             }
