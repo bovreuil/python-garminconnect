@@ -2887,15 +2887,14 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
                 {
                     label: 'SpO2 Alerts',
                     data: spo2Alerts,
-                    borderColor: '#ffc107', // Bright yellow
-                    backgroundColor: '#ffc107', // Bright yellow
-                    borderWidth: 2,
+                    borderColor: '#ffc107',
+                    backgroundColor: '#ffc107',
+                    borderWidth: 0,
                     fill: false,
-                    tension: 0,
-                    pointRadius: 3,
-                    pointHoverRadius: 4,
+                    tension: 0.1,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
                     pointHoverBackgroundColor: '#ffc107',
-                    pointHoverBorderColor: '#ffc107',
                     order: 1 // Draw on top of SpO2 line
                 }
             ]
@@ -3203,15 +3202,14 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
                 {
                     label: 'SpO2 Alerts',
                     data: spo2Alerts,
-                    borderColor: '#ffc107', // Bright yellow
-                    backgroundColor: '#ffc107', // Bright yellow
-                    borderWidth: 2,
+                    borderColor: '#ffc107',
+                    backgroundColor: '#ffc107',
+                    borderWidth: 0,
                     fill: false,
-                    tension: 0,
-                    pointRadius: 3,
-                    pointHoverRadius: 4,
+                    tension: 0.1,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
                     pointHoverBackgroundColor: '#ffc107',
-                    pointHoverBorderColor: '#ffc107',
                     order: 1 // Draw on top of SpO2 line
                 }
             ]
@@ -3484,6 +3482,20 @@ function createActivityBreathingChart(activity, breathingData, chartId, containe
                     pointHoverRadius: 4,
                     pointHoverBackgroundColor: '#6c757d',
                     order: 0
+                },
+                // Dummy alert dataset to match SpO2 chart area calculation
+                {
+                    label: 'Dummy Alerts',
+                    data: [{ x: startTime, y: 40 }],
+                    borderColor: '#f8f9fa',
+                    backgroundColor: '#f8f9fa',
+                    borderWidth: 0,
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: '#f8f9fa',
+                    order: 1
                 }
             ]
         },
@@ -3911,6 +3923,20 @@ function createHeartRateChart(dateLabel, dayData) {
                 pointHoverRadius: 4,
                 pointHoverBackgroundColor: '#e74c3c',
                 order: 0
+            },
+            // Dummy alert dataset to match SpO2 chart area calculation
+            {
+                label: 'Dummy Alerts',
+                data: [{ x: new Date(chartDate.getFullYear(), chartDate.getMonth(), chartDate.getDate(), 12, 0, 0), y: 40 }],
+                borderColor: '#002040',
+                backgroundColor: '#002040',
+                borderWidth: 0,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointHoverBackgroundColor: '#002040',
+                order: 1
             }
         ];
         
@@ -4450,6 +4476,20 @@ function createActivityHeartRateChart(activity) {
                  pointHoverBackgroundColor: '#e74c3c',
                  order: 0,
                  yAxisID: 'y'
+             },
+             // Dummy alert dataset to match SpO2 chart area calculation
+             {
+                 label: 'Dummy Alerts',
+                 data: [{ x: startTime, y: 40 }],
+                 borderColor: '#002040',
+                 backgroundColor: '#002040',
+                 borderWidth: 0,
+                 fill: false,
+                 tension: 0.1,
+                 pointRadius: 4,
+                 pointHoverRadius: 6,
+                 pointHoverBackgroundColor: '#002040',
+                 order: 1
              }
         ];
         
