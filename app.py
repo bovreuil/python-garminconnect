@@ -1991,19 +1991,23 @@ def o2ring_upload():
                 # Parse heart rate
                 heart_rate = int(row[2])
                 
-                # Parse motion warnings
-                motion_warnings = int(row[3])
+                # Parse motion
+                motion = int(row[3])
                 
-                # Parse HR warnings
-                hr_warnings = int(row[4])
+                # Parse SpO2 Reminder
+                spo2_reminder = int(row[4])
+                
+                # Parse PR Reminder
+                pr_reminder = int(row[5])
                 
                 # Store data point
                 data_points.append({
                     'timestamp': timestamp,
                     'spo2_value': spo2_value,
                     'heart_rate': heart_rate,
-                    'motion_warnings': motion_warnings,
-                    'hr_warnings': hr_warnings
+                    'motion': motion,
+                    'spo2_reminder': spo2_reminder,
+                    'pr_reminder': pr_reminder
                 })
                 
                 # Track first and last timestamps
@@ -2034,15 +2038,16 @@ def o2ring_upload():
         # Insert data points
         for point in data_points:
             cur.execute("""
-                INSERT INTO o2ring_data (file_id, timestamp, spo2_value, heart_rate, motion_warnings, hr_warnings)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO o2ring_data (file_id, timestamp, spo2_value, heart_rate, motion, spo2_reminder, pr_reminder)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 file_id,
                 point['timestamp'],
                 point['spo2_value'],
                 point['heart_rate'],
-                point['motion_warnings'],
-                point['hr_warnings']
+                point['motion'],
+                point['spo2_reminder'],
+                point['pr_reminder']
             ))
         
         conn.commit()
@@ -2156,14 +2161,14 @@ def get_o2ring_data_for_period(start_timestamp, end_timestamp):
         end_timestamp: End timestamp in milliseconds
         
     Returns:
-        List of [timestamp, spo2_value] pairs
+        List of [timestamp, spo2_value, spo2_reminder] tuples
     """
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         
         cur.execute("""
-            SELECT timestamp, spo2_value
+            SELECT timestamp, spo2_value, spo2_reminder
             FROM o2ring_data 
             WHERE timestamp >= ? AND timestamp <= ?
             ORDER BY timestamp
@@ -2171,7 +2176,7 @@ def get_o2ring_data_for_period(start_timestamp, end_timestamp):
         
         data_points = []
         for row in cur.fetchall():
-            data_points.append([row['timestamp'], row['spo2_value']])
+            data_points.append([row['timestamp'], row['spo2_value'], row['spo2_reminder']])
         
         cur.close()
         conn.close()

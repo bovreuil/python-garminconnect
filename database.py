@@ -290,8 +290,9 @@ def init_database():
             timestamp BIGINT NOT NULL,        -- Unix timestamp in milliseconds
             spo2_value INTEGER NOT NULL,      -- 0-100
             heart_rate INTEGER NOT NULL,      -- BPM
-            motion_warnings INTEGER NOT NULL, -- Number of low SpO2 warnings
-            hr_warnings INTEGER NOT NULL,     -- Number of HR range warnings
+            motion INTEGER NOT NULL,          -- Motion level
+            spo2_reminder INTEGER NOT NULL,   -- SpO2 Reminder (0 or low integer)
+            pr_reminder INTEGER NOT NULL,     -- PR Reminder (0 or low integer)
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (file_id) REFERENCES o2ring_files(id) ON DELETE CASCADE
         )
