@@ -2698,7 +2698,22 @@ function createActivitiesChart(activities) {
 }
 
 // Create SpO2 chart for daily view
-function createSpo2Chart(dateLabel, spo2Data, chartId, containerId) {
+function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) {
+    console.log('createSpo2Chart called with:', {
+        dateLabel,
+        spo2DataLength: spo2Data.length,
+        spo2AlertsLength: spo2Alerts.length,
+        chartId,
+        containerId
+    });
+    
+    // Log alert data
+    const alertPoints = spo2Alerts.filter(alert => alert.y !== null);
+    console.log('Alert points to display:', alertPoints.length);
+    if (alertPoints.length > 0) {
+        console.log('First few alert points:', alertPoints.slice(0, 3));
+    }
+    
     const chartElement = document.getElementById(chartId);
     const containerElement = document.getElementById(containerId);
     
@@ -2864,6 +2879,21 @@ function createSpo2Chart(dateLabel, spo2Data, chartId, containerId) {
                     pointHoverRadius: 4,
                     pointHoverBackgroundColor: '#000080',
                     order: 0
+                },
+                // SpO2 alert line
+                {
+                    label: 'SpO2 Alerts',
+                    data: spo2Alerts,
+                    borderColor: '#ffc107', // Bright yellow
+                    backgroundColor: '#ffc107', // Bright yellow
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0,
+                    pointRadius: 3,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: '#ffc107',
+                    pointHoverBorderColor: '#ffc107',
+                    order: 1 // Draw on top of SpO2 line
                 }
             ]
         },
@@ -2895,6 +2925,8 @@ function createSpo2Chart(dateLabel, spo2Data, chartId, containerId) {
                         label: function(context) {
                             if (context.dataset.label === 'SpO2 (%)') {
                                 return `SpO2: ${context.parsed.y}%`;
+                            } else if (context.dataset.label === 'SpO2 Alerts') {
+                                return `SpO2 Alert: ${context.parsed.y}%`;
                             }
                             return null;
                         }
@@ -2985,7 +3017,22 @@ function createSpo2Chart(dateLabel, spo2Data, chartId, containerId) {
 }
 
 // Create SpO2 chart for activity view
-function createActivitySpo2Chart(activity, spo2Data, chartId, containerId, startTime, endTime, optimalInterval, activityDurationMinutes) {
+function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, containerId, startTime, endTime, optimalInterval, activityDurationMinutes) {
+    console.log('createActivitySpo2Chart called with:', {
+        activityId: activity.activity_id,
+        spo2DataLength: spo2Data.length,
+        spo2AlertsLength: spo2Alerts.length,
+        chartId,
+        containerId
+    });
+    
+    // Log alert data
+    const alertPoints = spo2Alerts.filter(alert => alert.y !== null);
+    console.log('Activity alert points to display:', alertPoints.length);
+    if (alertPoints.length > 0) {
+        console.log('First few activity alert points:', alertPoints.slice(0, 3));
+    }
+    
     const chartElement = document.getElementById(chartId);
     const containerElement = document.getElementById(containerId);
     
@@ -3147,6 +3194,21 @@ function createActivitySpo2Chart(activity, spo2Data, chartId, containerId, start
                     pointHoverRadius: 4,
                     pointHoverBackgroundColor: '#000080',
                     order: 0
+                },
+                // SpO2 alert line
+                {
+                    label: 'SpO2 Alerts',
+                    data: spo2Alerts,
+                    borderColor: '#ffc107', // Bright yellow
+                    backgroundColor: '#ffc107', // Bright yellow
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0,
+                    pointRadius: 3,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: '#ffc107',
+                    pointHoverBorderColor: '#ffc107',
+                    order: 1 // Draw on top of SpO2 line
                 }
             ]
         },
@@ -3186,6 +3248,8 @@ function createActivitySpo2Chart(activity, spo2Data, chartId, containerId, start
                         label: function(context) {
                             if (context.dataset.label === 'SpO2 (%)') {
                                 return `SpO2: ${context.parsed.y}%`;
+                            } else if (context.dataset.label === 'SpO2 Alerts') {
+                                return `SpO2 Alert: ${context.parsed.y}%`;
                             }
                             return null;
                         }
@@ -3738,10 +3802,14 @@ function createHeartRateChart(dateLabel, dayData) {
     
     // Process SpO2 data if available
     const spo2Data = [];
+    const spo2Alerts = [];
     if (dayData.spo2_values && Array.isArray(dayData.spo2_values) && dayData.spo2_values.length > 0) {
+        console.log('Processing SpO2 data for day:', dayData.spo2_values.length, 'points');
+        let alertCount = 0;
         dayData.spo2_values.forEach(spo2Point => {
             const timestamp = new Date(spo2Point[0]);
             const spo2Value = spo2Point[1];
+            const spo2Reminder = spo2Point[2] || 0; // SpO2 Reminder column
             
             // Only include SpO2 data for this day
             if (timestamp.getDate() === chartDate.getDate() && 
@@ -3751,12 +3819,27 @@ function createHeartRateChart(dateLabel, dayData) {
                     x: timestamp,
                     y: spo2Value
                 });
+                
+                // Add alert data (87 if reminder > 0, null otherwise)
+                const alertValue = spo2Reminder > 0 ? 87 : null;
+                spo2Alerts.push({
+                    x: timestamp,
+                    y: alertValue
+                });
+                
+                if (spo2Reminder > 0) {
+                    alertCount++;
+                    console.log('Found SpO2 alert at:', timestamp, 'SpO2:', spo2Value, 'Reminder:', spo2Reminder);
+                }
             }
         });
+        console.log('Day SpO2 processing complete. Total alerts found:', alertCount);
+        console.log('SpO2 data points:', spo2Data.length);
+        console.log('SpO2 alert points:', spo2Alerts.length);
     }
     
     // Create SpO2 chart if data exists
-    createSpo2Chart(dateLabel, spo2Data, 'spo2Chart', 'spo2ChartContainer');
+    createSpo2Chart(dateLabel, spo2Data, spo2Alerts, 'spo2Chart', 'spo2ChartContainer');
     
     // Small delay to ensure DOM is ready
     setTimeout(() => {
@@ -4066,19 +4149,38 @@ function createActivityHeartRateChart(activity) {
     
     // Process SpO2 data if available - filter to fit within Garmin activity range
     const spo2Data = [];
+    const spo2Alerts = [];
     if (activity.spo2_values && activity.spo2_values.length > 0) {
         console.log('Processing SpO2 data for activity:', activity.spo2_values.length, 'points');
+        let alertCount = 0;
         activity.spo2_values.forEach(spo2Point => {
             const spo2Timestamp = new Date(spo2Point[0]);
+            const spo2Value = spo2Point[1];
+            const spo2Reminder = spo2Point[2] || 0; // SpO2 Reminder column
+            
             // Only include SpO2 data that falls within the Garmin activity range
             if (spo2Timestamp >= garminStartTime && spo2Timestamp <= garminEndTime) {
                 spo2Data.push({
                     x: spo2Timestamp,
-                    y: spo2Point[1]
+                    y: spo2Value
                 });
+                
+                // Add alert data (87 if reminder > 0, null otherwise)
+                const alertValue = spo2Reminder > 0 ? 87 : null;
+                spo2Alerts.push({
+                    x: spo2Timestamp,
+                    y: alertValue
+                });
+                
+                if (spo2Reminder > 0) {
+                    alertCount++;
+                    console.log('Found activity SpO2 alert at:', spo2Timestamp, 'SpO2:', spo2Value, 'Reminder:', spo2Reminder);
+                }
             }
         });
+        console.log('Activity SpO2 processing complete. Total alerts found:', alertCount);
         console.log('Filtered SpO2 data points within Garmin range:', spo2Data.length);
+        console.log('SpO2 alert points:', spo2Alerts.length);
     }
     
     // Process breathing data if available - filter to fit within Garmin activity range
@@ -4483,7 +4585,7 @@ function createActivityHeartRateChart(activity) {
         console.log('Activity chart dimensions after creation:', chartElement.offsetWidth, 'x', chartElement.offsetHeight);
         
         // Create SpO2 chart if data exists (using standardized range and gridlines)
-        createActivitySpo2Chart(activity, spo2Data, 'activitySpo2Chart', 'activitySpo2ChartContainer', garminStartTime, garminEndTime, optimalInterval, activityDurationMinutes);
+        createActivitySpo2Chart(activity, spo2Data, spo2Alerts, 'activitySpo2Chart', 'activitySpo2ChartContainer', garminStartTime, garminEndTime, optimalInterval, activityDurationMinutes);
         
         // Create breathing chart if data exists (using standardized range and gridlines)
         createActivityBreathingChart(activity, breathingData, 'activityBreathingChart', 'activityBreathingChartContainer', garminStartTime, garminEndTime, optimalInterval, activityDurationMinutes);
