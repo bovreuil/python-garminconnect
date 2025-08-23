@@ -2918,15 +2918,16 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
                                 const day = String(date.getDate()).padStart(2, '0');
                                 const hour = String(date.getHours()).padStart(2, '0');
                                 const minute = String(date.getMinutes()).padStart(2, '0');
-                                return `Time: ${year}-${month}-${day} ${hour}:${minute}`;
+                                const second = String(date.getSeconds()).padStart(2, '0');
+                                return `Time: ${year}-${month}-${day} ${hour}:${minute}:${second}`;
                             }
                             return `Time: ${context[0].label}`;
                         },
                         label: function(context) {
                             if (context.dataset.label === 'SpO2 (%)') {
-                                return `SpO2: ${context.parsed.y}%`;
+                                return `SpO2: ${context.parsed.y.toFixed(1)}%`;
                             } else if (context.dataset.label === 'SpO2 Alerts') {
-                                return `SpO2 Alert: ${context.parsed.y}%`;
+                                return `SpO2 Alert: ${context.parsed.y.toFixed(1)}%`;
                             }
                             return null;
                         }
@@ -3237,19 +3238,20 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
                                     const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
                                     return `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
                                 } else {
-                                    // For 5m and larger intervals: use h:mm format
+                                    // For 5m and larger intervals: use h:mm:ss format
                                     const hours = Math.floor(totalMinutes / 60);
                                     const minutes = Math.floor(totalMinutes % 60);
-                                    return `Time: ${hours}:${minutes.toString().padStart(2, '0')}`;
+                                    const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                                    return `Time: ${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
                                 }
                             }
                             return `Time: ${context[0].label}`;
                         },
                         label: function(context) {
                             if (context.dataset.label === 'SpO2 (%)') {
-                                return `SpO2: ${context.parsed.y}%`;
+                                return `SpO2: ${context.parsed.y.toFixed(1)}%`;
                             } else if (context.dataset.label === 'SpO2 Alerts') {
-                                return `SpO2 Alert: ${context.parsed.y}%`;
+                                return `SpO2 Alert: ${context.parsed.y.toFixed(1)}%`;
                             }
                             return null;
                         }
@@ -3507,17 +3509,18 @@ function createActivityBreathingChart(activity, breathingData, chartId, containe
                                     const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
                                     return `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
                                 } else {
-                                    // For 5m and larger intervals: use h:mm format
+                                    // For 5m and larger intervals: use h:mm:ss format
                                     const hours = Math.floor(totalMinutes / 60);
                                     const minutes = Math.floor(totalMinutes % 60);
-                                    return `Time: ${hours}:${minutes.toString().padStart(2, '0')}`;
+                                    const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                                    return `Time: ${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
                                 }
                             }
                             return `Time: ${context[0].label}`;
                         },
                         label: function(context) {
                             if (context.dataset.label === 'Breathing (BRPM)') {
-                                return `Breathing: ${context.parsed.y} BRPM`;
+                                return `Breathing: ${context.parsed.y.toFixed(1)} BRPM`;
                             }
                             return null;
                         }
@@ -3934,7 +3937,8 @@ function createHeartRateChart(dateLabel, dayData) {
                                     const day = String(date.getDate()).padStart(2, '0');
                                     const hour = String(date.getHours()).padStart(2, '0');
                                     const minute = String(date.getMinutes()).padStart(2, '0');
-                                    return `Time: ${year}-${month}-${day} ${hour}:${minute}`;
+                                    const second = String(date.getSeconds()).padStart(2, '0');
+                                    return `Time: ${year}-${month}-${day} ${hour}:${minute}:${second}`;
                                 }
                                 // Fallback to the label if raw data not available
                                 return `Time: ${context[0].label}`;
@@ -4480,10 +4484,11 @@ function createActivityHeartRateChart(activity) {
                                         const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
                                         return `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
                                     } else {
-                                        // For 5m and larger intervals: use h:mm format
+                                        // For 5m and larger intervals: use h:mm:ss format
                                         const hours = Math.floor(totalMinutes / 60);
                                         const minutes = Math.floor(totalMinutes % 60);
-                                        return `Time: ${hours}:${minutes.toString().padStart(2, '0')}`;
+                                        const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                                        return `Time: ${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
                                     }
                                 }
                                 // Fallback to the label if raw data not available
