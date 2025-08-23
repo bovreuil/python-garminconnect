@@ -2828,10 +2828,13 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
         data: {
             labels: labels,
             datasets: [
-                // Background dataset with SpO2 color bands
+                // Background dataset with SpO2 color bands (only 2 points to avoid tooltip interference)
                 {
                     label: 'Background',
-                    data: labels.map(label => ({ x: label, y: 100 })),
+                    data: [
+                        { x: labels[0], y: 100 },
+                        { x: labels[labels.length - 1], y: 100 }
+                    ],
                     borderColor: 'transparent',
                     backgroundColor: function(context) {
                         const chart = context.chart;
@@ -3848,10 +3851,13 @@ function createHeartRateChart(dateLabel, dayData) {
     setTimeout(() => {
         // Create datasets array (HR only - SpO2 is in separate chart)
         const datasets = [
-            // Single background dataset with gradient
+            // Single background dataset with gradient (only 2 points to avoid tooltip interference)
             {
                 label: 'Background',
-                data: labels.map(label => ({ x: label, y: 160 })), // Full height background for 24-hour timeline
+                data: [
+                    { x: labels[0], y: 160 },
+                    { x: labels[labels.length - 1], y: 160 }
+                ], // Full height background for 24-hour timeline
                 borderColor: 'transparent',
                 backgroundColor: function(context) {
                     const chart = context.chart;
@@ -3948,7 +3954,7 @@ function createHeartRateChart(dateLabel, dayData) {
                                 if (context.dataset.label === 'Heart Rate (BPM)') {
                                     return `Heart Rate: ${context.parsed.y} BPM`;
                                 } else if (context.dataset.label === 'SpO2 (%)') {
-                                    return `SpO2: ${context.parsed.y}%`;
+                                    return `SpO2: ${context.parsed.y.toFixed(1)}%`;
                                 }
                                 return null; // Hide background dataset from tooltip
                             }
