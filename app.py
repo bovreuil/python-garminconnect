@@ -1968,6 +1968,10 @@ def o2ring_upload():
         first_timestamp = None
         last_timestamp = None
         
+        # First pass: collect all rows and identify invalid ones
+        all_rows = []
+        invalid_indices = set()
+        
         for row_num, row in enumerate(reader, start=2):  # Start at 2 because we skipped header
             if len(row) < 6:  # Need at least 6 columns
                 logger.warning(f"Skipping row {row_num}: insufficient columns")
@@ -2000,8 +2004,22 @@ def o2ring_upload():
                 # Parse PR Reminder
                 pr_reminder = int(row[5])
                 
-                # Store data point
-                data_points.append({
+                # Check for device recording failures
+                if spo2_value == 255 or heart_rate == 65535:
+                    # Mark this row and adjacent rows as invalid
+                    current_index = len(all_rows)
+                    invalid_indices.add(current_index)  # Current row
+                    if current_index > 0:
+                        invalid_indices.add(current_index - 1)  # Previous row
+                    if current_index < len(all_rows):
+                        invalid_indices.add(current_index + 1)  # Next row (will be added)
+                    
+                    logger.warning(f"Row {row_num}: Device recording failure detected (SpO2: {spo2_value}, HR: {heart_rate}) - skipping this row and adjacent rows")
+                    continue
+                
+                # Store row data
+                all_rows.append({
+                    'row_num': row_num,
                     'timestamp': timestamp,
                     'spo2_value': spo2_value,
                     'heart_rate': heart_rate,
@@ -2010,15 +2028,27 @@ def o2ring_upload():
                     'pr_reminder': pr_reminder
                 })
                 
-                # Track first and last timestamps
-                if first_timestamp is None or timestamp < first_timestamp:
-                    first_timestamp = timestamp
-                if last_timestamp is None or timestamp > last_timestamp:
-                    last_timestamp = timestamp
-                
             except (ValueError, IndexError) as e:
                 logger.warning(f"Skipping row {row_num}: parsing error: {e}")
                 continue
+        
+        # Second pass: filter out invalid rows and their adjacent rows
+        for i, row_data in enumerate(all_rows):
+            if i not in invalid_indices:
+                data_points.append({
+                    'timestamp': row_data['timestamp'],
+                    'spo2_value': row_data['spo2_value'],
+                    'heart_rate': row_data['heart_rate'],
+                    'motion': row_data['motion'],
+                    'spo2_reminder': row_data['spo2_reminder'],
+                    'pr_reminder': row_data['pr_reminder']
+                })
+                
+                # Track first and last timestamps
+                if first_timestamp is None or row_data['timestamp'] < first_timestamp:
+                    first_timestamp = row_data['timestamp']
+                if last_timestamp is None or row_data['timestamp'] > last_timestamp:
+                    last_timestamp = row_data['timestamp']
         
         if not data_points:
             return jsonify({'success': False, 'error': 'No valid data points found in CSV'}), 400
