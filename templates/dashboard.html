@@ -111,37 +111,24 @@
                 
 
                 
-                <!-- Day Summary and SpO2 Distribution -->
-                <!-- Day Summary and Heart Rate Zones -->
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <h6 id="selectedDateTitle">Day Summary</h6>
-                        <div id="dateDetails">
-                            <p class="text-muted">Click on a column above to view details</p>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <h6>Heart Rate Zones</h6>
-                        <div id="zoneBreakdown">
-                            <p class="text-muted">Zone breakdown will appear here</p>
-                        </div>
-                    </div>
-                </div>
-                
                 <!-- SpO2 Distribution Charts -->
-                <div class="row mb-4" id="spo2DistributionChartsContainer" style="display: none;">
-                    <div class="col-md-6">
-                        <h6>SpO2 Time at Each Level</h6>
-                                        <div class="chart-container" style="height: 320px; max-width: 100%; overflow: hidden;">
-                    <canvas id="spo2AtLevelChart"></canvas>
-                </div>
-                    </div>
-                    <div class="col-md-6">
-                        <h6>SpO2 Time at or Below Level</h6>
-                                        <div class="chart-container" style="height: 320px; max-width: 100%; overflow: hidden;">
-                    <canvas id="spo2AtOrBelowChart"></canvas>
-                </div>
-                    </div>
+                <div class="mb-4" id="spo2DistributionChartsContainer" style="display: none;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="width: 50%; vertical-align: top; padding-right: 10px;">
+                                <h6>SpO2 Time at or Below Level</h6>
+                                <div class="chart-container" style="height: 320px; margin: 0; width: 100%;">
+                                    <canvas id="spo2AtOrBelowChart"></canvas>
+                                </div>
+                            </td>
+                            <td style="width: 50%; vertical-align: top; padding-left: 10px;">
+                                <h6>Notes</h6>
+                                <div id="dailyNotes" class="notes-field" onclick="editDailyNotes(selectedDate)">
+                                    <p class="mb-0"></p>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
                 </div>
                 
                 <!-- Activities Chart -->
@@ -199,36 +186,24 @@
                                 
 
                                 
-                                <!-- Activity Summary and Heart Rate Zones -->
-                                <div class="row mb-4">
-                                    <div class="col-md-6">
-                                        <h6>Activity Summary</h6>
-                                        <div id="activitySummary">
-                                            <p class="text-muted">Activity summary will appear here</p>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <h6>Heart Rate Zones</h6>
-                                        <div id="activityZoneBreakdown">
-                                            <p class="text-muted">Zone breakdown will appear here</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                
                                 <!-- Activity SpO2 Distribution Charts -->
-                                <div class="row mb-4" id="activitySpo2DistributionChartsContainer" style="display: none;">
-                                    <div class="col-md-6">
-                                        <h6>SpO2 Time at Each Level</h6>
-                                                        <div class="chart-container" style="height: 320px; max-width: 100%; overflow: hidden;">
-                    <canvas id="activitySpo2AtLevelChart"></canvas>
-                </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <h6>SpO2 Time at or Below Level</h6>
-                                                        <div class="chart-container" style="height: 320px; max-width: 100%; overflow: hidden;">
-                    <canvas id="activitySpo2AtOrBelowChart"></canvas>
-                </div>
-                                    </div>
+                                <div class="mb-4" id="activitySpo2DistributionChartsContainer" style="display: none;">
+                                    <table style="width: 100%; border-collapse: collapse;">
+                                        <tr>
+                                            <td style="width: 50%; vertical-align: top; padding-right: 10px;">
+                                                <h6>SpO2 Time at or Below Level</h6>
+                                                <div class="chart-container" style="height: 320px; margin: 0; width: 100%;">
+                                                    <canvas id="activitySpo2AtOrBelowChart"></canvas>
+                                                </div>
+                                            </td>
+                                            <td style="width: 50%; vertical-align: top; padding-left: 10px;">
+                                                <h6>Notes</h6>
+                                                <div id="activityNotes" class="notes-field" onclick="editActivityNotes(selectedActivity ? selectedActivity.activity_id : '')">
+                                                    <p class="mb-0"></p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </table>
                                 </div>
                             </div>
                         </div>
@@ -514,9 +489,7 @@ let activitiesChart = null;
 let activityHrChart = null;
 let activitySpo2Chart = null;
 let activityBreathingChart = null;
-let spo2AtLevelChart = null;
 let spo2AtOrBelowChart = null;
-let activitySpo2AtLevelChart = null;
 let activitySpo2AtOrBelowChart = null;
 let currentStartDate = null;
 let currentEndDate = null;
@@ -1410,130 +1383,26 @@ function showSingleDateView(dateLabel, dayData) {
     
     // Update the single date title with the formatted date
     document.getElementById('singleDateTitle').textContent = dateDisplayStr;
-    document.getElementById('selectedDateTitle').textContent = 'Day Summary';
     
     if (!dayData) {
-        document.getElementById('dateDetails').innerHTML = '<p class="text-muted">No data available for this date</p>';
-        document.getElementById('zoneBreakdown').innerHTML = '<p class="text-muted">No zone data available</p>';
         // Clear heart rate chart
-            if (hrChart) {
-        hrChart.destroy();
-        hrChart = null;
-    }
-    if (spo2Chart) {
-        spo2Chart.destroy();
-        spo2Chart = null;
-    }
+        if (hrChart) {
+            hrChart.destroy();
+            hrChart = null;
+        }
+        if (spo2Chart) {
+            spo2Chart.destroy();
+            spo2Chart = null;
+        }
     } else {
         // Create 24-hour heart rate chart
         createHeartRateChart(dateLabel, dayData);
         
-        // Display date details
-        let detailsHtml = '<div class="row">';
+        // Load notes for this date
+        loadDailyNotes(dateLabel);
         
-        if (dayData.total_trimp !== undefined) {
-            const hasOverrides = dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0;
-            const trimpValue = hasOverrides ? 
-                Object.values(dayData.trimp_overrides).reduce((sum, value) => sum + value, 0) : 
-                dayData.total_trimp;
-            const trimpLabel = hasOverrides ? 'Override TRIMP' : 'Total TRIMP';
-            
-            detailsHtml += `
-                <div class="col-6">
-                    <div class="text-center p-3 bg-light rounded">
-                        <h4 class="text-primary mb-1">${trimpValue.toFixed(1)}</h4>
-                        <small class="text-muted">${trimpLabel}</small>
-                    </div>
-                </div>
-            `;
-        }
-        
-        if (dayData.presentation_buckets) {
-            const hasOverrides = dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0;
-            let totalMinutes = 0;
-            
-            if (!hasOverrides) {
-                Object.values(dayData.presentation_buckets).forEach(bucket => {
-                    totalMinutes += bucket.minutes || 0;
-                });
-            }
-            
-            detailsHtml += `
-                <div class="col-6">
-                    <div class="text-center p-3 bg-light rounded">
-                        <h4 class="text-success mb-1">${totalMinutes.toFixed(0)}</h4>
-                        <small class="text-muted">Total Minutes</small>
-                    </div>
-                </div>
-            `;
-        }
-        
-        detailsHtml += '</div>';
-        
-        // Add notes section
-        detailsHtml += `
-            <div class="mt-3">
-                <h6 class="mb-2">Notes</h6>
-                <div id="dailyNotes" class="notes-field" onclick="editDailyNotes('${dateLabel}')">
-                    <p class="mb-0"></p>
-                </div>
-            </div>
-        `;
-        
-        document.getElementById('dateDetails').innerHTML = detailsHtml;
-        
-            // Load notes for this date
-    loadDailyNotes(dateLabel);
-    
-    // Check for TRIMP overrides and update icon
-    checkTrimpOverrides(dateLabel);
-        
-        // Display zone breakdown
-        if (dayData.presentation_buckets) {
-            let zoneHtml = '<div class="table-responsive"><table class="table table-sm">';
-            zoneHtml += '<thead><tr><th>Zone</th><th>Minutes</th><th>TRIMP</th><th>%</th></tr></thead><tbody>';
-            
-            const sortedZones = zoneOrder.filter(zone => dayData.presentation_buckets[zone]).reverse();
-            let totalMinutes = 0;
-            let totalTrimp = 0;
-            
-            // Calculate totals first
-            sortedZones.forEach(zone => {
-                const bucket = dayData.presentation_buckets[zone];
-                totalMinutes += bucket.minutes || 0;
-                totalTrimp += bucket.trimp || 0;
-            });
-            
-            // Check if TRIMP overrides are active
-            const hasOverrides = dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0;
-            
-            // Display each zone
-            sortedZones.forEach(zone => {
-                const bucket = dayData.presentation_buckets[zone];
-                const minutes = hasOverrides ? 0 : (bucket.minutes || 0);
-                const trimp = hasOverrides ? (dayData.trimp_overrides[zone] || 0) : (bucket.trimp || 0);
-                const percentage = totalMinutes > 0 ? ((minutes / totalMinutes) * 100).toFixed(1) : '0.0';
-                
-                // Use grey color if overrides are active, otherwise use zone color
-                const badgeColor = hasOverrides ? '#6c757d' : zoneColors[zone];
-                
-                zoneHtml += `
-                    <tr>
-                        <td>
-                            <span class="badge" style="background-color: ${badgeColor}; color: white;">${zone}</span>
-                        </td>
-                        <td>${minutes.toFixed(0)}</td>
-                        <td>${trimp.toFixed(1)}</td>
-                        <td>${percentage}%</td>
-                    </tr>
-                `;
-            });
-            
-            zoneHtml += '</tbody></table></div>';
-            document.getElementById('zoneBreakdown').innerHTML = zoneHtml;
-        } else {
-            document.getElementById('zoneBreakdown').innerHTML = '<p class="text-muted">No zone data available</p>';
-        }
+        // Check for TRIMP overrides and update icon
+        checkTrimpOverrides(dateLabel);
     }
     
     // Show the section
@@ -1671,25 +1540,8 @@ function showSingleActivityView(activity) {
         document.getElementById('activityZoneBreakdown').innerHTML = '<p class="text-muted">No zone data available</p>';
     }
     
-    // Add notes section to activity summary
-    let notesHtml = `
-        <div class="mt-3">
-            <h6 class="mb-2">Notes</h6>
-            <div id="activityNotes" class="notes-field" onclick="editActivityNotes('${activity.activity_id}')">
-                <p class="mb-0"></p>
-            </div>
-        </div>
-    `;
-    document.getElementById('activitySummary').insertAdjacentHTML('beforeend', notesHtml);
-    
     // Load notes for this activity
     loadActivityNotes(activity.activity_id);
-
-    // Remove any previous notes section after the zone breakdown (cleanup)
-    const oldNotes = document.getElementById('activityZoneBreakdown')?.nextElementSibling;
-    if (oldNotes && oldNotes.id === 'activityNotes') {
-        oldNotes.parentNode.removeChild(oldNotes);
-    }
     
     // Scroll to the section
     document.getElementById('singleActivitySection').scrollIntoView({ 
@@ -4926,7 +4778,9 @@ function loadDailySpo2Distribution(dateLabel) {
         .then(response => response.json())
         .then(data => {
             if (data.distribution) {
-                createSpo2DistributionCharts(data.distribution, 'spo2AtLevelChart', 'spo2AtOrBelowChart', 'spo2DistributionChartsContainer');
+                createSpo2DistributionCharts(data.distribution, 'spo2AtOrBelowChart', 'spo2DistributionChartsContainer');
+                // Load notes for this date
+                loadDailyNotes(dateLabel);
             } else {
                 hideSpo2DistributionCharts();
             }
@@ -4942,7 +4796,9 @@ function loadActivitySpo2Distribution(activityId) {
         .then(response => response.json())
         .then(data => {
             if (data.distribution) {
-                createSpo2DistributionCharts(data.distribution, 'activitySpo2AtLevelChart', 'activitySpo2AtOrBelowChart', 'activitySpo2DistributionChartsContainer');
+                createSpo2DistributionCharts(data.distribution, 'activitySpo2AtOrBelowChart', 'activitySpo2DistributionChartsContainer');
+                // Load notes for this activity
+                loadActivityNotes(activityId);
             } else {
                 hideActivitySpo2DistributionCharts();
             }
@@ -4953,7 +4809,7 @@ function loadActivitySpo2Distribution(activityId) {
         });
 }
 
-function createSpo2DistributionCharts(distribution, atLevelChartId, atOrBelowChartId, containerId) {
+function createSpo2DistributionCharts(distribution, atOrBelowChartId, containerId) {
     const container = document.getElementById(containerId);
     if (!container) {
         console.error('SpO2 distribution container not found');
@@ -4962,9 +4818,6 @@ function createSpo2DistributionCharts(distribution, atLevelChartId, atOrBelowCha
     
     // Show container
     container.style.display = 'block';
-    
-    // Create "At Level" chart
-    createSpo2HorizontalBarChart(atLevelChartId, distribution.at_level, 'Time at Each Level');
     
     // Create "At or Below Level" chart
     createSpo2HorizontalBarChart(atOrBelowChartId, distribution.at_or_below_level, 'Time at or Below Level');
@@ -4979,9 +4832,7 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
     
     // Destroy existing chart if it exists
     let existingChart = null;
-    if (chartId === 'spo2AtLevelChart') existingChart = spo2AtLevelChart;
-    else if (chartId === 'spo2AtOrBelowChart') existingChart = spo2AtOrBelowChart;
-    else if (chartId === 'activitySpo2AtLevelChart') existingChart = activitySpo2AtLevelChart;
+    if (chartId === 'spo2AtOrBelowChart') existingChart = spo2AtOrBelowChart;
     else if (chartId === 'activitySpo2AtOrBelowChart') existingChart = activitySpo2AtOrBelowChart;
     
     if (existingChart) {
@@ -5023,6 +4874,11 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
             indexAxis: 'y', // Horizontal bar chart
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    right: 20 // Add some padding for the percentage labels
+                }
+            },
             plugins: {
                 legend: {
                     display: false
@@ -5083,9 +4939,7 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
     });
     
     // Store chart reference
-    if (chartId === 'spo2AtLevelChart') spo2AtLevelChart = newChart;
-    else if (chartId === 'spo2AtOrBelowChart') spo2AtOrBelowChart = newChart;
-    else if (chartId === 'activitySpo2AtLevelChart') activitySpo2AtLevelChart = newChart;
+    if (chartId === 'spo2AtOrBelowChart') spo2AtOrBelowChart = newChart;
     else if (chartId === 'activitySpo2AtOrBelowChart') activitySpo2AtOrBelowChart = newChart;
 }
 
