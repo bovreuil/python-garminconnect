@@ -9,6 +9,7 @@ import os
 from dotenv import load_dotenv
 import logging
 import json
+import hashlib
 
 # Load environment variables
 load_dotenv('env.local')
@@ -194,6 +195,8 @@ def init_database():
             total_trimp FLOAT,
             daily_score FLOAT,
             activity_type VARCHAR(50),
+            cached_trimp_data JSON,
+            trimp_calculation_hash VARCHAR(64),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -216,6 +219,8 @@ def init_database():
             breathing_rate_series JSON,
             trimp_data JSON,
             total_trimp FLOAT,
+            cached_trimp_data JSON,
+            trimp_calculation_hash VARCHAR(64),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (date) REFERENCES daily_data(date)
@@ -313,3 +318,127 @@ def init_database():
     conn.commit()
     cur.close()
     conn.close() 
+
+def calculate_data_hash(data_content):
+    """
+    Calculate a hash of data content for change detection.
+    
+    Args:
+        data_content: The data to hash (can be dict, list, or string)
+        
+    Returns:
+        SHA256 hash string
+    """
+    if data_content is None:
+        return hashlib.sha256(b'null').hexdigest()
+    
+    # Convert to JSON string for consistent hashing
+    json_str = json.dumps(data_content, sort_keys=True)
+    return hashlib.sha256(json_str.encode('utf-8')).hexdigest()
+
+def get_cached_trimp_data(date, data_type='daily'):
+    """
+    Get cached TRIMP data for a date or activity.
+    
+    Args:
+        date: Date string (YYYY-MM-DD) or activity_id
+        data_type: 'daily' or 'activity'
+        
+    Returns:
+        Cached TRIMP data dict or None if not found/invalid
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        if data_type == 'daily':
+            cur.execute("""
+                SELECT cached_trimp_data, trimp_calculation_hash
+                FROM daily_data 
+                WHERE date = ?
+            """, (date,))
+        else:  # activity
+            cur.execute("""
+                SELECT cached_trimp_data, trimp_calculation_hash
+                FROM activity_data 
+                WHERE activity_id = ?
+            """, (date,))
+        
+        result = cur.fetchone()
+        
+        if result and result['cached_trimp_data']:
+            return {
+                'trimp_data': json.loads(result['cached_trimp_data']),
+                'hash': result['trimp_calculation_hash']
+            }
+        return None
+        
+    finally:
+        cur.close()
+        conn.close()
+
+def save_cached_trimp_data(date, trimp_data, data_hash, data_type='daily'):
+    """
+    Save cached TRIMP data for a date or activity.
+    
+    Args:
+        date: Date string (YYYY-MM-DD) or activity_id
+        trimp_data: TRIMP calculation results dict
+        data_hash: Hash of the input data used for calculation
+        data_type: 'daily' or 'activity'
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        trimp_json = json.dumps(trimp_data) if trimp_data else None
+        
+        if data_type == 'daily':
+            cur.execute("""
+                UPDATE daily_data 
+                SET cached_trimp_data = ?, trimp_calculation_hash = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE date = ?
+            """, (trimp_json, data_hash, date))
+        else:  # activity
+            cur.execute("""
+                UPDATE activity_data 
+                SET cached_trimp_data = ?, trimp_calculation_hash = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE activity_id = ?
+            """, (trimp_json, data_hash, date))
+        
+        conn.commit()
+        
+    finally:
+        cur.close()
+        conn.close()
+
+def invalidate_cached_trimp_data(date, data_type='daily'):
+    """
+    Invalidate cached TRIMP data for a date or activity.
+    
+    Args:
+        date: Date string (YYYY-MM-DD) or activity_id
+        data_type: 'daily' or 'activity'
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        if data_type == 'daily':
+            cur.execute("""
+                UPDATE daily_data 
+                SET cached_trimp_data = NULL, trimp_calculation_hash = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE date = ?
+            """, (date,))
+        else:  # activity
+            cur.execute("""
+                UPDATE activity_data 
+                SET cached_trimp_data = NULL, trimp_calculation_hash = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE activity_id = ?
+            """, (date,))
+        
+        conn.commit()
+        
+    finally:
+        cur.close()
+        conn.close() 

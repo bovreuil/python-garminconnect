@@ -31,7 +31,11 @@ from database import (
     update_job_status,
     get_user_data,
     save_user_data,
-    delete_user_data
+    delete_user_data,
+    get_cached_trimp_data,
+    save_cached_trimp_data,
+    calculate_data_hash,
+    invalidate_cached_trimp_data
 )
 
 # Import job functions
@@ -470,13 +474,15 @@ def get_data(date):
     
     if data:
         # Get enriched HR series at read time
-        from jobs import build_daily_hr_timeseries
+        from jobs import build_daily_hr_timeseries, calculate_trimp_with_caching
         
         # Get the enriched HR series (original daily + activity data)
         enriched_hr_series = build_daily_hr_timeseries(date, conn, cur)
         
-        # Use enriched data for display, but keep original TRIMP calculation
-        trimp_data = json.loads(data['trimp_data']) if data['trimp_data'] else {}
+        # Calculate TRIMP with caching
+        trimp_results = calculate_trimp_with_caching(date, enriched_hr_series, 'daily')
+        trimp_data = trimp_results.get('presentation_buckets', {})
+        total_trimp = trimp_results.get('total_trimp', 0.0)
         
         # Debug logging
         print(f"API DEBUG: trimp_data keys: {list(trimp_data.keys())}")
@@ -503,8 +509,8 @@ def get_data(date):
         return jsonify({
             'date': date,
             'heart_rate_values': enriched_hr_series,
-            'presentation_buckets': trimp_data.get('presentation_buckets', {}),
-            'total_trimp': data['total_trimp'],
+            'presentation_buckets': trimp_data,
+            'total_trimp': total_trimp,
             'daily_score': data['daily_score'],
             'activity_type': data['activity_type'],
             'spo2_values': o2ring_data
@@ -525,7 +531,8 @@ def get_data(date):
                     'presentation_buckets': overrides_data,
                     'total_trimp': total_trimp,
                     'daily_score': None,
-                    'activity_type': None
+                    'activity_type': None,
+                    'trimp_overrides': overrides_data
                 })
             except (json.JSONDecodeError, ValueError) as e:
                 logger.error(f"Error parsing TRIMP overrides for {date}: {e}")
@@ -873,6 +880,18 @@ def upload_activity_hr_csv(activity_id):
         logger.info(f"Recalculating TRIMP for activity {activity_id}")
         recalculate_activity_trimp(activity_id, hr_series)
         
+        # Invalidate cached TRIMP data for the activity and its date
+        invalidate_cached_trimp_data(activity_id, 'activity')
+        # Get the activity's date to invalidate daily cache
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT date FROM activity_data WHERE activity_id = ?", (activity_id,))
+        activity = cur.fetchone()
+        if activity:
+            invalidate_cached_trimp_data(activity['date'], 'daily')
+        cur.close()
+        conn.close()
+        
         logger.info(f"CSV upload successful for activity {activity_id}")
         return jsonify({'success': True, 'message': 'CSV uploaded successfully'})
         
@@ -950,10 +969,10 @@ def recalculate_activity_trimp(activity_id, hr_series_override=None):
     logger.info(f"Breathing series: {len(breathing_series)} points")
     
     # Calculate TRIMP using the same logic as in jobs.py
-    from jobs import calculate_trimp_from_timeseries
+    from jobs import calculate_trimp_with_caching
     
     logger.info(f"Calculating TRIMP for {len(hr_series)} HR points")
-    trimp_results = calculate_trimp_from_timeseries(hr_series)
+    trimp_results = calculate_trimp_with_caching(activity_id, hr_series, 'activity')
     logger.info(f"TRIMP results: {trimp_results}")
     
     # Update activity data - but DON'T overwrite the original heart_rate_series
@@ -990,11 +1009,11 @@ def recalculate_activity_trimp(activity_id, hr_series_override=None):
     if date:
         logger.info(f"Extracted date: {date}")
         # Rebuild daily HR series and TRIMP
-        from jobs import build_daily_hr_timeseries, calculate_trimp_from_timeseries
+        from jobs import build_daily_hr_timeseries, calculate_trimp_with_caching
         
         daily_hr_series = build_daily_hr_timeseries(date, conn, cur)
         logger.info(f"Daily HR series: {len(daily_hr_series)} points")
-        daily_trimp_results = calculate_trimp_from_timeseries(daily_hr_series)
+        daily_trimp_results = calculate_trimp_with_caching(date, daily_hr_series, 'daily')
         logger.info(f"Daily TRIMP results: {daily_trimp_results}")
         
         cur.execute("""
@@ -1403,6 +1422,9 @@ def daily_trimp_overrides(date):
                 # Delete existing overrides if empty
                 delete_user_data('daily_trimp_overrides', date)
             
+            # Invalidate cached TRIMP data for this date
+            invalidate_cached_trimp_data(date, 'daily')
+            
             return jsonify({
                 'success': True,
                 'message': 'TRIMP overrides saved successfully',
@@ -1606,7 +1628,10 @@ def create_manual_activity(date):
         
         # Recalculate TRIMP for the day with the new manual activity
         logger.info(f"Recalculating TRIMP for the day")
-        from jobs import build_daily_hr_timeseries, calculate_trimp_from_timeseries
+        # Invalidate cached TRIMP data for this date
+        invalidate_cached_trimp_data(date, 'daily')
+        
+        from jobs import build_daily_hr_timeseries, calculate_trimp_with_caching
         
         try:
             logger.info(f"Opening second database connection for TRIMP calculation")
@@ -1618,7 +1643,7 @@ def create_manual_activity(date):
             
             if final_hr_series:
                 # Recalculate TRIMP for the day
-                trimp_results = calculate_trimp_from_timeseries(final_hr_series)
+                trimp_results = calculate_trimp_with_caching(date, final_hr_series, 'daily')
                 
                 # Update only the TRIMP data, not the HR series
                 cur2.execute("UPDATE daily_data SET trimp_data = ?, total_trimp = ? WHERE date = ?", (
@@ -1699,7 +1724,10 @@ def delete_activity(activity_id):
         
         # Recalculate TRIMP for the day without this activity
         logger.info(f"Recalculating TRIMP for the day after delete")
-        from jobs import build_daily_hr_timeseries, calculate_trimp_from_timeseries
+        # Invalidate cached TRIMP data for this date
+        invalidate_cached_trimp_data(date, 'daily')
+        
+        from jobs import build_daily_hr_timeseries, calculate_trimp_with_caching
         
         try:
             logger.info(f"Opening second database connection for TRIMP calculation")
@@ -1711,7 +1739,7 @@ def delete_activity(activity_id):
             
             if final_hr_series:
                 # Recalculate TRIMP for the day
-                trimp_results = calculate_trimp_from_timeseries(final_hr_series)
+                trimp_results = calculate_trimp_with_caching(date, final_hr_series, 'daily')
                 
                 # Update only the TRIMP data, not the HR series
                 cur2.execute("UPDATE daily_data SET trimp_data = ?, total_trimp = ? WHERE date = ?", (
@@ -2244,6 +2272,89 @@ def parse_o2ring_timestamp(time_str):
     except Exception as e:
         logger.error(f"Error parsing O2Ring timestamp '{time_str}': {e}")
         return None
+
+@app.route('/api/data/batch', methods=['POST'])
+def get_batch_data():
+    """Get TRIMP data for multiple dates in a single request."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.get_json()
+    if not data or 'dates' not in data:
+        return jsonify({'error': 'No dates provided'}), 400
+    
+    dates = data['dates']
+    if not isinstance(dates, list) or len(dates) == 0:
+        return jsonify({'error': 'Invalid dates format'}), 400
+    
+    # Validate date format for all dates
+    for date in dates:
+        if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
+            return jsonify({'error': f'Invalid date format: {date}. Expected YYYY-MM-DD'}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    results = {}
+    
+    try:
+        for date in dates:
+            # Get basic data from daily_data table
+            cur.execute("""
+                SELECT heart_rate_series, daily_score, activity_type
+                FROM daily_data 
+                WHERE date = ?
+            """, (date,))
+            
+            data = cur.fetchone()
+            
+            if data:
+                # Get enriched HR series
+                from jobs import build_daily_hr_timeseries, calculate_trimp_with_caching
+                enriched_hr_series = build_daily_hr_timeseries(date, conn, cur)
+                
+                # Calculate TRIMP with caching
+                trimp_results = calculate_trimp_with_caching(date, enriched_hr_series, 'daily')
+                trimp_data = trimp_results.get('presentation_buckets', {})
+                total_trimp = trimp_results.get('total_trimp', 0.0)
+                
+                results[date] = {
+                    'date': date,
+                    'presentation_buckets': trimp_data,
+                    'total_trimp': total_trimp,
+                    'daily_score': data['daily_score'],
+                    'activity_type': data['activity_type']
+                }
+            else:
+                # Check for TRIMP overrides even when there's no daily data
+                trimp_overrides = get_user_data('daily_trimp_overrides', date)
+                if trimp_overrides:
+                    try:
+                        overrides_data = json.loads(trimp_overrides)
+                        total_trimp = sum(float(value) for value in overrides_data.values() if value is not None and value != '')
+                        
+                        results[date] = {
+                            'date': date,
+                            'presentation_buckets': overrides_data,
+                            'total_trimp': total_trimp,
+                            'daily_score': None,
+                            'activity_type': None,
+                            'trimp_overrides': overrides_data
+                        }
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.error(f"Error parsing TRIMP overrides for {date}: {e}")
+                        results[date] = None
+                else:
+                    results[date] = None
+    
+    finally:
+        cur.close()
+        conn.close()
+    
+    return jsonify({
+        'success': True,
+        'data': results
+    })
 
 if __name__ == '__main__':
     init_database()

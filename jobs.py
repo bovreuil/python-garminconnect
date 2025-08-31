@@ -20,6 +20,7 @@ from models import HeartRateAnalyzer
 from typing import Dict, List, Optional, Tuple
 import math
 from config import TIME_CONFIG, API_CONFIG
+from database import get_cached_trimp_data, save_cached_trimp_data, calculate_data_hash, invalidate_cached_trimp_data
 
 
 # Configure logging
@@ -663,6 +664,12 @@ def build_daily_hr_timeseries(target_date, conn, cur):
     """
     logger.info(f"build_daily_hr_timeseries: Building HR time series for {target_date}")
     
+    # Check for cached TRIMP data first
+    cached_data = get_cached_trimp_data(target_date, 'daily')
+    if cached_data:
+        logger.info(f"build_daily_hr_timeseries: Found cached TRIMP data for {target_date}")
+        # We still need to return the HR series for display, but we can skip TRIMP calculation
+    
     # Get daily HR data
     cur.execute("SELECT heart_rate_series FROM daily_data WHERE date = ?", (target_date,))
     daily_result = cur.fetchone()
@@ -805,4 +812,40 @@ def calculate_trimp_from_timeseries(hr_series):
     return {
         'presentation_buckets': results['presentation_buckets'],
         'total_trimp': results['total_trimp']
-    } 
+    }
+
+def calculate_trimp_with_caching(target_date, hr_series, data_type='daily'):
+    """
+    Calculate TRIMP with caching support.
+    
+    Args:
+        target_date: Date string or activity_id
+        hr_series: List of [timestamp, heart_rate] pairs
+        data_type: 'daily' or 'activity'
+        
+    Returns:
+        Dict with presentation_buckets and total_trimp
+    """
+    if not hr_series or len(hr_series) < 2:
+        return {
+            'presentation_buckets': {},
+            'total_trimp': 0.0
+        }
+    
+    # Calculate hash of input data
+    data_hash = calculate_data_hash(hr_series)
+    
+    # Check for cached data
+    cached_data = get_cached_trimp_data(target_date, data_type)
+    if cached_data and cached_data['hash'] == data_hash:
+        logger.info(f"calculate_trimp_with_caching: Using cached TRIMP data for {target_date}")
+        return cached_data['trimp_data']
+    
+    # Calculate TRIMP
+    logger.info(f"calculate_trimp_with_caching: Calculating TRIMP for {target_date}")
+    trimp_data = calculate_trimp_from_timeseries(hr_series)
+    
+    # Cache the result
+    save_cached_trimp_data(target_date, trimp_data, data_hash, data_type)
+    
+    return trimp_data 

@@ -677,17 +677,30 @@ function loadTwoWeekData(startDate, endDate) {
         currentDate.setDate(currentDate.getDate() + 1);
     }
     
-    // Load data for all date labels
-    Promise.all(dateLabels.map(dateLabel => loadDateData(dateLabel)))
-        .then(results => {
+    // Load data for all date labels using batch API
+    fetch('/api/data/batch', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ dates: dateLabels })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Convert batch response to array format expected by chart
+            const results = dateLabels.map(dateLabel => data.data[dateLabel] || null);
             currentDataResults = results; // Store for click handling
             updateTwoWeekChart(dateLabels, results);
-            hideLoading();
-        })
-        .catch(error => {
-            console.error('Error loading two week data:', error);
-            hideLoading();
-        });
+        } else {
+            console.error('Error loading two week data:', data.error);
+        }
+        hideLoading();
+    })
+    .catch(error => {
+        console.error('Error loading two week data:', error);
+        hideLoading();
+    });
 }
 
 // Load data for a single date label (string)
@@ -1043,16 +1056,29 @@ function loadFourteenWeekData() {
         currentDate.setDate(currentDate.getDate() + 1);
     }
     
-    // Load data for all date labels
-    Promise.all(dateLabels.map(dateLabel => loadDateData(dateLabel)))
-        .then(results => {
+    // Load data for all date labels using batch API
+    fetch('/api/data/batch', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ dates: dateLabels })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Convert batch response to array format expected by chart
+            const results = dateLabels.map(dateLabel => data.data[dateLabel] || null);
             updateFourteenWeekChart(dateLabels, results);
-            hideLoading();
-        })
-        .catch(error => {
-            console.error('Error loading 14 week data:', error);
-            hideLoading();
-        });
+        } else {
+            console.error('Error loading 14 week data:', data.error);
+        }
+        hideLoading();
+    })
+    .catch(error => {
+        console.error('Error loading 14 week data:', error);
+        hideLoading();
+    });
 }
 
 // Get the start of the week (Monday) for a given date
@@ -2359,6 +2385,9 @@ function uploadCsvData() {
             // Clear the file input
             fileInput.value = '';
             
+            // Refresh the 14-week chart
+            loadFourteenWeekData();
+            
             alert('CSV uploaded successfully! Activity data has been updated.');
         } else {
             console.error('CSV upload failed:', data.error);
@@ -2420,6 +2449,9 @@ function clearCsvOverride() {
             // Close the modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('csvUploadModal'));
             modal.hide();
+            
+            // Refresh the 14-week chart
+            loadFourteenWeekData();
             
             alert('CSV override cleared successfully! Original HR data has been restored.');
         } else {
