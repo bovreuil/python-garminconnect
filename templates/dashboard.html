@@ -75,6 +75,7 @@
                         <button type="button" class="btn btn-sm btn-outline-primary" id="prevDay">
                             <span>←</span>
                         </button>
+                        <button type="button" class="btn btn-sm btn-primary" id="singleDateTodayBtn">Today</button>
                         <button type="button" class="btn btn-sm btn-outline-primary" id="nextDay">
                             <span>→</span>
                         </button>
@@ -534,6 +535,7 @@ let selectedActivity = null; // Track the currently selected activity
     document.getElementById('nextWeek').addEventListener('click', () => navigateWeek(1));
     document.getElementById('todayBtn').addEventListener('click', goToToday);
     document.getElementById('prevDay').addEventListener('click', () => navigateSingleDay(-1));
+    document.getElementById('singleDateTodayBtn').addEventListener('click', goToSingleDateToday);
     document.getElementById('nextDay').addEventListener('click', () => navigateSingleDay(1));
     document.getElementById('trimpBtn').addEventListener('click', () => switchMetric('trimp'));
     document.getElementById('minutesBtn').addEventListener('click', () => switchMetric('minutes'));
@@ -645,6 +647,32 @@ function navigateSingleDay(direction) {
         loadDateData(formatDateForAPI(newDate)).then(dayData => {
             // Always show the single day view, even if there's no data
             showSingleDateView(formatDateForAPI(newDate), dayData);
+        });
+    }, 500);
+}
+
+// Go to today in single date view
+function goToSingleDateToday() {
+    // Close single activity view when going to today
+    closeSingleActivityView();
+    
+    const today = new Date();
+    const todayString = today.toISOString().split('T')[0];
+    
+    // Check if the new date is outside the current period
+    if (currentStartDate && currentEndDate) {
+        if (today < currentStartDate || today > currentEndDate) {
+            // Need to adjust the period to include today
+            const { startDate, endDate } = calculateTwoWeekPeriod(today);
+            loadTwoWeekData(startDate, endDate);
+        }
+    }
+    
+    // Show the single day view for today
+    setTimeout(() => {
+        loadDateData(todayString).then(dayData => {
+            // Always show the single day view, even if there's no data
+            showSingleDateView(todayString, dayData);
         });
     }, 500);
 }
