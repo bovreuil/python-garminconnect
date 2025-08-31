@@ -35,7 +35,9 @@ from database import (
     get_cached_trimp_data,
     save_cached_trimp_data,
     calculate_data_hash,
-    invalidate_cached_trimp_data
+    invalidate_cached_trimp_data,
+    get_config_value,
+    set_config_value
 )
 
 # Import job functions
@@ -375,6 +377,19 @@ def admin():
         return redirect(url_for('index'))
     
     return render_template('admin.html', today=date.today().isoformat())
+
+@app.route('/data')
+def data():
+    """Data management page."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        flash('Access denied. Admin privileges required.', 'error')
+        return redirect(url_for('index'))
+    
+    return render_template('data.html', today=date.today().isoformat())
 
 @app.route('/collect-data', methods=['POST'])
 def collect_data():
@@ -1911,15 +1926,15 @@ def backup_database():
         # Source database path
         source_db = 'garmin_hr.db'
         
-        # Dropbox destination path
-        dropbox_dir = os.path.expanduser('~/Dropbox/PetesRehab/')
-        dropbox_backup_path = os.path.join(dropbox_dir, backup_filename)
+        # Get configured backup folder, fallback to default
+        backup_dir = get_config_value('backup_folder', os.path.expanduser('~/Dropbox/PetesRehab/'))
+        backup_path = os.path.join(backup_dir, backup_filename)
         
-        # Ensure Dropbox directory exists
-        os.makedirs(dropbox_dir, exist_ok=True)
+        # Ensure backup directory exists
+        os.makedirs(backup_dir, exist_ok=True)
         
-        # Copy database to Dropbox
-        shutil.copy2(source_db, dropbox_backup_path)
+        # Copy database to backup location
+        shutil.copy2(source_db, backup_path)
         
         app.logger.info(f"Database backup created: {backup_filename}")
         
@@ -1933,42 +1948,123 @@ def backup_database():
         app.logger.error(f"Error creating database backup: {str(e)}")
         return jsonify({'success': False, 'error': f'Backup failed: {str(e)}'}), 500
 
-# O2Ring Data Management Routes
-@app.route('/admin/o2ring')
-def o2ring_admin():
-    """O2Ring data management page."""
+# Configuration API Routes
+@app.route('/api/config/status')
+def get_config_status():
+    """Get current system configuration status."""
     if 'user_id' not in session:
-        return redirect(url_for('login'))
+        return jsonify({'error': 'Not authenticated'}), 401
     
     # Only admin can access
     if session.get('user_role') != 'admin':
-        flash('Access denied. Admin privileges required.', 'error')
-        return redirect(url_for('index'))
-    
-    return render_template('o2ring_admin.html')
-
-@app.route('/admin/o2ring/upload', methods=['POST'])
-def o2ring_upload():
-    """Upload O2Ring CSV file."""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    
-    # Only admin can access
-    if session.get('user_role') != 'admin':
-        return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
+        return jsonify({'error': 'Admin privileges required'}), 403
     
     try:
-        # Check if file was uploaded
-        if 'file' not in request.files:
-            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        conn = get_db_connection()
+        cur = conn.cursor()
         
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        # Check Garmin credentials
+        cur.execute("SELECT COUNT(*) FROM garmin_credentials")
+        garmin_configured = cur.fetchone()[0] > 0
         
+        # Check HR parameters
+        cur.execute("SELECT COUNT(*) FROM hr_parameters")
+        hr_configured = cur.fetchone()[0] > 0
+        
+        # Get folder configurations from config table
+        o2ring_folder = get_config_value('o2ring_csv_folder')
+        backup_folder = get_config_value('backup_folder')
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'garmin_configured': garmin_configured,
+            'hr_configured': hr_configured,
+            'o2ring_folder': o2ring_folder,
+            'backup_folder': backup_folder
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting config status: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/config/o2ring-folder', methods=['POST'])
+def set_o2ring_folder():
+    """Set O2Ring CSV folder path."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        return jsonify({'error': 'Admin privileges required'}), 403
+    
+    try:
+        data = request.get_json()
+        folder_path = data.get('folder_path')
+        
+        if not folder_path:
+            return jsonify({'success': False, 'error': 'Folder path is required'}), 400
+        
+        # Validate folder exists
+        if not os.path.exists(folder_path):
+            return jsonify({'success': False, 'error': 'Folder does not exist'}), 400
+        
+        # Save to config table
+        set_config_value('o2ring_csv_folder', folder_path)
+        logger.info(f"O2Ring folder set to: {folder_path}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'O2Ring folder saved successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error setting O2Ring folder: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Removed complex browse_folder function - using frontend file picker instead
+
+@app.route('/api/config/backup-folder', methods=['POST'])
+def set_backup_folder():
+    """Set database backup folder path."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        return jsonify({'error': 'Admin privileges required'}), 403
+    
+    try:
+        data = request.get_json()
+        folder_path = data.get('folder_path')
+        
+        if not folder_path:
+            return jsonify({'success': False, 'error': 'Folder path is required'}), 400
+        
+        # Validate folder exists
+        if not os.path.exists(folder_path):
+            return jsonify({'success': False, 'error': 'Folder does not exist'}), 400
+        
+        # Save to config table
+        set_config_value('backup_folder', folder_path)
+        logger.info(f"Backup folder set to: {folder_path}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Backup folder saved successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error setting backup folder: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+def process_o2ring_file(file):
+    """Process an O2Ring CSV file and return result dict."""
+    try:
         # Validate file extension
         if not file.filename.lower().endswith('.csv'):
-            return jsonify({'success': False, 'error': 'File must be a CSV'}), 400
+            return {'success': False, 'error': 'File must be a CSV'}
         
         # Read and parse CSV
         import io
@@ -1986,10 +2082,10 @@ def o2ring_upload():
         expected_header = ['Time', 'SpO2(%)', 'Pulse Rate(bpm)', 'Motion', 'SpO2 Reminder', 'PR Reminder', '']
         
         if header != expected_header:
-            return jsonify({
+            return {
                 'success': False, 
                 'error': f'Invalid header format. Expected: {expected_header}, Got: {header}'
-            }), 400
+            }
         
         # Parse CSV data
         data_points = []
@@ -2079,11 +2175,21 @@ def o2ring_upload():
                     last_timestamp = row_data['timestamp']
         
         if not data_points:
-            return jsonify({'success': False, 'error': 'No valid data points found in CSV'}), 400
+            return {'success': False, 'error': 'No valid data points found in CSV'}
         
         # Store in database
         conn = get_db_connection()
         cur = conn.cursor()
+        
+        # Check if file already exists
+        cur.execute("SELECT id FROM o2ring_files WHERE filename = ?", (file.filename,))
+        existing_file = cur.fetchone()
+        
+        if existing_file:
+            return {
+                'success': False, 
+                'error': f'File "{file.filename}" has already been loaded. Skipping duplicate.'
+            }
         
         # Insert file record
         cur.execute("""
@@ -2112,22 +2218,161 @@ def o2ring_upload():
         cur.close()
         conn.close()
         
-        logger.info(f"O2Ring file uploaded successfully: {file.filename}, {len(data_points)} data points")
+        logger.info(f"O2Ring file processed successfully: {file.filename}, {len(data_points)} data points")
+        
+        return {
+            'success': True,
+            'message': f'File processed successfully with {len(data_points)} data points',
+            'filename': file.filename,
+            'data_points': len(data_points)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing O2Ring file: {e}")
+        return {'success': False, 'error': f'Error processing file: {str(e)}'}
+
+@app.route('/api/load-o2ring-files', methods=['POST'])
+def load_o2ring_files():
+    """Load new O2Ring CSV files from configured folder."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        return jsonify({'error': 'Admin privileges required'}), 403
+    
+    try:
+        # Get O2Ring folder from config
+        o2ring_folder = get_config_value('o2ring_csv_folder')
+        
+        if not o2ring_folder:
+            return jsonify({'success': False, 'error': 'O2Ring folder not configured. Please set it in the Data panel.'}), 400
+        
+        if not os.path.exists(o2ring_folder):
+            return jsonify({'success': False, 'error': 'O2Ring folder does not exist'}), 400
+        
+        # Get list of already loaded files
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT filename FROM o2ring_files")
+        loaded_files = {row['filename'] for row in cur.fetchall()}
+        conn.close()
+        
+        # Scan folder for CSV files
+        csv_files = []
+        for filename in os.listdir(o2ring_folder):
+            if filename.lower().endswith('.csv') and filename not in loaded_files:
+                file_path = os.path.join(o2ring_folder, filename)
+                if os.path.isfile(file_path):
+                    csv_files.append((filename, file_path))
+        
+        if not csv_files:
+            return jsonify({
+                'success': True,
+                'message': 'No new CSV files found to load'
+            })
+        
+        # Sort files by modification time (newest first)
+        csv_files.sort(key=lambda x: os.path.getmtime(x[1]), reverse=True)
+        
+        loaded_count = 0
+        errors = []
+        
+        for filename, file_path in csv_files:
+            try:
+                # Process the file using the existing upload logic
+                with open(file_path, 'rb') as f:
+                    # Create a file-like object that mimics request.files
+                    from werkzeug.datastructures import FileStorage
+                    file_storage = FileStorage(
+                        stream=f,
+                        filename=filename,
+                        content_type='text/csv'
+                    )
+                    
+                    # Call the existing upload function
+                    result = process_o2ring_file(file_storage)
+                    if result['success']:
+                        loaded_count += 1
+                    else:
+                        errors.append(f"{filename}: {result['error']}")
+                        
+            except Exception as e:
+                errors.append(f"{filename}: {str(e)}")
+        
+        message = f"Loaded {loaded_count} new files"
+        if errors:
+            message += f". Errors: {', '.join(errors)}"
         
         return jsonify({
             'success': True,
-            'message': f'File uploaded successfully with {len(data_points)} data points',
-            'filename': file.filename,
-            'data_points': len(data_points)
+            'message': message,
+            'loaded_count': loaded_count,
+            'errors': errors
         })
         
     except Exception as e:
-        logger.error(f"Error uploading O2Ring file: {e}")
-        return jsonify({'success': False, 'error': f'Error uploading file: {str(e)}'}), 500
+        logger.error(f"Error loading O2Ring files: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/admin/o2ring/files')
-def o2ring_files():
-    """Get list of uploaded O2Ring files."""
+@app.route('/api/backups')
+def get_backups():
+    """Get list of recent database backups."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        return jsonify({'error': 'Admin privileges required'}), 403
+    
+    try:
+        # Get backup folder from config, fallback to default
+        backup_folder = get_config_value('backup_folder', os.path.expanduser('~/Dropbox/PetesRehab/'))
+        
+        if not os.path.exists(backup_folder):
+            return jsonify({'success': True, 'backups': []})
+        
+        # Scan for backup files
+        backup_files = []
+        for filename in os.listdir(backup_folder):
+            if filename.startswith('garmin_hr_backup_') and filename.endswith('.db'):
+                file_path = os.path.join(backup_folder, filename)
+                stat = os.stat(file_path)
+                backup_files.append({
+                    'filename': filename,
+                    'size': stat.st_size,
+                    'created_at': stat.st_ctime * 1000  # Convert to milliseconds for JavaScript
+                })
+        
+        # Sort by creation time, newest first
+        backup_files.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'backups': backup_files
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting backups: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# O2Ring Data Management Routes
+@app.route('/admin/o2ring')
+def o2ring_admin():
+    """O2Ring data management page."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        flash('Access denied. Admin privileges required.', 'error')
+        return redirect(url_for('index'))
+    
+    return render_template('o2ring_admin.html')
+
+@app.route('/admin/o2ring/upload', methods=['POST'])
+def o2ring_upload():
+    """Upload O2Ring CSV file."""
     if 'user_id' not in session:
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
@@ -2136,14 +2381,65 @@ def o2ring_files():
         return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
     
     try:
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        # Use the helper function to process the file
+        result = process_o2ring_file(file)
+        
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+        
+    except Exception as e:
+        logger.error(f"Error uploading O2Ring file: {e}")
+        return jsonify({'success': False, 'error': f'Error uploading file: {str(e)}'}), 500
+
+@app.route('/admin/o2ring/files')
+def o2ring_files():
+    """Get list of uploaded O2Ring files with pagination."""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
+    # Only admin can access
+    if session.get('user_role') != 'admin':
+        return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
+    
+    try:
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        
+        # Validate parameters
+        if page < 1:
+            page = 1
+        if per_page < 1 or per_page > 50:
+            per_page = 10
+        
         conn = get_db_connection()
         cur = conn.cursor()
         
+        # Get total count
+        cur.execute("SELECT COUNT(*) as total FROM o2ring_files")
+        total_count = cur.fetchone()['total']
+        
+        # Calculate pagination
+        offset = (page - 1) * per_page
+        total_pages = (total_count + per_page - 1) // per_page
+        
+        # Get files for current page
         cur.execute("""
             SELECT id, filename, first_timestamp, last_timestamp, row_count, uploaded_at
             FROM o2ring_files
             ORDER BY first_timestamp DESC
-        """)
+            LIMIT ? OFFSET ?
+        """, (per_page, offset))
         
         files = []
         for row in cur.fetchall():
@@ -2161,7 +2457,13 @@ def o2ring_files():
         
         return jsonify({
             'success': True,
-            'files': files
+            'files': files,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total_count': total_count,
+                'total_pages': total_pages
+            }
         })
         
     except Exception as e:

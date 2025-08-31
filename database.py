@@ -315,6 +315,17 @@ def init_database():
         ON o2ring_data(file_id)
     """)
     
+    # Create system configuration table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS system_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            config_key VARCHAR(100) UNIQUE NOT NULL,
+            config_value TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
     conn.commit()
     cur.close()
     conn.close() 
@@ -335,6 +346,35 @@ def calculate_data_hash(data_content):
     # Convert to JSON string for consistent hashing
     json_str = json.dumps(data_content, sort_keys=True)
     return hashlib.sha256(json_str.encode('utf-8')).hexdigest()
+
+def get_config_value(config_key: str, default: str = None) -> str:
+    """Get a configuration value from the system_config table."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT config_value FROM system_config WHERE config_key = ?", (config_key,))
+    result = cur.fetchone()
+    
+    cur.close()
+    conn.close()
+    
+    if result:
+        return result['config_value']
+    return default
+
+def set_config_value(config_key: str, config_value: str):
+    """Set a configuration value in the system_config table."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("""
+        INSERT OR REPLACE INTO system_config (config_key, config_value, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+    """, (config_key, config_value))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
 
 def get_cached_trimp_data(date, data_type='daily'):
     """
