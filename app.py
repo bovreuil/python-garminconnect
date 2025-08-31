@@ -755,6 +755,119 @@ def save_activity_spo2(activity_id):
         return jsonify({'error': f'Error saving SpO2 data: {str(e)}'}), 500
 
 
+@app.route('/api/activity/<activity_id>/spo2-distribution')
+def get_activity_spo2_distribution(activity_id):
+    """Get SpO2 distribution statistics for a specific activity."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Get activity data
+        cur.execute("""
+            SELECT activity_name, start_time_local, duration_seconds, heart_rate_series
+            FROM activity_data 
+            WHERE activity_id = ?
+        """, (activity_id,))
+        
+        activity = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if not activity:
+            return jsonify({'error': 'Activity not found'}), 404
+        
+        # Get O2Ring data for this activity's time period
+        o2ring_data = []
+        if activity['start_time_local'] and activity['duration_seconds']:
+            try:
+                from datetime import datetime
+                import pytz
+                
+                # Parse activity start time
+                start_time_str = activity['start_time_local']
+                
+                # Handle different timestamp formats
+                if start_time_str.endswith('.0'):
+                    start_time_str = start_time_str[:-2]
+                
+                # Try to parse with timezone info first
+                try:
+                    start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                except ValueError:
+                    # If that fails, try parsing without timezone and assume UK time
+                    start_time = datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S')
+                    uk_tz = pytz.timezone('Europe/London')
+                    start_time = uk_tz.localize(start_time)
+                
+                if start_time.tzinfo is None:
+                    # If still no timezone info, assume UK time
+                    uk_tz = pytz.timezone('Europe/London')
+                    start_time = uk_tz.localize(start_time)
+                
+                # Calculate end time
+                end_time = start_time + timedelta(seconds=activity['duration_seconds'])
+                
+                # Convert to timestamps
+                start_timestamp = int(start_time.timestamp() * 1000)
+                end_timestamp = int(end_time.timestamp() * 1000)
+                
+                o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
+            except Exception as e:
+                logger.error(f"Error getting O2Ring data for activity {activity_id}: {e}")
+        
+        # Calculate SpO2 distribution
+        distribution = calculate_spo2_distribution(o2ring_data, start_timestamp, end_timestamp)
+        
+        return jsonify({
+            'activity_id': activity_id,
+            'activity_name': activity['activity_name'],
+            'distribution': distribution
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting SpO2 distribution for activity {activity_id}: {e}")
+        return jsonify({'error': f'Error calculating SpO2 distribution: {str(e)}'}), 500
+
+@app.route('/api/data/<date>/spo2-distribution')
+def get_daily_spo2_distribution(date):
+    """Get SpO2 distribution statistics for a specific day."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Validate date format
+    if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
+        return jsonify({'error': 'Invalid date format. Expected YYYY-MM-DD'}), 400
+    
+    try:
+        # Convert date string to start and end timestamps for the day
+        from datetime import datetime
+        import pytz
+        
+        uk_tz = pytz.timezone('Europe/London')
+        start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
+        end_of_day = start_of_day + timedelta(days=1)
+        
+        start_timestamp = int(start_of_day.timestamp() * 1000)
+        end_timestamp = int(end_of_day.timestamp() * 1000)
+        
+        # Get O2Ring data for this day
+        o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
+        
+        # Calculate SpO2 distribution
+        distribution = calculate_spo2_distribution(o2ring_data, start_timestamp, end_timestamp)
+        
+        return jsonify({
+            'date': date,
+            'distribution': distribution
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting SpO2 distribution for date {date}: {e}")
+        return jsonify({'error': f'Error calculating SpO2 distribution: {str(e)}'}), 500
+
 @app.route('/api/activity/<activity_id>/hr-csv')
 def download_activity_hr_csv(activity_id):
     """Download HR data for a specific activity as CSV."""
@@ -2657,6 +2770,129 @@ def get_batch_data():
         'success': True,
         'data': results
     })
+
+def calculate_spo2_distribution(spo2_data, start_timestamp=None, end_timestamp=None):
+    """
+    Calculate SpO2 distribution statistics for a given time period.
+    
+    Args:
+        spo2_data: List of [timestamp, spo2_value, spo2_reminder] tuples
+        start_timestamp: Optional start timestamp in milliseconds (for filtering)
+        end_timestamp: Optional end timestamp in milliseconds (for filtering)
+        
+    Returns:
+        Dictionary with 'at_level' and 'at_or_below_level' statistics
+    """
+    if not spo2_data:
+        return {
+            'at_level': [],
+            'at_or_below_level': [],
+            'total_seconds': 0
+        }
+    
+    # Filter data to time period if specified
+    if start_timestamp and end_timestamp:
+        filtered_data = [
+            point for point in spo2_data 
+            if start_timestamp <= point[0] <= end_timestamp
+        ]
+    else:
+        filtered_data = spo2_data
+    
+    if not filtered_data:
+        return {
+            'at_level': [],
+            'at_or_below_level': [],
+            'total_seconds': 0
+        }
+    
+    # Sort by timestamp
+    filtered_data.sort(key=lambda x: x[0])
+    
+    # Calculate total time period in seconds
+    total_start = filtered_data[0][0]
+    total_end = filtered_data[-1][0]
+    total_seconds = (total_end - total_start) / 1000  # Convert from milliseconds
+    
+    # Calculate total SpO2 data time (sum of all intervals)
+    total_spo2_seconds = 0
+    for i in range(len(filtered_data) - 1):
+        current_point = filtered_data[i]
+        next_point = filtered_data[i + 1]
+        interval_seconds = (next_point[0] - current_point[0]) / 1000
+        total_spo2_seconds += interval_seconds
+    
+    # Add the last point
+    if filtered_data:
+        total_spo2_seconds += 1  # Assume last point represents 1 second
+    
+    # Initialize counters for each SpO2 level (80-100)
+    level_counts = {level: 0 for level in range(80, 101)}
+    
+    # Track values below 80 for accumulation
+    below_80_seconds = 0
+    
+    # Count seconds at each level
+    # Since O2Ring data is typically recorded every few seconds, we'll interpolate
+    # between consecutive points to get a more accurate time distribution
+    
+    for i in range(len(filtered_data) - 1):
+        current_point = filtered_data[i]
+        next_point = filtered_data[i + 1]
+        
+        current_timestamp = current_point[0]
+        next_timestamp = next_point[0]
+        current_spo2 = current_point[1]
+        
+        # Calculate time interval between points in seconds
+        interval_seconds = (next_timestamp - current_timestamp) / 1000
+        
+        # Add this interval to the appropriate SpO2 level
+        if current_spo2 < 80:
+            below_80_seconds += interval_seconds
+        elif 80 <= current_spo2 <= 100:
+            level_counts[current_spo2] += interval_seconds
+    
+    # Handle the last point (assume it continues for a short interval)
+    if filtered_data:
+        last_point = filtered_data[-1]
+        last_spo2 = last_point[1]
+        if last_spo2 < 80:
+            below_80_seconds += 1
+        elif 80 <= last_spo2 <= 100:
+            # Assume last point represents 1 second
+            level_counts[last_spo2] += 1
+    
+    # Create at_level statistics (only 81-98 for display)
+    at_level_stats = []
+    for level in range(98, 80, -1):  # 98 down to 81
+        seconds = level_counts[level]
+        percent = (seconds / total_spo2_seconds * 100) if total_spo2_seconds > 0 else 0
+        at_level_stats.append({
+            'spo2': level,
+            'seconds': round(seconds, 1),
+            'percent': round(percent, 0)  # 0 decimal places
+        })
+    
+    # Create at_or_below_level statistics (only 81-98 for display)
+    at_or_below_stats = []
+    for level in range(98, 80, -1):  # 98 down to 81
+        # Calculate cumulative time from current level down to 81
+        cumulative_seconds = 0
+        for l in range(level, 80, -1):  # From current level down to 81
+            cumulative_seconds += level_counts[l]
+        percent = (cumulative_seconds / total_spo2_seconds * 100) if total_spo2_seconds > 0 else 0
+        at_or_below_stats.append({
+            'spo2': level,
+            'seconds': round(cumulative_seconds, 1),
+            'percent': round(percent, 0)  # 0 decimal places
+        })
+    
+    return {
+        'at_level': at_level_stats,
+        'at_or_below_level': at_or_below_stats,
+        'total_seconds': round(total_seconds, 1)
+    }
 
 if __name__ == '__main__':
     init_database()
