@@ -114,12 +114,22 @@
                 
                 <!-- SpO2 Distribution Charts -->
                 <div class="mb-4" id="spo2DistributionChartsContainer" style="display: none;">
+                    <div class="mb-2">
+                        <div class="btn-group" role="group" aria-label="SpO2 Chart Type">
+                            <input type="radio" class="btn-check" name="spo2ChartType" id="spo2AtOrBelowRadio" value="at_or_below" checked>
+                            <label class="btn btn-outline-primary btn-sm" for="spo2AtOrBelowRadio">At or Below</label>
+                            
+                            <input type="radio" class="btn-check" name="spo2ChartType" id="spo2AtRadio" value="at">
+                            <label class="btn btn-outline-primary btn-sm" for="spo2AtRadio">At</label>
+                        </div>
+                    </div>
                     <table style="width: 100%; border-collapse: collapse;">
                         <tr>
                             <td style="width: 50%; vertical-align: top; padding-right: 10px;">
-                                <h6>SpO2 Time at or Below Level</h6>
+                                <h6 id="spo2ChartTitle">SpO2 Time at or Below Level</h6>
                                 <div class="chart-container" style="height: 320px; margin: 0; width: 100%;">
                                     <canvas id="spo2AtOrBelowChart"></canvas>
+                                    <canvas id="spo2AtChart" style="display: none;"></canvas>
                                 </div>
                             </td>
                             <td style="width: 50%; vertical-align: top; padding-left: 10px;">
@@ -189,12 +199,22 @@
                                 
                                 <!-- Activity SpO2 Distribution Charts -->
                                 <div class="mb-4" id="activitySpo2DistributionChartsContainer" style="display: none;">
+                                    <div class="mb-2">
+                                        <div class="btn-group" role="group" aria-label="Activity SpO2 Chart Type">
+                                            <input type="radio" class="btn-check" name="activitySpo2ChartType" id="activitySpo2AtOrBelowRadio" value="at_or_below" checked>
+                                            <label class="btn btn-outline-primary btn-sm" for="activitySpo2AtOrBelowRadio">At or Below</label>
+                                            
+                                            <input type="radio" class="btn-check" name="activitySpo2ChartType" id="activitySpo2AtRadio" value="at">
+                                            <label class="btn btn-outline-primary btn-sm" for="activitySpo2AtRadio">At</label>
+                                        </div>
+                                    </div>
                                     <table style="width: 100%; border-collapse: collapse;">
                                         <tr>
                                             <td style="width: 50%; vertical-align: top; padding-right: 10px;">
-                                                <h6>SpO2 Time at or Below Level</h6>
+                                                <h6 id="activitySpo2ChartTitle">SpO2 Time at or Below Level</h6>
                                                 <div class="chart-container" style="height: 320px; margin: 0; width: 100%;">
                                                     <canvas id="activitySpo2AtOrBelowChart"></canvas>
+                                                    <canvas id="activitySpo2AtChart" style="display: none;"></canvas>
                                                 </div>
                                             </td>
                                             <td style="width: 50%; vertical-align: top; padding-left: 10px;">
@@ -491,7 +511,9 @@ let activityHrChart = null;
 let activitySpo2Chart = null;
 let activityBreathingChart = null;
 let spo2AtOrBelowChart = null;
+let spo2AtChart = null;
 let activitySpo2AtOrBelowChart = null;
+let activitySpo2AtChart = null;
 let currentStartDate = null;
 let currentEndDate = null;
 let currentMetric = 'trimp'; // 'trimp' or 'minutes'
@@ -528,6 +550,11 @@ let selectedActivity = null; // Track the currently selected activity
                         activityBreathingChart.resize();
                     }
                 }
+                // Resize SpO2 distribution charts if they exist
+                if (spo2AtOrBelowChart) spo2AtOrBelowChart.resize();
+                if (spo2AtChart) spo2AtChart.resize();
+                if (activitySpo2AtOrBelowChart) activitySpo2AtOrBelowChart.resize();
+                if (activitySpo2AtChart) activitySpo2AtChart.resize();
             }, 100);
         });
     // Set up event listeners
@@ -561,6 +588,20 @@ let selectedActivity = null; // Track the currently selected activity
         }
     });
     document.getElementById('clearCsvOverride').addEventListener('click', clearCsvOverride);
+    
+    // SpO2 chart type toggle event listeners
+    document.getElementById('spo2AtOrBelowRadio').addEventListener('change', function() {
+        if (this.checked) toggleSpo2ChartType('at_or_below', 'daily');
+    });
+    document.getElementById('spo2AtRadio').addEventListener('change', function() {
+        if (this.checked) toggleSpo2ChartType('at', 'daily');
+    });
+    document.getElementById('activitySpo2AtOrBelowRadio').addEventListener('change', function() {
+        if (this.checked) toggleSpo2ChartType('at_or_below', 'activity');
+    });
+    document.getElementById('activitySpo2AtRadio').addEventListener('change', function() {
+        if (this.checked) toggleSpo2ChartType('at', 'activity');
+    });
     
     // Initialize by loading 14-week data and going to today
     loadFourteenWeekData();
@@ -1456,6 +1497,16 @@ function closeSingleDateView() {
         activitiesChart.destroy();
         activitiesChart = null;
     }
+    
+    // Destroy SpO2 distribution charts if they exist
+    if (spo2AtOrBelowChart) {
+        spo2AtOrBelowChart.destroy();
+        spo2AtOrBelowChart = null;
+    }
+    if (spo2AtChart) {
+        spo2AtChart.destroy();
+        spo2AtChart = null;
+    }
 }
 
 // Show single activity view
@@ -1597,6 +1648,16 @@ function closeSingleActivityView() {
     if (activityBreathingChart) {
         activityBreathingChart.destroy();
         activityBreathingChart = null;
+    }
+    
+    // Destroy SpO2 distribution charts if they exist
+    if (activitySpo2AtOrBelowChart) {
+        activitySpo2AtOrBelowChart.destroy();
+        activitySpo2AtOrBelowChart = null;
+    }
+    if (activitySpo2AtChart) {
+        activitySpo2AtChart.destroy();
+        activitySpo2AtChart = null;
     }
     
     // Clear the chart container to ensure clean state
@@ -4045,6 +4106,12 @@ function createActivityHeartRateChart(activity) {
         breathingChartContainer.innerHTML = '<canvas id="activityBreathingChart"></canvas>';
     }
     
+    // Clear SpO2 distribution chart containers
+    const spo2DistributionContainer = document.getElementById('activitySpo2DistributionChartsContainer');
+    if (spo2DistributionContainer) {
+        spo2DistributionContainer.style.display = 'none';
+    }
+    
     const chartElement = document.getElementById('activityHrChart');
     if (!chartElement) {
         console.error('Activity chart element not found after recreation');
@@ -4073,6 +4140,16 @@ function createActivityHeartRateChart(activity) {
     if (activityBreathingChart) {
         activityBreathingChart.destroy();
         activityBreathingChart = null;
+    }
+    
+    // Destroy SpO2 distribution charts if they exist
+    if (activitySpo2AtOrBelowChart) {
+        activitySpo2AtOrBelowChart.destroy();
+        activitySpo2AtOrBelowChart = null;
+    }
+    if (activitySpo2AtChart) {
+        activitySpo2AtChart.destroy();
+        activitySpo2AtChart = null;
     }
     
     // Check if we have heart rate values for this activity
@@ -4847,7 +4924,14 @@ function createSpo2DistributionCharts(distribution, atOrBelowChartId, containerI
     // Show container
     container.style.display = 'block';
     
-    // Create "At or Below Level" chart
+    // Store the distribution data for toggling
+    if (containerId === 'spo2DistributionChartsContainer') {
+        window.dailySpo2Distribution = distribution;
+    } else if (containerId === 'activitySpo2DistributionChartsContainer') {
+        window.activitySpo2Distribution = distribution;
+    }
+    
+    // Create "At or Below Level" chart by default
     createSpo2HorizontalBarChart(atOrBelowChartId, distribution.at_or_below_level, 'Time at or Below Level');
 }
 
@@ -4861,7 +4945,9 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
     // Destroy existing chart if it exists
     let existingChart = null;
     if (chartId === 'spo2AtOrBelowChart') existingChart = spo2AtOrBelowChart;
+    else if (chartId === 'spo2AtChart') existingChart = spo2AtChart;
     else if (chartId === 'activitySpo2AtOrBelowChart') existingChart = activitySpo2AtOrBelowChart;
+    else if (chartId === 'activitySpo2AtChart') existingChart = activitySpo2AtChart;
     
     if (existingChart) {
         existingChart.destroy();
@@ -4968,7 +5054,9 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
     
     // Store chart reference
     if (chartId === 'spo2AtOrBelowChart') spo2AtOrBelowChart = newChart;
+    else if (chartId === 'spo2AtChart') spo2AtChart = newChart;
     else if (chartId === 'activitySpo2AtOrBelowChart') activitySpo2AtOrBelowChart = newChart;
+    else if (chartId === 'activitySpo2AtChart') activitySpo2AtChart = newChart;
 }
 
 function hideSpo2DistributionCharts() {
@@ -4982,6 +5070,50 @@ function hideActivitySpo2DistributionCharts() {
     const container = document.getElementById('activitySpo2DistributionChartsContainer');
     if (container) {
         container.style.display = 'none';
+    }
+}
+
+function toggleSpo2ChartType(chartType, viewType) {
+    if (viewType === 'daily') {
+        const distribution = window.dailySpo2Distribution;
+        if (!distribution) return;
+        
+        // Hide/show appropriate canvas
+        const atOrBelowCanvas = document.getElementById('spo2AtOrBelowChart');
+        const atCanvas = document.getElementById('spo2AtChart');
+        const titleElement = document.getElementById('spo2ChartTitle');
+        
+        if (chartType === 'at_or_below') {
+            atOrBelowCanvas.style.display = 'block';
+            atCanvas.style.display = 'none';
+            titleElement.textContent = 'SpO2 Time at or Below Level';
+            createSpo2HorizontalBarChart('spo2AtOrBelowChart', distribution.at_or_below_level, 'Time at or Below Level');
+        } else {
+            atOrBelowCanvas.style.display = 'none';
+            atCanvas.style.display = 'block';
+            titleElement.textContent = 'SpO2 Time at Each Level';
+            createSpo2HorizontalBarChart('spo2AtChart', distribution.at_level, 'Time at Each Level');
+        }
+    } else if (viewType === 'activity') {
+        const distribution = window.activitySpo2Distribution;
+        if (!distribution) return;
+        
+        // Hide/show appropriate canvas
+        const atOrBelowCanvas = document.getElementById('activitySpo2AtOrBelowChart');
+        const atCanvas = document.getElementById('activitySpo2AtChart');
+        const titleElement = document.getElementById('activitySpo2ChartTitle');
+        
+        if (chartType === 'at_or_below') {
+            atOrBelowCanvas.style.display = 'block';
+            atCanvas.style.display = 'none';
+            titleElement.textContent = 'SpO2 Time at or Below Level';
+            createSpo2HorizontalBarChart('activitySpo2AtOrBelowChart', distribution.at_or_below_level, 'Time at or Below Level');
+        } else {
+            atOrBelowCanvas.style.display = 'none';
+            atCanvas.style.display = 'block';
+            titleElement.textContent = 'SpO2 Time at Each Level';
+            createSpo2HorizontalBarChart('activitySpo2AtChart', distribution.at_level, 'Time at Each Level');
+        }
     }
 }
 
