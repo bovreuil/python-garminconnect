@@ -131,6 +131,52 @@
                                     <canvas id="spo2AtOrBelowChart"></canvas>
                                     <canvas id="spo2AtChart" style="display: none;"></canvas>
                                 </div>
+                                <hr class="my-3">
+                                <h6>Oxygen Debt</h6>
+                                <div id="dailyOxygenDebt" class="oxygen-debt-display" style="padding: 0 20px;">
+                                    <div class="row">
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Time under 95:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyTimeUnder95">-</small>
+                                        </div>
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Area under 95:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyAreaUnder95">-</small>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-1">
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Time under 90:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyTimeUnder90">-</small>
+                                        </div>
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Area under 90:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyAreaUnder90">-</small>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-1">
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Time under 88:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyTimeUnder88">-</small>
+                                        </div>
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Area under 88:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyAreaUnder88">-</small>
+                                        </div>
+                                    </div>
+                                </div>
                             </td>
                             <td style="width: 50%; vertical-align: top; padding-left: 10px;">
                                 <h6>Notes</h6>
@@ -215,6 +261,52 @@
                                                 <div class="chart-container" style="height: 320px; margin: 0; width: 100%;">
                                                     <canvas id="activitySpo2AtOrBelowChart"></canvas>
                                                     <canvas id="activitySpo2AtChart" style="display: none;"></canvas>
+                                                </div>
+                                                <hr class="my-3">
+                                                <h6>Oxygen Debt</h6>
+                                                <div id="activityOxygenDebt" class="oxygen-debt-display" style="padding: 0 20px;">
+                                                    <div class="row">
+                                                        <div class="col-3" style="padding-left: 10px;">
+                                                            <small class="text-muted">Time under 95:</small>
+                                                        </div>
+                                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                                            <small class="text-muted" id="activityTimeUnder95">-</small>
+                                                        </div>
+                                                        <div class="col-3" style="padding-left: 10px;">
+                                                            <small class="text-muted">Area under 95:</small>
+                                                        </div>
+                                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                                            <small class="text-muted" id="activityAreaUnder95">-</small>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row mt-1">
+                                                        <div class="col-3" style="padding-left: 10px;">
+                                                            <small class="text-muted">Time under 90:</small>
+                                                        </div>
+                                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                                            <small class="text-muted" id="activityTimeUnder90">-</small>
+                                                        </div>
+                                                        <div class="col-3" style="padding-left: 10px;">
+                                                            <small class="text-muted">Area under 90:</small>
+                                                        </div>
+                                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                                            <small class="text-muted" id="activityAreaUnder90">-</small>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row mt-1">
+                                                        <div class="col-3" style="padding-left: 10px;">
+                                                            <small class="text-muted">Time under 88:</small>
+                                                        </div>
+                                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                                            <small class="text-muted" id="activityTimeUnder88">-</small>
+                                                        </div>
+                                                        <div class="col-3" style="padding-left: 10px;">
+                                                            <small class="text-muted">Area under 88:</small>
+                                                        </div>
+                                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                                            <small class="text-muted" id="activityAreaUnder88">-</small>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </td>
                                             <td style="width: 50%; vertical-align: top; padding-left: 10px;">
@@ -4933,6 +5025,12 @@ function createSpo2DistributionCharts(distribution, atOrBelowChartId, containerI
     
     // Create "At or Below Level" chart by default
     createSpo2HorizontalBarChart(atOrBelowChartId, distribution.at_or_below_level, 'Time at or Below Level');
+    
+    // Update oxygen debt display if available
+    if (distribution.oxygen_debt) {
+        const viewType = containerId === 'spo2DistributionChartsContainer' ? 'daily' : 'activity';
+        updateOxygenDebtDisplay(distribution.oxygen_debt, viewType);
+    }
 }
 
 function createSpo2HorizontalBarChart(chartId, data, title) {
@@ -5115,6 +5213,39 @@ function toggleSpo2ChartType(chartType, viewType) {
             createSpo2HorizontalBarChart('activitySpo2AtChart', distribution.at_level, 'Time at Each Level');
         }
     }
+}
+
+function formatTime(seconds) {
+    if (seconds === 0) return '00:00:00';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function updateOxygenDebtDisplay(oxygenDebt, viewType) {
+    if (!oxygenDebt) return;
+    
+    const prefix = viewType === 'daily' ? 'daily' : 'activity';
+    
+    // Update time displays
+    const time95Element = document.getElementById(`${prefix}TimeUnder95`);
+    const time90Element = document.getElementById(`${prefix}TimeUnder90`);
+    const time88Element = document.getElementById(`${prefix}TimeUnder88`);
+    
+    if (time95Element) time95Element.textContent = formatTime(oxygenDebt.time_under_95 || 0);
+    if (time90Element) time90Element.textContent = formatTime(oxygenDebt.time_under_90 || 0);
+    if (time88Element) time88Element.textContent = formatTime(oxygenDebt.time_under_88 || 0);
+    
+    // Update area displays
+    const area95Element = document.getElementById(`${prefix}AreaUnder95`);
+    const area90Element = document.getElementById(`${prefix}AreaUnder90`);
+    const area88Element = document.getElementById(`${prefix}AreaUnder88`);
+    
+    if (area95Element) area95Element.textContent = oxygenDebt.area_under_95 || 0;
+    if (area90Element) area90Element.textContent = oxygenDebt.area_under_90 || 0;
+    if (area88Element) area88Element.textContent = oxygenDebt.area_under_88 || 0;
 }
 
 

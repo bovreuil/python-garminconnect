@@ -2826,11 +2826,8 @@ def calculate_spo2_distribution(spo2_data, start_timestamp=None, end_timestamp=N
     if filtered_data:
         total_spo2_seconds += 1  # Assume last point represents 1 second
     
-    # Initialize counters for each SpO2 level (80-100)
-    level_counts = {level: 0 for level in range(80, 101)}
-    
-    # Track values below 80 for accumulation
-    below_80_seconds = 0
+    # Initialize counters for each SpO2 level (0-100 to handle all possible values)
+    level_counts = {level: 0 for level in range(0, 101)}
     
     # Count seconds at each level
     # Since O2Ring data is typically recorded every few seconds, we'll interpolate
@@ -2848,18 +2845,14 @@ def calculate_spo2_distribution(spo2_data, start_timestamp=None, end_timestamp=N
         interval_seconds = (next_timestamp - current_timestamp) / 1000
         
         # Add this interval to the appropriate SpO2 level
-        if current_spo2 < 80:
-            below_80_seconds += interval_seconds
-        elif 80 <= current_spo2 <= 100:
+        if 0 <= current_spo2 <= 100:
             level_counts[current_spo2] += interval_seconds
     
     # Handle the last point (assume it continues for a short interval)
     if filtered_data:
         last_point = filtered_data[-1]
         last_spo2 = last_point[1]
-        if last_spo2 < 80:
-            below_80_seconds += 1
-        elif 80 <= last_spo2 <= 100:
+        if 0 <= last_spo2 <= 100:
             # Assume last point represents 1 second
             level_counts[last_spo2] += 1
     
@@ -2888,10 +2881,30 @@ def calculate_spo2_distribution(spo2_data, start_timestamp=None, end_timestamp=N
             'percent': round(percent, 0)  # 0 decimal places
         })
     
+    # Calculate oxygen debt metrics for thresholds 95, 90, and 88
+    oxygen_debt = {}
+    
+    for threshold in [95, 90, 88]:
+        # Calculate time under threshold (cumulative time at threshold-1 and below)
+        time_under_threshold = 0
+        area_under_threshold = 0
+        
+        for level in range(threshold - 1, -1, -1):  # From threshold-1 down to 0
+            if level in level_counts:
+                time_at_level = level_counts[level]
+                time_under_threshold += time_at_level
+                # Calculate area: time * depth below threshold
+                depth_below = threshold - level
+                area_under_threshold += time_at_level * depth_below
+        
+        oxygen_debt[f'time_under_{threshold}'] = round(time_under_threshold, 1)
+        oxygen_debt[f'area_under_{threshold}'] = round(area_under_threshold, 1)
+    
     return {
         'at_level': at_level_stats,
         'at_or_below_level': at_or_below_stats,
-        'total_seconds': round(total_seconds, 1)
+        'total_seconds': round(total_seconds, 1),
+        'oxygen_debt': oxygen_debt
     }
 
 if __name__ == '__main__':
