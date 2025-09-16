@@ -527,6 +527,16 @@ def get_data(date):
         
         o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
         
+        # Calculate oxygen debt data for this day
+        oxygen_debt_data = {}
+        if o2ring_data:
+            # o2ring_data is a list of [timestamp, spo2_value, spo2_reminder] tuples
+            spo2_series = [[row[0], row[1]] for row in o2ring_data]
+            oxygen_debt_data = calculate_oxygen_debt_with_caching(date, spo2_series, 'daily')
+            logger.info(f"Daily oxygen debt calculated for {date}: {oxygen_debt_data}")
+        else:
+            logger.info(f"No O2Ring data found for {date}, oxygen debt will be empty")
+        
         # Close connection after enrichment
         cur.close()
         conn.close()
@@ -538,7 +548,8 @@ def get_data(date):
             'total_trimp': total_trimp,
             'daily_score': data['daily_score'],
             'activity_type': data['activity_type'],
-            'spo2_values': o2ring_data
+            'spo2_values': o2ring_data,
+            'oxygen_debt': oxygen_debt_data
         })
     else:
         # Check if there are TRIMP overrides for this date (even without daily data)
@@ -664,6 +675,11 @@ def get_activities(date):
             # Sort by timestamp
             combined_spo2.sort(key=lambda x: x[0])
         
+        # Calculate oxygen debt for this activity
+        activity_oxygen_debt = {}
+        if combined_spo2:
+            activity_oxygen_debt = calculate_oxygen_debt_with_caching(activity['activity_id'], combined_spo2, 'activity')
+
         activities_list.append({
             'activity_id': activity['activity_id'],
             'activity_name': activity['activity_name'],
@@ -680,7 +696,8 @@ def get_activities(date):
             'total_trimp': activity['total_trimp'],
             'heart_rate_values': heart_rate_series,
             'breathing_rate_values': breathing_rate_series,
-            'spo2_values': combined_spo2
+            'spo2_values': combined_spo2,
+            'oxygen_debt': activity_oxygen_debt
         })
     
     return jsonify(activities_list)
@@ -2761,12 +2778,28 @@ def get_batch_data():
                 trimp_data = trimp_results.get('presentation_buckets', {})
                 total_trimp = trimp_results.get('total_trimp', 0.0)
                 
+                # Calculate oxygen debt data for this day
+                from datetime import datetime
+                import pytz
+                uk_tz = pytz.timezone('Europe/London')
+                start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
+                end_of_day = start_of_day + timedelta(days=1)
+                start_timestamp = int(start_of_day.timestamp() * 1000)
+                end_timestamp = int(end_of_day.timestamp() * 1000)
+                
+                o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
+                oxygen_debt_data = {}
+                if o2ring_data:
+                    spo2_series = [[row[0], row[1]] for row in o2ring_data]
+                    oxygen_debt_data = calculate_oxygen_debt_with_caching(date, spo2_series, 'daily')
+                
                 results[date] = {
                     'date': date,
                     'presentation_buckets': trimp_data,
                     'total_trimp': total_trimp,
                     'daily_score': data['daily_score'],
-                    'activity_type': data['activity_type']
+                    'activity_type': data['activity_type'],
+                    'oxygen_debt': oxygen_debt_data
                 }
             else:
                 # Check for TRIMP overrides even when there's no daily data
