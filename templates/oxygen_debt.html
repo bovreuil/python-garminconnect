@@ -1035,20 +1035,31 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     // Calculate a proper max that aligns with Chart.js tick intervals
     let yAxisMax;
     if (maxValue === 0) {
-        yAxisMax = 500; // Default minimum for consistency
+        yAxisMax = 10; // Small default for no data
     } else {
-        // Determine step size based on the range
+        // Determine step size based on the range and metric type
         let step;
-        if (maxValue <= 50) step = 10;
-        else if (maxValue <= 100) step = 20;
-        else if (maxValue <= 200) step = 20;
-        else if (maxValue <= 500) step = 50;
-        else step = 100;
+        if (currentMetric === 'area') {
+            // Oxygen debt area values can be large (20k-200k+)
+            if (maxValue <= 1000) step = 200;
+            else if (maxValue <= 5000) step = 1000;
+            else if (maxValue <= 10000) step = 2000;
+            else if (maxValue <= 50000) step = 10000;
+            else if (maxValue <= 100000) step = 20000;
+            else if (maxValue <= 500000) step = 50000;
+            else step = 100000;
+        } else {
+            // Minutes values are smaller (50-2000)
+            if (maxValue <= 50) step = 10;
+            else if (maxValue <= 100) step = 20;
+            else if (maxValue <= 500) step = 100;
+            else if (maxValue <= 1000) step = 200;
+            else if (maxValue <= 2000) step = 400;
+            else step = 500;
+        }
         
-        // Add one extra step for label space
+        // Round up to next tick boundary and add one extra step for label space
         yAxisMax = Math.ceil(maxValue / step) * step + step;
-        
-        // Dynamic y-axis scaling - no minimum constraint
     }
     
     twoWeekChart = new Chart(ctx, {
@@ -1133,7 +1144,7 @@ function updateTwoWeekChart(dateLabels, dataResults) {
                                     const totalArea = (oxygenDebt.area_under_95 || 0) + 
                                                      (oxygenDebt.area_under_90 || 0) + 
                                                      (oxygenDebt.area_under_88 || 0);
-                                    return `Total: ${totalArea.toFixed(1)}`;
+                                    return `Total: ${totalArea.toFixed(0)}`;
                                 } else {
                                     const totalMinutes = Math.round(((oxygenDebt.time_under_95 || 0) + 
                                                                    (oxygenDebt.time_under_90 || 0) + 
@@ -1164,7 +1175,7 @@ function updateTwoWeekChart(dateLabels, dataResults) {
                                 const totalArea = (oxygenDebt.area_under_95 || 0) + 
                                                  (oxygenDebt.area_under_90 || 0) + 
                                                  (oxygenDebt.area_under_88 || 0);
-                                return totalArea.toFixed(1);
+                                return totalArea.toFixed(0);
                             } else {
                                 // Calculate total minutes from oxygen debt
                                 const totalMinutes = Math.round(((oxygenDebt.time_under_95 || 0) + 
@@ -2772,7 +2783,7 @@ function createActivitiesChart(activities) {
                             const value = context.parsed.x;
                             const zone = context.dataset.label;
                             if (currentMetric === 'area') {
-                                return `${zone}: ${value.toFixed(1)}`;
+                                return `${zone}: ${value.toFixed(0)}`;
                             } else {
                                 return `${zone}: ${value.toFixed(0)} minutes`;
                             }
