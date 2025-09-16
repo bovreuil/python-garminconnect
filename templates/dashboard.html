@@ -3,7 +3,7 @@
 {% block title %}Dashboard - Garmin Heart Rate Analyzer{% endblock %}
 
 {% block head %}
-
+<script src="{{ url_for('static', filename='js/dashboard-navigation.js') }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -529,25 +529,7 @@ function formatDateForAPI(date) {
 // Calculate two-week period containing a given date
 // preferSecondWeek: if true, puts target date in second week (for initialization)
 // if false, puts target date in first week (for minimal navigation)
-function calculateTwoWeekPeriod(targetDate, preferSecondWeek = true) {
-    const startDate = new Date(targetDate);
-    const endDate = new Date(targetDate);
-    
-    // Find the Monday of the week containing the target date
-    const dayOfWeek = startDate.getDay();
-    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday = 0, Monday = 1
-    startDate.setDate(startDate.getDate() - daysToMonday);
-    
-    if (preferSecondWeek) {
-        // Move back one week so the target date is in the second week
-        startDate.setDate(startDate.getDate() - 7);
-    }
-    
-    // Set end date to 13 days after start (14 days total)
-    endDate.setDate(startDate.getDate() + 13);
-    
-    return { startDate, endDate };
-}
+// calculateTwoWeekPeriod moved to dashboard-navigation.js
 
 
 
@@ -702,52 +684,11 @@ let selectedActivity = null; // Track the currently selected activity
 
 
 
-// Navigate by one week
-function navigateWeek(direction) {
-    if (!currentStartDate || !currentEndDate) return;
-    
-    // Close single date view and single activity view when navigating
-    closeSingleDateView();
-    closeSingleActivityView();
-    
-    // Calculate new start and end dates
-    const newStartDate = new Date(currentStartDate);
-    const newEndDate = new Date(currentEndDate);
-    newStartDate.setDate(currentStartDate.getDate() + (direction * 7));
-    newEndDate.setDate(currentEndDate.getDate() + (direction * 7));
-    
-    loadTwoWeekData(newStartDate, newEndDate);
-}
+// navigateWeek moved to dashboard-navigation.js
 
-// Go to today's two-week period
-function goToToday() {
-    // Close single date view and single activity view when going to today
-    closeSingleDateView();
-    closeSingleActivityView();
-    
-    const today = new Date();
-    const { startDate, endDate } = calculateTwoWeekPeriod(today);
-    
-    loadTwoWeekData(startDate, endDate);
-    
-    // Also open single day view for today
-    const todayString = today.toISOString().split('T')[0];
-    loadDateData(todayString).then(dayData => {
-        showSingleDateView(todayString, dayData);
-    });
-}
+// goToToday moved to dashboard-navigation.js
 
-// Navigate to a specific week in the two-week view
-function navigateToWeek(targetDate) {
-    // Close single date view and single activity view when navigating
-    closeSingleDateView();
-    closeSingleActivityView();
-    
-    // Calculate the two-week period with the target date in the second week
-    const { startDate, endDate } = calculateTwoWeekPeriod(targetDate, true);
-    
-    loadTwoWeekData(startDate, endDate);
-}
+// navigateToWeek moved to dashboard-navigation.js
 
 // Navigate single day left or right
 function navigateSingleDay(direction) {
