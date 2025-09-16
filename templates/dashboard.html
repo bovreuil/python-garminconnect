@@ -4,6 +4,7 @@
 
 {% block head %}
 <script src="{{ url_for('static', filename='js/dashboard-navigation.js') }}"></script>
+<script src="{{ url_for('static', filename='js/chart-utilities.js') }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -534,42 +535,11 @@ Chart.defaults.font.size = 12;
 Chart.defaults.color = '#2c3e50';
 
 // Zone colors - temperature scale from cool to hot
-const zoneColors = {
-    '80-89': '#002040',    // Midnight
-    '90-99': '#004080',    // Night sky blue
-    '100-109': '#006d5b',  // Deep teal
-    '110-119': '#28a745',  // Green
-    '120-129': '#9acd32',  // Yellow-green
-    '130-139': '#ffc107',  // Yellow
-    '140-149': '#fd7e14',  // Orange
-    '150-159': '#e74c3c',  // Red
-    '160+': '#dc3545'      // Hot red
-};
+// zoneColors moved to chart-utilities.js
 
-// SpO2 zone colors
-const spo2ZoneColors = {
-    '80-82.5': '#dc3545',   // Hot red
-    '82.5-85': '#dc3545',   // Hot red
-    '85-87.5': '#e74c3c',   // Red
-    '87.5-90': '#fd7e14',   // Orange
-    '90-92.5': '#ffc107',   // Yellow
-    '92.5-95': '#9acd32',   // Yellow-green
-    '95-97.5': '#28a745',   // Green
-    '97.5-100': '#28a745'   // Green
-};
+// spo2ZoneColors moved to chart-utilities.js
 
-// Zone order for stacking (bottom to top)
-const zoneOrder = [
-    '80-89',
-    '90-99',
-    '100-109', 
-    '110-119',
-    '120-129',
-    '130-139',
-    '140-149',
-    '150-159',
-    '160+'
-];
+// zoneOrder moved to chart-utilities.js
 
 let twoWeekChart = null;
 let fourteenWeekChart = null;
@@ -934,25 +904,8 @@ function updateTwoWeekChart(dateLabels, dataResults) {
         }
     });
     
-    // Calculate a proper max that aligns with Chart.js tick intervals
-    let yAxisMax;
-    if (maxValue === 0) {
-        yAxisMax = 500; // Default minimum for consistency
-    } else {
-        // Determine step size based on the range
-        let step;
-        if (maxValue <= 50) step = 10;
-        else if (maxValue <= 100) step = 20;
-        else if (maxValue <= 200) step = 20;
-        else if (maxValue <= 500) step = 50;
-        else step = 100;
-        
-        // Add one extra step for label space
-        yAxisMax = Math.ceil(maxValue / step) * step + step;
-        
-        // Ensure minimum y-axis maximum of 500 for consistency across weeks
-        yAxisMax = Math.max(yAxisMax, 500);
-    }
+    // Calculate Y-axis maximum using shared utility (with 500 minimum for consistency)
+    const { axisMax: yAxisMax } = calculateAxisScaling(maxValue, true, 500);
     
     twoWeekChart = new Chart(ctx, {
         type: 'bar',
@@ -1177,25 +1130,8 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
         maxValue = Math.max(maxValue, weekTotal);
     });
     
-    // Calculate a proper max that aligns with Chart.js tick intervals
-    let yAxisMax;
-    if (maxValue === 0) {
-        yAxisMax = 10; // Default for no data
-    } else {
-        // Determine step size based on the range
-        let step;
-        if (maxValue <= 50) step = 10;
-        else if (maxValue <= 100) step = 20;
-        else if (maxValue <= 200) step = 20;
-        else if (maxValue <= 500) step = 50;
-        else if (maxValue <= 1000) step = 100;
-        else if (maxValue <= 2000) step = 200;
-        else if (maxValue <= 5000) step = 500;
-        else step = 1000;
-        
-        // Add one extra step for label space
-        yAxisMax = Math.ceil(maxValue / step) * step + step;
-    }
+    // Calculate Y-axis maximum using shared utility (no minimum constraint for 14-week)
+    const { axisMax: yAxisMax } = calculateAxisScaling(maxValue, true);
     
     fourteenWeekChart = new Chart(ctx, {
         type: 'bar',
@@ -2555,33 +2491,8 @@ function createActivitiesChart(activities) {
         }
     });
     
-    // Calculate x-axis maximum to align with gridline boundaries
-    let xAxisMax;
-    if (maxValue === 0) {
-        xAxisMax = 10;
-    } else {
-        // Use Chart.js-like step size logic based on observed gridline behavior
-        let step;
-        if (maxValue <= 70) step = 10;
-        else if (maxValue <= 200) step = 20;
-        else if (maxValue <= 500) step = 50;
-        else if (maxValue <= 1000) step = 100;
-        else if (maxValue <= 2000) step = 200;
-        else if (maxValue <= 5000) step = 500;
-        else if (maxValue <= 10000) step = 1000;
-        else if (maxValue <= 20000) step = 2000;
-        else if (maxValue <= 50000) step = 5000;
-        else if (maxValue <= 100000) step = 10000;
-        else if (maxValue <= 200000) step = 20000;
-        else if (maxValue <= 500000) step = 50000;
-        else step = 100000;
-        
-        // Round up to next gridline boundary (no extra step needed for activities)
-        xAxisMax = Math.ceil(maxValue / step) * step;
-        
-        // Apply minimum constraint if it exists
-        xAxisMax = Math.max(xAxisMax, 100);
-    }
+    // Calculate x-axis maximum using shared utility
+    const xAxisMax = calculateAxisMaxWithMinimum(maxValue, 100);
     
     // Create the chart
     activitiesChart = new Chart(ctx, {
