@@ -564,7 +564,7 @@ const zoneColors = {
     '110-119': '#28a745',  // Green
     '120-129': '#9acd32',  // Yellow-green
     '130-139': '#ffc107',  // Yellow
-    '140-149': '#fd7e14',  // Orange
+    '140-149': '#tyt',  // Orange
     '150-159': '#e74c3c',  // Red
     '160+': '#dc3545'      // Hot red
 };
@@ -2697,8 +2697,33 @@ function createActivitiesChart(activities) {
         }
     });
     
-    // Ensure minimum x-axis maximum of 100
-    const xAxisMax = Math.max(maxValue, 100);
+    // Calculate x-axis maximum to align with gridline boundaries
+    let xAxisMax;
+    if (maxValue === 0) {
+        xAxisMax = 10;
+    } else {
+        // Use Chart.js-like step size logic based on observed gridline behavior
+        let step;
+        if (maxValue <= 70) step = 10;
+        else if (maxValue <= 200) step = 20;
+        else if (maxValue <= 500) step = 50;
+        else if (maxValue <= 1000) step = 100;
+        else if (maxValue <= 2000) step = 200;
+        else if (maxValue <= 5000) step = 500;
+        else if (maxValue <= 10000) step = 1000;
+        else if (maxValue <= 20000) step = 2000;
+        else if (maxValue <= 50000) step = 5000;
+        else if (maxValue <= 100000) step = 10000;
+        else if (maxValue <= 200000) step = 20000;
+        else if (maxValue <= 500000) step = 50000;
+        else step = 100000;
+        
+        // Round up to next gridline boundary (no extra step needed for activities)
+        xAxisMax = Math.ceil(maxValue / step) * step;
+        
+        // Apply minimum constraint if it exists
+        xAxisMax = Math.max(xAxisMax, 100);
+    }
     
     // Create the chart
     activitiesChart = new Chart(ctx, {

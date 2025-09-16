@@ -2698,8 +2698,33 @@ function createActivitiesChart(activities) {
         }
     });
     
-    // Dynamic x-axis scaling - no minimum constraint
-    const xAxisMax = maxValue;
+    // Calculate x-axis maximum to align with gridline boundaries
+    let xAxisMax;
+    if (maxValue === 0) {
+        xAxisMax = 10;
+    } else {
+        // Use Chart.js-like step size logic based on your observed examples
+        let step;
+        if (maxValue <= 70) step = 10;        // 17 → 10, 64 → 10
+        else if (maxValue <= 200) step = 20;  // 155 → 20, 183 → 20
+        else if (maxValue <= 500) step = 50;  // 251 → 50
+        else if (maxValue <= 1000) step = 100;
+        else if (maxValue <= 2000) step = 200; // 1785 → 200
+        else if (maxValue <= 5000) step = 500;
+        else if (maxValue <= 10000) step = 1000;
+        else if (maxValue <= 20000) step = 2000;
+        else if (maxValue <= 50000) step = 5000; // 25080 → 5000
+        else if (maxValue <= 100000) step = 10000;
+        else if (maxValue <= 200000) step = 20000;
+        else if (maxValue <= 500000) step = 50000;
+        else step = 100000;
+        
+        // Round up to next gridline boundary (no extra step needed for activities)
+        xAxisMax = Math.ceil(maxValue / step) * step;
+        
+        // Apply minimum constraint if it exists
+        xAxisMax = Math.max(xAxisMax, 100);
+    }
     
     // Create the chart
     activitiesChart = new Chart(ctx, {
