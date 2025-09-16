@@ -197,6 +197,8 @@ def init_database():
             activity_type VARCHAR(50),
             cached_trimp_data JSON,
             trimp_calculation_hash VARCHAR(64),
+            cached_oxygen_debt_data JSON,
+            oxygen_debt_calculation_hash VARCHAR(64),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -221,6 +223,8 @@ def init_database():
             total_trimp FLOAT,
             cached_trimp_data JSON,
             trimp_calculation_hash VARCHAR(64),
+            cached_oxygen_debt_data JSON,
+            oxygen_debt_calculation_hash VARCHAR(64),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (date) REFERENCES daily_data(date)
@@ -474,6 +478,113 @@ def invalidate_cached_trimp_data(date, data_type='daily'):
             cur.execute("""
                 UPDATE activity_data 
                 SET cached_trimp_data = NULL, trimp_calculation_hash = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE activity_id = ?
+            """, (date,))
+        
+        conn.commit()
+        
+    finally:
+        cur.close()
+        conn.close()
+
+def get_cached_oxygen_debt_data(date, data_type='daily'):
+    """
+    Get cached oxygen debt data for a date or activity.
+    
+    Args:
+        date: Date string (YYYY-MM-DD) or activity_id
+        data_type: 'daily' or 'activity'
+        
+    Returns:
+        Cached oxygen debt data dict or None if not found/invalid
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        if data_type == 'daily':
+            cur.execute("""
+                SELECT cached_oxygen_debt_data, oxygen_debt_calculation_hash
+                FROM daily_data 
+                WHERE date = ?
+            """, (date,))
+        else:  # activity
+            cur.execute("""
+                SELECT cached_oxygen_debt_data, oxygen_debt_calculation_hash
+                FROM activity_data 
+                WHERE activity_id = ?
+            """, (date,))
+        
+        result = cur.fetchone()
+        
+        if result and result['cached_oxygen_debt_data']:
+            return {
+                'oxygen_debt_data': json.loads(result['cached_oxygen_debt_data']),
+                'hash': result['oxygen_debt_calculation_hash']
+            }
+        return None
+        
+    finally:
+        cur.close()
+        conn.close()
+
+def save_cached_oxygen_debt_data(date, oxygen_debt_data, data_hash, data_type='daily'):
+    """
+    Save cached oxygen debt data for a date or activity.
+    
+    Args:
+        date: Date string (YYYY-MM-DD) or activity_id
+        oxygen_debt_data: Oxygen debt calculation results dict
+        data_hash: Hash of the input data used for calculation
+        data_type: 'daily' or 'activity'
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        oxygen_debt_json = json.dumps(oxygen_debt_data) if oxygen_debt_data else None
+        
+        if data_type == 'daily':
+            cur.execute("""
+                UPDATE daily_data 
+                SET cached_oxygen_debt_data = ?, oxygen_debt_calculation_hash = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE date = ?
+            """, (oxygen_debt_json, data_hash, date))
+        else:  # activity
+            cur.execute("""
+                UPDATE activity_data 
+                SET cached_oxygen_debt_data = ?, oxygen_debt_calculation_hash = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE activity_id = ?
+            """, (oxygen_debt_json, data_hash, date))
+        
+        conn.commit()
+        
+    finally:
+        cur.close()
+        conn.close()
+
+def invalidate_cached_oxygen_debt_data(date, data_type='daily'):
+    """
+    Invalidate cached oxygen debt data for a date or activity.
+    
+    Args:
+        date: Date string (YYYY-MM-DD) or activity_id
+        data_type: 'daily' or 'activity'
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        if data_type == 'daily':
+            cur.execute("""
+                UPDATE daily_data 
+                SET cached_oxygen_debt_data = NULL, oxygen_debt_calculation_hash = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE date = ?
+            """, (date,))
+        else:  # activity
+            cur.execute("""
+                UPDATE activity_data 
+                SET cached_oxygen_debt_data = NULL, oxygen_debt_calculation_hash = NULL, updated_at = CURRENT_TIMESTAMP
                 WHERE activity_id = ?
             """, (date,))
         

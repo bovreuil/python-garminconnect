@@ -1,0 +1,629 @@
+{% extends "base.html" %}
+
+{% block title %}Oxygen Debt - Garmin Heart Rate Analyzer{% endblock %}
+
+{% block head %}
+
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Oxygen Debt Analysis</h1>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-secondary active" id="areaBtn">Area</button>
+                <button type="button" class="btn btn-outline-secondary" id="minutesBtn">Minutes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Two Week Chart Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0" id="twoWeekTitle">Two Week Overview</h5>
+                <div class="d-flex gap-2">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="prevWeek">
+                            <span>←</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-primary" id="todayBtn">Today</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="nextWeek">
+                            <span>→</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="chartContainer" class="chart-container" style="height: 360px;">
+                    <canvas id="twoWeekChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Single Date View Section -->
+<div class="row mt-4" id="singleDateSection" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <h5 class="mb-0" id="singleDateTitle">Single Date View</h5>
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="prevDay">
+                            <span>←</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-primary" id="singleDateTodayBtn">Today</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="nextDay">
+                            <span>→</span>
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="closeSingleDate">
+                        <span>×</span>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Activities Chart -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6>Activities</h6>
+                        <div class="chart-container" id="activitiesChartContainer" style="height: 280px;">
+                            <canvas id="activitiesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading indicator -->
+<div class="loading" id="loading">
+    <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-2">Loading data...</p>
+</div>
+
+<script>
+// Global variables
+let twoWeekChart = null;
+let activitiesChart = null;
+let currentStartDate = null;
+let currentEndDate = null;
+let selectedDate = null;
+let currentMetric = 'area'; // 'area' or 'minutes'
+
+// Oxygen debt zone colors - matching your specified colors
+const oxygenDebtColors = {
+    'Below 95': '#9acd32',  // Yellow-green
+    'Below 90': '#fd7e14',  // Orange  
+    'Below 88': '#e74c3c'   // Red
+};
+
+// Zone order for consistent display (bottom to top in bars)
+const oxygenDebtZoneOrder = ['Below 95', 'Below 90', 'Below 88'];
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Toggle button event listeners
+    document.getElementById('areaBtn').addEventListener('click', () => switchMetric('area'));
+    document.getElementById('minutesBtn').addEventListener('click', () => switchMetric('minutes'));
+    
+    // Navigation event listeners
+    document.getElementById('prevWeek').addEventListener('click', () => navigateWeek(-1));
+    document.getElementById('nextWeek').addEventListener('click', () => navigateWeek(1));
+    document.getElementById('todayBtn').addEventListener('click', goToToday);
+    
+    document.getElementById('prevDay').addEventListener('click', () => navigateSingleDay(-1));
+    document.getElementById('nextDay').addEventListener('click', () => navigateSingleDay(1));
+    document.getElementById('singleDateTodayBtn').addEventListener('click', goToTodayFromSingleDate);
+    document.getElementById('closeSingleDate').addEventListener('click', closeSingleDateView);
+    
+    // Initialize by going to today
+    goToToday();
+});
+
+// Switch between Area and Minutes
+function switchMetric(metric) {
+    currentMetric = metric;
+    
+    // Update button states
+    document.getElementById('areaBtn').classList.toggle('active', metric === 'area');
+    document.getElementById('minutesBtn').classList.toggle('active', metric === 'minutes');
+    
+    // Reload two-week data with new metric
+    if (currentStartDate && currentEndDate) {
+        loadTwoWeekData(currentStartDate, currentEndDate);
+    }
+    
+    // Update activities chart if single date view is open
+    const singleDateSection = document.getElementById('singleDateSection');
+    if (singleDateSection.style.display !== 'none' && selectedDate) {
+        loadActivitiesForDate(selectedDate);
+    }
+}
+
+// Navigate by one week
+function navigateWeek(direction) {
+    if (!currentStartDate || !currentEndDate) return;
+    
+    closeSingleDateView();
+    
+    const newStartDate = new Date(currentStartDate);
+    const newEndDate = new Date(currentEndDate);
+    newStartDate.setDate(currentStartDate.getDate() + (direction * 7));
+    newEndDate.setDate(currentEndDate.getDate() + (direction * 7));
+    
+    loadTwoWeekData(newStartDate, newEndDate);
+}
+
+// Go to today's two-week period
+function goToToday() {
+    closeSingleDateView();
+    
+    const today = new Date();
+    const { startDate, endDate } = calculateTwoWeekPeriod(today);
+    
+    loadTwoWeekData(startDate, endDate);
+}
+
+// Calculate two-week period
+function calculateTwoWeekPeriod(targetDate) {
+    const endDate = new Date(targetDate);
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - 13); // 14 days total
+    
+    return { startDate, endDate };
+}
+
+// Load two weeks of data
+function loadTwoWeekData(startDate, endDate) {
+    showLoading();
+    
+    currentStartDate = startDate;
+    currentEndDate = endDate;
+    
+    // Update date range display
+    updateDateRange();
+    
+    // Generate array of 14 date labels
+    const dateLabels = [];
+    const currentDate = new Date(startDate);
+    for (let i = 0; i < 14; i++) {
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        dateLabels.push(`${year}-${month}-${day}`);
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Load oxygen debt data for all dates
+    Promise.all(dateLabels.map(date => loadOxygenDebtData(date)))
+        .then(dataResults => {
+            createTwoWeekChart(dateLabels, dataResults);
+            hideLoading();
+        })
+        .catch(error => {
+            console.error('Error loading two week data:', error);
+            hideLoading();
+        });
+}
+
+// Load oxygen debt data for a single date
+function loadOxygenDebtData(dateLabel) {
+    return fetch(`/api/data/${dateLabel}/spo2-distribution`)
+        .then(response => {
+            if (!response.ok) {
+                return null;
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log(`Oxygen debt data for ${dateLabel}:`, data); // Debug logging
+            if (data && data.distribution && data.distribution.oxygen_debt) {
+                return data.distribution.oxygen_debt;
+            }
+            return null;
+        })
+        .catch(error => {
+            console.error(`Error loading oxygen debt data for ${dateLabel}:`, error);
+            return null;
+        });
+}
+
+// Create two-week chart
+function createTwoWeekChart(dateLabels, dataResults) {
+    const ctx = document.getElementById('twoWeekChart').getContext('2d');
+    
+    console.log('Creating two-week chart with data:', dataResults); // Debug logging
+    
+    // Destroy existing chart
+    if (twoWeekChart) {
+        twoWeekChart.destroy();
+    }
+    
+    // Prepare labels (show day names)
+    const labels = dateLabels.map(date => {
+        const d = new Date(date);
+        return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    });
+    
+    // Create datasets for each oxygen debt zone
+    const datasets = oxygenDebtZoneOrder.map(zone => {
+        const data = dataResults.map(oxygenDebtData => {
+            if (!oxygenDebtData) return 0;
+            
+            if (currentMetric === 'area') {
+                if (zone === 'Below 95') return oxygenDebtData.area_under_95 || 0;
+                if (zone === 'Below 90') return oxygenDebtData.area_under_90 || 0;
+                if (zone === 'Below 88') return oxygenDebtData.area_under_88 || 0;
+            } else {
+                // Convert seconds to minutes
+                if (zone === 'Below 95') return Math.round((oxygenDebtData.time_under_95 || 0) / 60);
+                if (zone === 'Below 90') return Math.round((oxygenDebtData.time_under_90 || 0) / 60);
+                if (zone === 'Below 88') return Math.round((oxygenDebtData.time_under_88 || 0) / 60);
+            }
+            return 0;
+        });
+        
+        return {
+            label: zone,
+            data: data,
+            backgroundColor: oxygenDebtColors[zone] || '#6c757d',
+            borderWidth: 1,
+            borderColor: '#ffffff'
+        };
+    });
+    
+    // Calculate dynamic Y-axis maximum
+    let maxValue = 0;
+    dataResults.forEach(oxygenDebtData => {
+        if (!oxygenDebtData) return;
+        
+        let dayTotal = 0;
+        if (currentMetric === 'area') {
+            dayTotal = (oxygenDebtData.area_under_95 || 0) + 
+                      (oxygenDebtData.area_under_90 || 0) + 
+                      (oxygenDebtData.area_under_88 || 0);
+        } else {
+            dayTotal = Math.round(((oxygenDebtData.time_under_95 || 0) + 
+                                 (oxygenDebtData.time_under_90 || 0) + 
+                                 (oxygenDebtData.time_under_88 || 0)) / 60);
+        }
+        maxValue = Math.max(maxValue, dayTotal);
+    });
+    
+    twoWeekChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            onClick: function(event, elements) {
+                const canvas = event.native.target;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.native.x - rect.left;
+                const y = event.native.y - rect.top;
+                
+                const chartArea = twoWeekChart.chartArea;
+                if (!chartArea) return;
+                
+                if (x >= chartArea.left && x <= chartArea.right && 
+                    y >= chartArea.top && y <= chartArea.bottom) {
+                    
+                    const xAxis = twoWeekChart.scales.x;
+                    const clickIndex = xAxis.getValueForPixel(x);
+                    
+                    if (clickIndex >= 0 && clickIndex < dateLabels.length) {
+                        const dateLabel = dateLabels[clickIndex];
+                        showSingleDateView(dateLabel);
+                    }
+                }
+            },
+            onHover: function(event, elements) {
+                event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    max: maxValue > 0 ? Math.ceil(maxValue * 1.1) : undefined,
+                    title: {
+                        display: true,
+                        text: currentMetric === 'area' ? 'Oxygen Debt Area' : 'Minutes'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                }
+            }
+        }
+    });
+}
+
+// Update the date range display
+function updateDateRange() {
+    if (!currentStartDate || !currentEndDate) return;
+    
+    const startStr = currentStartDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+    });
+    const endStr = currentEndDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+    });
+    
+    document.getElementById('twoWeekTitle').textContent = `${startStr} - ${endStr}`;
+}
+
+// Show single date view
+function showSingleDateView(dateLabel) {
+    selectedDate = dateLabel;
+    
+    document.getElementById('singleDateTitle').textContent = 
+        new Date(dateLabel).toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+    
+    document.getElementById('singleDateSection').style.display = 'block';
+    
+    // Load activities for this date
+    loadActivitiesForDate(dateLabel);
+    
+    // Scroll to the section
+    document.getElementById('singleDateSection').scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+    });
+}
+
+// Close single date view
+function closeSingleDateView() {
+    document.getElementById('singleDateSection').style.display = 'none';
+    selectedDate = null;
+    
+    if (activitiesChart) {
+        activitiesChart.destroy();
+        activitiesChart = null;
+    }
+}
+
+// Navigate single day left or right
+function navigateSingleDay(direction) {
+    if (!selectedDate) return;
+    
+    const currentDate = new Date(selectedDate);
+    currentDate.setDate(currentDate.getDate() + direction);
+    const newDateLabel = currentDate.toISOString().split('T')[0];
+    
+    showSingleDateView(newDateLabel);
+}
+
+// Go to today from single date view
+function goToTodayFromSingleDate() {
+    const today = new Date().toISOString().split('T')[0];
+    showSingleDateView(today);
+}
+
+// Load activities for a specific date
+function loadActivitiesForDate(dateLabel) {
+    fetch(`/api/activities/${dateLabel}`)
+        .then(response => {
+            if (!response.ok) {
+                console.log(`No activities found for ${dateLabel}`);
+                return [];
+            }
+            return response.json();
+        })
+        .then(activities => {
+            // Get oxygen debt data for each activity
+            const activityPromises = activities.map(activity => 
+                fetch(`/api/activity/${activity.activity_id}/spo2-distribution`)
+                    .then(response => response.ok ? response.json() : null)
+                    .then(data => ({
+                        ...activity,
+                        oxygen_debt: data && data.distribution ? data.distribution.oxygen_debt : null
+                    }))
+                    .catch(error => {
+                        console.error(`Error loading oxygen debt for activity ${activity.activity_id}:`, error);
+                        return { ...activity, oxygen_debt: null };
+                    })
+            );
+            
+            return Promise.all(activityPromises);
+        })
+        .then(activitiesWithOxygenDebt => {
+            createActivitiesChart(activitiesWithOxygenDebt);
+        })
+        .catch(error => {
+            console.error(`Error loading activities for ${dateLabel}:`, error);
+            createActivitiesChart([]);
+        });
+}
+
+// Create activities chart
+function createActivitiesChart(activities) {
+    const ctx = document.getElementById('activitiesChart').getContext('2d');
+    const chartContainer = document.getElementById('activitiesChartContainer');
+    
+    // Destroy existing chart
+    if (activitiesChart) {
+        activitiesChart.destroy();
+    }
+    
+    if (!activities || activities.length === 0) {
+        // No activities - show empty chart
+        chartContainer.style.height = '100px';
+        
+        const existingOverlay = chartContainer.querySelector('.no-activities-overlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+        
+        activitiesChart = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: [], datasets: [] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                scales: { x: { display: false }, y: { display: false } }
+            }
+        });
+        
+        const overlay = document.createElement('div');
+        overlay.className = 'no-activities-overlay d-flex align-items-center justify-content-center h-100';
+        overlay.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255, 255, 255, 0.9);';
+        overlay.innerHTML = '<p class="text-muted">No activities for this date</p>';
+        chartContainer.appendChild(overlay);
+        return;
+    }
+    
+    // Clear overlay
+    const existingOverlay = chartContainer.querySelector('.no-activities-overlay');
+    if (existingOverlay) {
+        existingOverlay.remove();
+    }
+    
+    // Calculate dynamic height
+    const barHeight = 56;
+    const padding = 40;
+    const legendHeight = 50;
+    const totalHeight = (activities.length * barHeight) + padding + legendHeight;
+    chartContainer.style.height = totalHeight + 'px';
+    
+    // Prepare data for horizontal stacked bar chart
+    const labels = activities.map(activity => activity.activity_name);
+    
+    // Create datasets for each oxygen debt zone
+    const datasets = oxygenDebtZoneOrder.map(zone => {
+        const data = activities.map(activity => {
+            if (!activity.oxygen_debt) return 0;
+            
+            if (currentMetric === 'area') {
+                if (zone === 'Below 95') return activity.oxygen_debt.area_under_95 || 0;
+                if (zone === 'Below 90') return activity.oxygen_debt.area_under_90 || 0;
+                if (zone === 'Below 88') return activity.oxygen_debt.area_under_88 || 0;
+            } else {
+                // Convert seconds to minutes
+                if (zone === 'Below 95') return Math.round((activity.oxygen_debt.time_under_95 || 0) / 60);
+                if (zone === 'Below 90') return Math.round((activity.oxygen_debt.time_under_90 || 0) / 60);
+                if (zone === 'Below 88') return Math.round((activity.oxygen_debt.time_under_88 || 0) / 60);
+            }
+            return 0;
+        });
+        
+        return {
+            label: zone,
+            data: data,
+            backgroundColor: oxygenDebtColors[zone],
+            borderColor: oxygenDebtColors[zone],
+            borderWidth: 1,
+            stack: 'activities'
+        };
+    });
+    
+    // Calculate x-axis maximum
+    let maxValue = 0;
+    activities.forEach(activity => {
+        if (!activity.oxygen_debt) return;
+        
+        let activityTotal = 0;
+        if (currentMetric === 'area') {
+            activityTotal = (activity.oxygen_debt.area_under_95 || 0) + 
+                           (activity.oxygen_debt.area_under_90 || 0) + 
+                           (activity.oxygen_debt.area_under_88 || 0);
+        } else {
+            activityTotal = Math.round(((activity.oxygen_debt.time_under_95 || 0) + 
+                                      (activity.oxygen_debt.time_under_90 || 0) + 
+                                      (activity.oxygen_debt.time_under_88 || 0)) / 60);
+        }
+        maxValue = Math.max(maxValue, activityTotal);
+    });
+    
+    const xAxisMax = Math.max(maxValue, 10); // Minimum of 10
+    
+    // Create the chart
+    activitiesChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            indexAxis: 'y', // Horizontal bars
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    stacked: true,
+                    beginAtZero: true,
+                    max: xAxisMax,
+                    title: {
+                        display: true,
+                        text: currentMetric === 'area' ? 'Oxygen Debt Area' : 'Minutes'
+                    }
+                },
+                y: {
+                    stacked: true,
+                    title: {
+                        display: true,
+                        text: 'Activities'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                }
+            }
+        }
+    });
+}
+
+// Show/hide loading indicator
+function showLoading() {
+    document.getElementById('loading').style.display = 'block';
+}
+
+function hideLoading() {
+    document.getElementById('loading').style.display = 'none';
+}
+
+</script>
+{% endblock %}

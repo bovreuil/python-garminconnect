@@ -36,6 +36,9 @@ from database import (
     save_cached_trimp_data,
     calculate_data_hash,
     invalidate_cached_trimp_data,
+    get_cached_oxygen_debt_data,
+    save_cached_oxygen_debt_data,
+    invalidate_cached_oxygen_debt_data,
     get_config_value,
     set_config_value
 )
@@ -153,6 +156,13 @@ def index():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template('dashboard.html')
+
+@app.route('/oxygen-debt')
+def oxygen_debt():
+    """Oxygen Debt page route."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('oxygen_debt.html')
 
 @app.route('/<date>')
 def date_view(date):
@@ -821,6 +831,9 @@ def get_activity_spo2_distribution(activity_id):
         # Calculate SpO2 distribution
         distribution = calculate_spo2_distribution(o2ring_data, start_timestamp, end_timestamp)
         
+        # The distribution already contains oxygen_debt from calculate_spo2_distribution
+        # We could add caching here in the future if needed, but for now keep the existing calculation
+        
         return jsonify({
             'activity_id': activity_id,
             'activity_name': activity['activity_name'],
@@ -858,6 +871,9 @@ def get_daily_spo2_distribution(date):
         
         # Calculate SpO2 distribution
         distribution = calculate_spo2_distribution(o2ring_data, start_timestamp, end_timestamp)
+        
+        # The distribution already contains oxygen_debt from calculate_spo2_distribution
+        # We could add caching here in the future if needed, but for now keep the existing calculation
         
         return jsonify({
             'date': date,
@@ -2331,6 +2347,12 @@ def process_o2ring_file(file):
         cur.close()
         conn.close()
         
+        # Invalidate oxygen debt cache for the date range covered by this file
+        from datetime import datetime
+        start_date = datetime.fromtimestamp(first_timestamp / 1000).strftime('%Y-%m-%d')
+        end_date = datetime.fromtimestamp(last_timestamp / 1000).strftime('%Y-%m-%d')
+        invalidate_oxygen_debt_cache_for_date_range(start_date, end_date)
+        
         logger.info(f"O2Ring file processed successfully: {file.filename}, {len(data_points)} data points")
         
         return {
@@ -2613,6 +2635,12 @@ def o2ring_delete_file(file_id):
         conn.commit()
         cur.close()
         conn.close()
+        
+        # Invalidate oxygen debt cache for the date range covered by this file
+        from datetime import datetime
+        start_date = datetime.fromtimestamp(file_record['first_timestamp'] / 1000).strftime('%Y-%m-%d')
+        end_date = datetime.fromtimestamp(file_record['last_timestamp'] / 1000).strftime('%Y-%m-%d')
+        invalidate_oxygen_debt_cache_for_date_range(start_date, end_date)
         
         logger.info(f"O2Ring file deleted: {file_record['filename']}")
         
@@ -2906,6 +2934,74 @@ def calculate_spo2_distribution(spo2_data, start_timestamp=None, end_timestamp=N
         'total_seconds': round(total_seconds, 1),
         'oxygen_debt': oxygen_debt
     }
+
+def invalidate_oxygen_debt_cache_for_date_range(start_date, end_date):
+    """
+    Invalidate oxygen debt cache for all dates in a given range.
+    
+    Args:
+        start_date: Start date string (YYYY-MM-DD)
+        end_date: End date string (YYYY-MM-DD)
+    """
+    from datetime import datetime, timedelta
+    
+    try:
+        # Parse dates
+        start = datetime.strptime(start_date, '%Y-%m-%d')
+        end = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        # Iterate through each date in the range
+        current_date = start
+        while current_date <= end:
+            date_str = current_date.strftime('%Y-%m-%d')
+            invalidate_cached_oxygen_debt_data(date_str, 'daily')
+            current_date += timedelta(days=1)
+            
+        logger.info(f"Invalidated oxygen debt cache for date range {start_date} to {end_date}")
+        
+    except Exception as e:
+        logger.error(f"Error invalidating oxygen debt cache for date range: {e}")
+
+def calculate_oxygen_debt_with_caching(target_date, spo2_data, data_type='daily'):
+    """
+    Calculate oxygen debt with caching support.
+    
+    Args:
+        target_date: Date string or activity_id
+        spo2_data: List of [timestamp, spo2_value] pairs
+        data_type: 'daily' or 'activity'
+        
+    Returns:
+        Dict with oxygen debt data
+    """
+    if not spo2_data or len(spo2_data) < 2:
+        return {
+            'time_under_95': 0.0,
+            'area_under_95': 0.0,
+            'time_under_90': 0.0,
+            'area_under_90': 0.0,
+            'time_under_88': 0.0,
+            'area_under_88': 0.0
+        }
+    
+    # Calculate hash of input data
+    data_hash = calculate_data_hash(spo2_data)
+    
+    # Check for cached data
+    cached_data = get_cached_oxygen_debt_data(target_date, data_type)
+    if cached_data and cached_data['hash'] == data_hash:
+        logger.info(f"calculate_oxygen_debt_with_caching: Using cached oxygen debt data for {target_date}")
+        return cached_data['oxygen_debt_data']
+    
+    # Calculate oxygen debt
+    logger.info(f"calculate_oxygen_debt_with_caching: Calculating oxygen debt for {target_date}")
+    distribution = calculate_spo2_distribution(spo2_data)
+    oxygen_debt_data = distribution.get('oxygen_debt', {})
+    
+    # Cache the result
+    save_cached_oxygen_debt_data(target_date, oxygen_debt_data, data_hash, data_type)
+    
+    return oxygen_debt_data
 
 if __name__ == '__main__':
     init_database()

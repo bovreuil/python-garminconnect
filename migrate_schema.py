@@ -65,6 +65,36 @@ def migrate_database():
         else:
             logger.info("trimp_calculation_hash column already exists in activity_data table")
         
+        # Check and add oxygen debt caching columns to daily_data table
+        logger.info("Checking oxygen debt caching columns in daily_data table...")
+        
+        if not check_column_exists(conn, 'daily_data', 'cached_oxygen_debt_data'):
+            logger.info("Adding cached_oxygen_debt_data column to daily_data table")
+            cur.execute("ALTER TABLE daily_data ADD COLUMN cached_oxygen_debt_data JSON")
+        else:
+            logger.info("cached_oxygen_debt_data column already exists in daily_data table")
+        
+        if not check_column_exists(conn, 'daily_data', 'oxygen_debt_calculation_hash'):
+            logger.info("Adding oxygen_debt_calculation_hash column to daily_data table")
+            cur.execute("ALTER TABLE daily_data ADD COLUMN oxygen_debt_calculation_hash VARCHAR(64)")
+        else:
+            logger.info("oxygen_debt_calculation_hash column already exists in daily_data table")
+        
+        # Check and add oxygen debt caching columns to activity_data table
+        logger.info("Checking oxygen debt caching columns in activity_data table...")
+        
+        if not check_column_exists(conn, 'activity_data', 'cached_oxygen_debt_data'):
+            logger.info("Adding cached_oxygen_debt_data column to activity_data table")
+            cur.execute("ALTER TABLE activity_data ADD COLUMN cached_oxygen_debt_data JSON")
+        else:
+            logger.info("cached_oxygen_debt_data column already exists in activity_data table")
+        
+        if not check_column_exists(conn, 'activity_data', 'oxygen_debt_calculation_hash'):
+            logger.info("Adding oxygen_debt_calculation_hash column to activity_data table")
+            cur.execute("ALTER TABLE activity_data ADD COLUMN oxygen_debt_calculation_hash VARCHAR(64)")
+        else:
+            logger.info("oxygen_debt_calculation_hash column already exists in activity_data table")
+        
         # Commit changes
         conn.commit()
         logger.info("Migration completed successfully!")
