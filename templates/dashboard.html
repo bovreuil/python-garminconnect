@@ -519,12 +519,7 @@ document.head.appendChild(style);
 
 
 // Helper function to format dates consistently without timezone issues
-function formatDateForAPI(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
+// formatDateForAPI moved to dashboard-navigation.js
 
 // Calculate two-week period containing a given date
 // preferSecondWeek: if true, puts target date in second week (for initialization)
@@ -690,66 +685,9 @@ let selectedActivity = null; // Track the currently selected activity
 
 // navigateToWeek moved to dashboard-navigation.js
 
-// Navigate single day left or right
-function navigateSingleDay(direction) {
-    if (!selectedDate) {
-        return;
-    }
-    
-    // Close single activity view when navigating
-    closeSingleActivityView();
-    
-    // Convert selectedDate string to Date object
-    const currentDate = new Date(selectedDate + 'T00:00:00');
-    const newDate = new Date(currentDate);
-    newDate.setDate(currentDate.getDate() + direction);
-    
-    // Check if the new date is outside the current period
-    if (currentStartDate && currentEndDate) {
-        if (newDate < currentStartDate || newDate > currentEndDate) {
-            // Need to adjust the period
-            // When going left (direction < 0): prefer first week to see more past dates
-            // When going right (direction > 0): prefer second week to see more future dates
-            const preferSecondWeek = direction > 0;
-            const { startDate, endDate } = calculateTwoWeekPeriod(newDate, preferSecondWeek);
-            loadTwoWeekData(startDate, endDate);
-        }
-    }
-    
-    // Show the single day view for the new date
-    setTimeout(() => {
-        loadDateData(formatDateForAPI(newDate)).then(dayData => {
-            // Always show the single day view, even if there's no data
-            showSingleDateView(formatDateForAPI(newDate), dayData);
-        });
-    }, 500);
-}
+// navigateSingleDay moved to dashboard-navigation.js
 
-// Go to today in single date view
-function goToSingleDateToday() {
-    // Close single activity view when going to today
-    closeSingleActivityView();
-    
-    const today = new Date();
-    const todayString = today.toISOString().split('T')[0];
-    
-    // Check if the new date is outside the current period
-    if (currentStartDate && currentEndDate) {
-        if (today < currentStartDate || today > currentEndDate) {
-            // Need to adjust the period to include today
-            const { startDate, endDate } = calculateTwoWeekPeriod(today);
-            loadTwoWeekData(startDate, endDate);
-        }
-    }
-    
-    // Show the single day view for today
-    setTimeout(() => {
-        loadDateData(todayString).then(dayData => {
-            // Always show the single day view, even if there's no data
-            showSingleDateView(todayString, dayData);
-        });
-    }, 500);
-}
+// goToSingleDateToday moved to dashboard-navigation.js
 
 // Switch between TRIMP and minutes
 function switchMetric(metric) {
@@ -1140,23 +1078,7 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     });
 }
 
-// Update the date range display
-function updateDateRange() {
-    if (!currentStartDate || !currentEndDate) return;
-    
-    const startStr = currentStartDate.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
-    });
-    const endStr = currentEndDate.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        year: 'numeric'
-    });
-    
-    // Update the two week title with the date range
-    document.getElementById('twoWeekTitle').textContent = `${startStr} - ${endStr}`;
-}
+// updateDateRange moved to dashboard-navigation.js
 
 // Load 14 weeks of data
 function loadFourteenWeekData() {
@@ -1205,12 +1127,7 @@ function loadFourteenWeekData() {
 }
 
 // Get the start of the week (Monday) for a given date
-function getWeekStart(date) {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
-    return new Date(d.setDate(diff));
-}
+// getWeekStart moved to dashboard-navigation.js
 
 // Update 14-week chart
 function updateFourteenWeekChart(dateLabels, dataResults) {
@@ -5181,14 +5098,7 @@ function toggleSpo2ChartType(chartType, viewType) {
     }
 }
 
-function formatTime(seconds) {
-    if (seconds === 0) return '00:00:00';
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-}
+// formatTime moved to dashboard-navigation.js
 
 function updateOxygenDebtDisplay(oxygenDebt, viewType) {
     if (!oxygenDebt) return;

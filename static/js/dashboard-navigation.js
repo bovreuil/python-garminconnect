@@ -76,28 +76,33 @@ function navigateSingleDay(direction) {
         return;
     }
     
-    const currentDate = new Date(selectedDate);
-    currentDate.setDate(currentDate.getDate() + direction);
-    const newDateLabel = currentDate.toISOString().split('T')[0];
+    // Close single activity view when navigating
+    closeSingleActivityView();
     
-    // Check if the new date is within the current two-week view
+    // Convert selectedDate string to Date object
+    const currentDate = new Date(selectedDate + 'T00:00:00');
+    const newDate = new Date(currentDate);
+    newDate.setDate(currentDate.getDate() + direction);
+    
+    // Check if the new date is outside the current period
     if (currentStartDate && currentEndDate) {
-        if (currentDate >= currentStartDate && currentDate <= currentEndDate) {
-            // Date is within current view, just update single date view
-            loadDateData(newDateLabel).then(dayData => {
-                showSingleDateView(newDateLabel, dayData);
-            });
-        } else {
-            // Date is outside current view, need to navigate to new two-week period
-            const { startDate, endDate } = calculateTwoWeekPeriod(currentDate);
+        if (newDate < currentStartDate || newDate > currentEndDate) {
+            // Need to adjust the period
+            // When going left (direction < 0): prefer first week to see more past dates
+            // When going right (direction > 0): prefer second week to see more future dates
+            const preferSecondWeek = direction > 0;
+            const { startDate, endDate } = calculateTwoWeekPeriod(newDate, preferSecondWeek);
             loadTwoWeekData(startDate, endDate);
-            
-            // Then show single date view for the new date
-            loadDateData(newDateLabel).then(dayData => {
-                showSingleDateView(newDateLabel, dayData);
-            });
         }
     }
+    
+    // Show the single day view for the new date
+    setTimeout(() => {
+        loadDateData(formatDateForAPI(newDate)).then(dayData => {
+            // Always show the single day view, even if there's no data
+            showSingleDateView(formatDateForAPI(newDate), dayData);
+        });
+    }, 500);
 }
 
 // Go to today from single date view
@@ -108,24 +113,22 @@ function goToSingleDateToday() {
     const today = new Date();
     const todayString = today.toISOString().split('T')[0];
     
-    // Check if today is within the current two-week view
+    // Check if the new date is outside the current period
     if (currentStartDate && currentEndDate) {
-        if (today >= currentStartDate && today <= currentEndDate) {
-            // Today is within current view, just update single date view
-            loadDateData(todayString).then(dayData => {
-                showSingleDateView(todayString, dayData);
-            });
-        } else {
-            // Today is outside current view, need to navigate to today's two-week period
+        if (today < currentStartDate || today > currentEndDate) {
+            // Need to adjust the period to include today
             const { startDate, endDate } = calculateTwoWeekPeriod(today);
             loadTwoWeekData(startDate, endDate);
-            
-            // Then show single date view for today
-            loadDateData(todayString).then(dayData => {
-                showSingleDateView(todayString, dayData);
-            });
         }
     }
+    
+    // Show the single day view for today
+    setTimeout(() => {
+        loadDateData(todayString).then(dayData => {
+            // Always show the single day view, even if there's no data
+            showSingleDateView(todayString, dayData);
+        });
+    }, 500);
 }
 
 // Update the date range display
@@ -152,6 +155,14 @@ function getWeekStart(date) {
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
     return new Date(d.setDate(diff));
+}
+
+// Format date object as YYYY-MM-DD string for API calls
+function formatDateForAPI(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 // Format seconds as HH:MM:SS
