@@ -1037,26 +1037,20 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     if (maxValue === 0) {
         yAxisMax = 10; // Small default for no data
     } else {
-        // Determine step size based on the range and metric type
+        // Determine step size - unified logic for both area and minutes values
+        // Chart.js uses the same gridline algorithm regardless of data meaning
         let step;
-        if (currentMetric === 'area') {
-            // Oxygen debt area values can be large (20k-200k+)
-            if (maxValue <= 1000) step = 200;
-            else if (maxValue <= 5000) step = 1000;
-            else if (maxValue <= 10000) step = 2000;
-            else if (maxValue <= 50000) step = 10000;
-            else if (maxValue <= 100000) step = 20000;
-            else if (maxValue <= 500000) step = 50000;
-            else step = 100000;
-        } else {
-            // Minutes values are smaller (50-2000)
-            if (maxValue <= 50) step = 10;
-            else if (maxValue <= 100) step = 20;
-            else if (maxValue <= 500) step = 100;
-            else if (maxValue <= 1000) step = 200;
-            else if (maxValue <= 2000) step = 400;
-            else step = 500;
-        }
+        
+        if (maxValue <= 1000) step = 100;        // 497 → 100, 809 → 100
+        else if (maxValue <= 2000) step = 200;   // 1113 → 200
+        else if (maxValue <= 5000) step = 500;
+        else if (maxValue <= 10000) step = 1000;
+        else if (maxValue <= 20000) step = 2000;
+        else if (maxValue <= 50000) step = 5000;
+        else if (maxValue <= 70000) step = 10000; // 65091 → 10000
+        else if (maxValue <= 150000) step = 20000; // 93739 → 20000
+        else if (maxValue <= 400000) step = 50000; // 191404 → 50000
+        else step = 100000;
         
         // Round up to next tick boundary and add one extra step for label space
         yAxisMax = Math.ceil(maxValue / step) * step + step;
