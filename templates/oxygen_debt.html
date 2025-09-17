@@ -229,19 +229,6 @@
                                     </div>
                                 </div>
                                 
-                                <!-- Activity Summary and Zone Breakdown -->
-                                <div class="row mb-4">
-                                    <div class="col-6">
-                                        <div id="activitySummary">
-                                            <!-- Activity summary will be populated by JavaScript -->
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <div id="activityZoneBreakdown">
-                                            <!-- Zone breakdown will be populated by JavaScript -->
-                                        </div>
-                                    </div>
-                                </div>
                                 
                                 <!-- Activity SpO2 Distribution Charts -->
                                 <div class="mb-4" id="activitySpo2DistributionChartsContainer" style="display: none;">
@@ -643,8 +630,7 @@ let selectedActivity = null; // Track the currently selected activity
         if (this.checked) toggleSpo2ChartType('at', 'activity');
     });
     
-    // Initialize by loading 14-week data and going to today
-    loadFourteenWeekData();
+    // Initialize by going to today (no 14-week chart on oxygen debt page)
     goToToday();
 });
 
@@ -1452,79 +1438,7 @@ function showSingleActivityView(activity) {
         createActivityHeartRateChart(activity);
     }, 50);
     
-    // Display activity summary
-    let summaryHtml = '<div class="row">';
-    
-    if (activity.total_trimp !== undefined) {
-        summaryHtml += `
-            <div class="col-6">
-                <div class="text-center p-3 bg-light rounded">
-                    <h4 class="text-primary mb-1">${activity.total_trimp.toFixed(1)}</h4>
-                    <small class="text-muted">Total TRIMP</small>
-                </div>
-            </div>
-        `;
-    }
-    
-    if (activity.presentation_buckets) {
-        let totalMinutes = 0;
-        Object.values(activity.presentation_buckets).forEach(bucket => {
-            totalMinutes += bucket.minutes || 0;
-        });
-        
-        summaryHtml += `
-            <div class="col-6">
-                <div class="text-center p-3 bg-light rounded">
-                    <h4 class="text-success mb-1">${totalMinutes.toFixed(0)}</h4>
-                    <small class="text-muted">Total Minutes</small>
-                </div>
-            </div>
-        `;
-    }
-    
-    summaryHtml += '</div>';
-    document.getElementById('activitySummary').innerHTML = summaryHtml;
-    
-    // Display zone breakdown
-    if (activity.presentation_buckets) {
-        let zoneHtml = '<div class="table-responsive"><table class="table table-sm">';
-        zoneHtml += '<thead><tr><th>Zone</th><th>Minutes</th><th>TRIMP</th><th>%</th></tr></thead><tbody>';
-        
-        const sortedZones = zoneOrder.filter(zone => activity.presentation_buckets[zone]).reverse();
-        let totalMinutes = 0;
-        let totalTrimp = 0;
-        
-        // Calculate totals first
-        sortedZones.forEach(zone => {
-            const bucket = activity.presentation_buckets[zone];
-            totalMinutes += bucket.minutes || 0;
-            totalTrimp += bucket.trimp || 0;
-        });
-        
-        // Display each zone
-        sortedZones.forEach(zone => {
-            const bucket = activity.presentation_buckets[zone];
-            const minutes = bucket.minutes || 0;
-            const trimp = bucket.trimp || 0;
-            const percentage = totalMinutes > 0 ? ((minutes / totalMinutes) * 100).toFixed(1) : '0.0';
-            
-            zoneHtml += `
-                <tr>
-                    <td>
-                        <span class="badge" style="background-color: ${zoneColors[zone]}; color: white;">${zone}</span>
-                    </td>
-                    <td>${minutes.toFixed(0)}</td>
-                    <td>${trimp.toFixed(1)}</td>
-                    <td>${percentage}%</td>
-                </tr>
-            `;
-        });
-        
-        zoneHtml += '</tbody></table></div>';
-        document.getElementById('activityZoneBreakdown').innerHTML = zoneHtml;
-    } else {
-        document.getElementById('activityZoneBreakdown').innerHTML = '<p class="text-muted">No zone data available</p>';
-    }
+    // Activity summary and zone breakdown removed - no longer needed
     
     // Load notes for this activity
     loadActivityNotes(activity.activity_id);
@@ -1918,8 +1832,7 @@ function clearTrimpOverrides() {
                 loadTwoWeekData(currentStartDate, currentEndDate);
             }
             
-            // Refresh the 14-week chart to show calculated values
-            loadFourteenWeekData();
+            // No 14-week chart on oxygen debt page
             
             // Refresh the single date view if it's open
             if (selectedDate) {
@@ -1974,8 +1887,7 @@ function saveTrimpOverrides() {
                 loadTwoWeekData(currentStartDate, currentEndDate);
             }
             
-            // Refresh the 14-week chart to show overrides
-            loadFourteenWeekData();
+            // No 14-week chart on oxygen debt page
             
             // Refresh the single date view if it's open
             if (selectedDate) {
@@ -2107,8 +2019,7 @@ function createManualActivity() {
                 loadTwoWeekData(currentStartDate, currentEndDate);
             }
             
-            // Refresh the 14-week chart
-            loadFourteenWeekData();
+            // No 14-week chart on oxygen debt page
             
             alert('Manual activity created successfully!');
         } else {
@@ -2147,8 +2058,7 @@ function deleteActivity(activityId) {
                 loadTwoWeekData(currentStartDate, currentEndDate);
             }
             
-            // Refresh the 14-week chart
-            loadFourteenWeekData();
+            // No 14-week chart on oxygen debt page
             
             alert('Activity deleted successfully!');
         } else {
@@ -2281,8 +2191,7 @@ function uploadCsvData() {
             // Clear the file input
             fileInput.value = '';
             
-            // Refresh the 14-week chart
-            loadFourteenWeekData();
+            // No 14-week chart on oxygen debt page
             
             alert('CSV uploaded successfully! Activity data has been updated.');
         } else {
@@ -2346,8 +2255,7 @@ function clearCsvOverride() {
             const modal = bootstrap.Modal.getInstance(document.getElementById('csvUploadModal'));
             modal.hide();
             
-            // Refresh the 14-week chart
-            loadFourteenWeekData();
+            // No 14-week chart on oxygen debt page
             
             alert('CSV override cleared successfully! Original HR data has been restored.');
         } else {
