@@ -2769,29 +2769,44 @@ def get_batch_data():
             data = cur.fetchone()
             
             if data:
-                # Get enriched HR series
-                from jobs import build_daily_hr_timeseries, calculate_trimp_with_caching
-                enriched_hr_series = build_daily_hr_timeseries(date, conn, cur)
+                # For batch requests (chart data), try to serve from cached data only
+                from database import get_cached_trimp_data
+                cached_trimp = get_cached_trimp_data(date, 'daily')
                 
-                # Calculate TRIMP with caching
-                trimp_results = calculate_trimp_with_caching(date, enriched_hr_series, 'daily')
-                trimp_data = trimp_results.get('presentation_buckets', {})
-                total_trimp = trimp_results.get('total_trimp', 0.0)
+                if cached_trimp:
+                    # Use cached TRIMP data - no need to rebuild time series for charts
+                    trimp_data = cached_trimp['trimp_data'].get('presentation_buckets', {})
+                    total_trimp = cached_trimp['trimp_data'].get('total_trimp', 0.0)
+                else:
+                    # Fallback: rebuild time series and calculate TRIMP (rare case)
+                    from jobs import build_daily_hr_timeseries, calculate_trimp_with_caching
+                    enriched_hr_series = build_daily_hr_timeseries(date, conn, cur)
+                    trimp_results = calculate_trimp_with_caching(date, enriched_hr_series, 'daily')
+                    trimp_data = trimp_results.get('presentation_buckets', {})
+                    total_trimp = trimp_results.get('total_trimp', 0.0)
                 
-                # Calculate oxygen debt data for this day
-                from datetime import datetime
-                import pytz
-                uk_tz = pytz.timezone('Europe/London')
-                start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
-                end_of_day = start_of_day + timedelta(days=1)
-                start_timestamp = int(start_of_day.timestamp() * 1000)
-                end_timestamp = int(end_of_day.timestamp() * 1000)
+                # Calculate oxygen debt data for this day - try cached first
+                from database import get_cached_oxygen_debt_data
+                cached_oxygen_debt = get_cached_oxygen_debt_data(date, 'daily')
                 
-                o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
-                oxygen_debt_data = {}
-                if o2ring_data:
-                    spo2_series = [[row[0], row[1]] for row in o2ring_data]
-                    oxygen_debt_data = calculate_oxygen_debt_with_caching(date, spo2_series, 'daily')
+                if cached_oxygen_debt:
+                    # Use cached oxygen debt data
+                    oxygen_debt_data = cached_oxygen_debt['oxygen_debt_data']
+                else:
+                    # Fallback: calculate oxygen debt from SpO2 data (rare case)
+                    from datetime import datetime
+                    import pytz
+                    uk_tz = pytz.timezone('Europe/London')
+                    start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
+                    end_of_day = start_of_day + timedelta(days=1)
+                    start_timestamp = int(start_of_day.timestamp() * 1000)
+                    end_timestamp = int(end_of_day.timestamp() * 1000)
+                    
+                    o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
+                    oxygen_debt_data = {}
+                    if o2ring_data:
+                        spo2_series = [[row[0], row[1]] for row in o2ring_data]
+                        oxygen_debt_data = calculate_oxygen_debt_with_caching(date, spo2_series, 'daily')
                 
                 results[date] = {
                     'date': date,
