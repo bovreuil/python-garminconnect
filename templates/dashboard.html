@@ -6,6 +6,7 @@
 <script src="{{ url_for('static', filename='js/dashboard-navigation.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chart-utilities.js') }}"></script>
 <script src="{{ url_for('static', filename='js/data-loading.js') }}"></script>
+<script src="{{ url_for('static', filename='js/chart-creation.js') }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -4749,129 +4750,7 @@ function createSpo2DistributionCharts(distribution, atOrBelowChartId, containerI
     }
 }
 
-function createSpo2HorizontalBarChart(chartId, data, title) {
-    const ctx = document.getElementById(chartId);
-    if (!ctx) {
-        console.error(`Chart element ${chartId} not found`);
-        return;
-    }
-    
-    // Destroy existing chart if it exists
-    let existingChart = null;
-    if (chartId === 'spo2AtOrBelowChart') existingChart = spo2AtOrBelowChart;
-    else if (chartId === 'spo2AtChart') existingChart = spo2AtChart;
-    else if (chartId === 'activitySpo2AtOrBelowChart') existingChart = activitySpo2AtOrBelowChart;
-    else if (chartId === 'activitySpo2AtChart') existingChart = activitySpo2AtChart;
-    
-    if (existingChart) {
-        existingChart.destroy();
-    }
-    
-    // SpO2 color mapping (81-98) - exact specification
-    const spo2Colors = {
-        98: '#28a745', 97: '#28a745', 96: '#28a745', 95: '#28a745', // Green
-        94: '#9acd32', 93: '#9acd32', 92: '#ffc107', 91: '#ffc107', // Yellow-Green, Yellow
-        90: '#fd7e14', 89: '#fd7e14', 88: '#e74c3c', 87: '#e74c3c', // Orange, Red
-        86: '#dc3545', 85: '#dc3545', 84: '#dc3545', 83: '#dc3545', 82: '#dc3545', 81: '#dc3545' // Hot Red
-    };
-    
-    // Convert seconds to hh:mm:ss format
-    function formatTime(seconds) {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    
-    const chartData = {
-        labels: data.map(item => item.spo2), // Remove % from labels
-        datasets: [{
-            label: title,
-            data: data.map(item => item.seconds),
-            backgroundColor: data.map(item => spo2Colors[item.spo2] || '#6c757d'),
-            borderColor: data.map(item => spo2Colors[item.spo2] || '#6c757d'),
-            borderWidth: 1,
-            borderRadius: 2
-        }]
-    };
-    
-    const newChart = new Chart(ctx, {
-        type: 'bar',
-        data: chartData,
-        options: {
-            indexAxis: 'y', // Horizontal bar chart
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: {
-                padding: {
-                    right: 20 // Add some padding for the percentage labels
-                }
-            },
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const item = data[context.dataIndex];
-                            return [
-                                `Time: ${formatTime(item.seconds)}`,
-                                `Percentage: ${Math.round(item.percent)}%`
-                            ];
-                        }
-                    }
-                },
-                datalabels: {
-                    display: true,
-                    anchor: 'end',
-                    align: 'right',
-                    offset: 10,
-                    color: '#333',
-                    font: {
-                        size: 11
-                    },
-                    formatter: function(value, context) {
-                        const item = data[context.dataIndex];
-                        return `${Math.round(item.percent)}%`;
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Seconds'
-                    }
-                },
-                y: {
-                    reverse: false, // 98 at top, 81 at bottom (data comes in descending order, so reverse=false puts 98 at top)
-                    title: {
-                        display: true,
-                        text: 'SpO2 Level'
-                    },
-                    ticks: {
-                        stepSize: 1, // Show every integer value
-                        maxTicksLimit: 18, // Force showing all 18 values (98-81)
-                        autoSkip: false, // Don't skip any ticks
-                        callback: function(value, index, values) {
-                            // Map the index to the actual SpO2 value (98 down to 81)
-                            const spo2Values = [98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81];
-                            return spo2Values[index] || value;
-                        }
-                    }
-                }
-            }
-        }
-    });
-    
-    // Store chart reference
-    if (chartId === 'spo2AtOrBelowChart') spo2AtOrBelowChart = newChart;
-    else if (chartId === 'spo2AtChart') spo2AtChart = newChart;
-    else if (chartId === 'activitySpo2AtOrBelowChart') activitySpo2AtOrBelowChart = newChart;
-    else if (chartId === 'activitySpo2AtChart') activitySpo2AtChart = newChart;
-}
+// createSpo2HorizontalBarChart function moved to chart-creation.js
 
 function hideSpo2DistributionCharts() {
     const container = document.getElementById('spo2DistributionChartsContainer');
