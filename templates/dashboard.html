@@ -5,6 +5,7 @@
 {% block head %}
 <script src="{{ url_for('static', filename='js/dashboard-navigation.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chart-utilities.js') }}"></script>
+<script src="{{ url_for('static', filename='js/data-loading.js') }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -242,7 +243,19 @@
                                     </div>
                                 </div>
                                 
-
+                                <!-- Activity Summary and Zone Breakdown -->
+                                <div class="row mb-4">
+                                    <div class="col-6">
+                                        <div id="activitySummary">
+                                            <!-- Activity summary will be populated by JavaScript -->
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div id="activityZoneBreakdown">
+                                            <!-- Zone breakdown will be populated by JavaScript -->
+                                        </div>
+                                    </div>
+                                </div>
                                 
                                 <!-- Activity SpO2 Distribution Charts -->
                                 <div class="mb-4" id="activitySpo2DistributionChartsContainer" style="display: none;">
@@ -1310,13 +1323,7 @@ function aggregateWeekData(weekData) {
 }
 
 // Show/hide loading
-function showLoading() {
-    document.getElementById('loading').style.display = 'block';
-}
-
-function hideLoading() {
-    document.getElementById('loading').style.display = 'none';
-}
+// showLoading and hideLoading moved to dashboard-navigation.js (already available)
 
 // Show single date view
 function showSingleDateView(dateLabel, dayData) {
