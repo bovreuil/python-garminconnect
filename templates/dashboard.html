@@ -4723,32 +4723,7 @@ function loadActivitySpo2Distribution(activityId) {
         });
 }
 
-function createSpo2DistributionCharts(distribution, atOrBelowChartId, containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) {
-        console.error('SpO2 distribution container not found');
-        return;
-    }
-    
-    // Show container
-    container.style.display = 'block';
-    
-    // Store the distribution data for toggling
-    if (containerId === 'spo2DistributionChartsContainer') {
-        window.dailySpo2Distribution = distribution;
-    } else if (containerId === 'activitySpo2DistributionChartsContainer') {
-        window.activitySpo2Distribution = distribution;
-    }
-    
-    // Create "At or Below Level" chart by default
-    createSpo2HorizontalBarChart(atOrBelowChartId, distribution.at_or_below_level, 'Time at or Below Level');
-    
-    // Update oxygen debt display if available
-    if (distribution.oxygen_debt) {
-        const viewType = containerId === 'spo2DistributionChartsContainer' ? 'daily' : 'activity';
-        updateOxygenDebtDisplay(distribution.oxygen_debt, viewType);
-    }
-}
+// createSpo2DistributionCharts function moved to chart-creation.js
 
 // createSpo2HorizontalBarChart function moved to chart-creation.js
 

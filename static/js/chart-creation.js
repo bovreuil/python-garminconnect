@@ -259,21 +259,26 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
 function createSpo2DistributionCharts(distribution, atOrBelowChartId, containerId) {
     const container = document.getElementById(containerId);
     if (!container) {
-        console.error(`Container ${containerId} not found`);
+        console.error('SpO2 distribution container not found');
         return;
     }
     
-    // Show the container
+    // Show container
     container.style.display = 'block';
     
-    // Create "At or Below" chart
-    if (distribution.at_or_below_data && distribution.at_or_below_data.length > 0) {
-        createSpo2HorizontalBarChart(atOrBelowChartId, distribution.at_or_below_data, 'Time At or Below SpO2 Level');
+    // Store the distribution data for toggling
+    if (containerId === 'spo2DistributionChartsContainer') {
+        window.dailySpo2Distribution = distribution;
+    } else if (containerId === 'activitySpo2DistributionChartsContainer') {
+        window.activitySpo2Distribution = distribution;
     }
     
-    // Update oxygen debt display if function exists
-    if (typeof updateOxygenDebtDisplay === 'function' && distribution.oxygen_debt) {
-        const viewType = containerId.includes('activity') ? 'activity' : 'daily';
+    // Create "At or Below Level" chart by default
+    createSpo2HorizontalBarChart(atOrBelowChartId, distribution.at_or_below_level, 'Time at or Below Level');
+    
+    // Update oxygen debt display if available
+    if (distribution.oxygen_debt) {
+        const viewType = containerId === 'spo2DistributionChartsContainer' ? 'daily' : 'activity';
         updateOxygenDebtDisplay(distribution.oxygen_debt, viewType);
     }
 }
