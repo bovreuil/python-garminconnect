@@ -333,9 +333,14 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
         type: 'bar',
         data: chartData,
         options: {
-            indexAxis: 'y',
+            indexAxis: 'y', // Horizontal bar chart
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    right: 20 // Add some padding for the percentage labels
+                }
+            },
             plugins: {
                 legend: {
                     display: false
@@ -343,9 +348,26 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
                 tooltip: {
                     callbacks: {
                         label: function(context) {
-                            const seconds = context.parsed.x;
-                            return `${formatTime(seconds)} (${seconds}s)`;
+                            const item = data[context.dataIndex];
+                            return [
+                                `Time: ${formatTime(item.seconds)}`,
+                                `Percentage: ${Math.round(item.percent)}%`
+                            ];
                         }
+                    }
+                },
+                datalabels: {
+                    display: true,
+                    anchor: 'end',
+                    align: 'right',
+                    offset: 10,
+                    color: '#333',
+                    font: {
+                        size: 11
+                    },
+                    formatter: function(value, context) {
+                        const item = data[context.dataIndex];
+                        return `${Math.round(item.percent)}%`;
                     }
                 }
             },
@@ -354,13 +376,24 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
                     beginAtZero: true,
                     title: {
                         display: true,
-                        text: 'Time (seconds)'
+                        text: 'Seconds'
                     }
                 },
                 y: {
+                    reverse: false, // 98 at top, 81 at bottom (data comes in descending order, so reverse=false puts 98 at top)
                     title: {
                         display: true,
-                        text: 'SpO2 Level (%)'
+                        text: 'SpO2 Level'
+                    },
+                    ticks: {
+                        stepSize: 1, // Show every integer value
+                        maxTicksLimit: 18, // Force showing all 18 values (98-81)
+                        autoSkip: false, // Don't skip any ticks
+                        callback: function(value, index, values) {
+                            // Map the index to the actual SpO2 value (98 down to 81)
+                            const spo2Values = [98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81];
+                            return spo2Values[index] || value;
+                        }
                     }
                 }
             }
