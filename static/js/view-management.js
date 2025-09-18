@@ -99,47 +99,38 @@ function closeSingleDateView() {
 function showSingleActivityView(activity) {
     selectedActivity = activity; // Store the selected activity globally
     
-    // Update the single activity title with activity name and date
-    const activityDate = new Date(activity.start_time);
+    // Create a Date object for display formatting using selectedDate
+    const activityDate = new Date(selectedDate + 'T00:00:00');
     const activityDateStr = activityDate.toLocaleDateString('en-US', { 
-        weekday: 'short', 
-        month: 'short', 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
         day: 'numeric' 
     });
-    const activityTimeStr = activityDate.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-    });
     
-    document.getElementById('singleActivityTitle').textContent = 
-        `${activity.activity_name} - ${activityDateStr} ${activityTimeStr}`;
-    
-    // Show delete button only for manual activities
-    const deleteButton = document.getElementById('deleteActivity');
-    if (activity.activity_name && activity.activity_name.includes('Manual Activity')) {
-        deleteButton.style.display = 'inline-block';
-    } else {
-        deleteButton.style.display = 'none';
-    }
-    
-    // Update CSV override icon
-    const csvIcon = document.getElementById('csvIcon');
-    if (activity.has_hr_override) {
-        csvIcon.textContent = '📤✅ CSV';
-        csvIcon.parentElement.title = 'HR data has been overridden with CSV';
-    } else {
-        csvIcon.textContent = '📤 CSV';
-        csvIcon.parentElement.title = 'Upload CSV to override HR data';
-    }
-    
-    // Create activity heart rate chart
-    createActivityHeartRateChart(activity);
-    
-    // Load notes for this activity
-    loadActivityNotes(activity.activity_id);
+    // Update the single activity title with date and activity name
+    document.getElementById('singleActivityTitle').textContent = `${activityDateStr} - ${activity.activity_name}`;
+    document.getElementById('activityTitle').textContent = 'Activity Heart Rate';
     
     // Show the section
     document.getElementById('singleActivitySection').style.display = 'block';
+    
+    // Show/hide delete button for manual activities
+    const deleteBtn = document.getElementById('deleteActivity');
+    if (activity.activity_type === 'manual') {
+        deleteBtn.style.display = 'inline-block';
+    } else {
+        deleteBtn.style.display = 'none';
+    }
+    
+    // Small delay to ensure DOM is fully updated before creating chart
+    setTimeout(() => {
+        // Create the activity heart rate chart
+        createActivityHeartRateChart(activity);
+    }, 50);
+    
+    // Load notes for this activity
+    loadActivityNotes(activity.activity_id);
     
     // Scroll to the section
     document.getElementById('singleActivitySection').scrollIntoView({ 
