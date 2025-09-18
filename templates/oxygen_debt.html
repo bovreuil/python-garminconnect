@@ -3010,6 +3010,58 @@ function cancelActivityNotes(activityId) {
     loadActivityNotes(activityId);
 }
 
+function editDailyNotes(dateLabel) {
+    const notesElement = document.getElementById('dailyNotes');
+    const currentNotesElement = notesElement.querySelector('p');
+    let currentNotes = '';
+    
+    if (currentNotesElement) {
+        // Convert <br> tags back to newlines for the textarea
+        currentNotes = currentNotesElement.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+    }
+    
+    // Create edit form
+    notesElement.innerHTML = `
+        <textarea class="form-control" rows="4" onclick="event.stopPropagation()">${currentNotes}</textarea>
+        <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation(); saveDailyNotes('${dateLabel}')">Save</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); cancelDailyNotes('${dateLabel}')">Cancel</button>
+        </div>
+    `;
+    // Focus and move cursor to end
+    const textarea = notesElement.querySelector('textarea');
+    if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    }
+}
+
+function editActivityNotes(activityId) {
+    const notesElement = document.getElementById('activityNotes');
+    const currentNotesElement = notesElement.querySelector('p');
+    let currentNotes = '';
+    
+    if (currentNotesElement) {
+        // Convert <br> tags back to newlines for the textarea
+        currentNotes = currentNotesElement.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+    }
+    
+    // Create edit form
+    notesElement.innerHTML = `
+        <textarea class="form-control" rows="4" onclick="event.stopPropagation()">${currentNotes}</textarea>
+        <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation(); saveActivityNotes('${activityId}')">Save</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); cancelActivityNotes('${activityId}')">Cancel</button>
+        </div>
+    `;
+    // Focus and move cursor to end
+    const textarea = notesElement.querySelector('textarea');
+    if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    }
+}
+
 // SpO2 Distribution Functions
 function loadDailySpo2Distribution(dateLabel) {
     fetch(`/api/data/${dateLabel}/spo2-distribution`)
