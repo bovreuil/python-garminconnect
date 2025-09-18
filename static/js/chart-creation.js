@@ -2056,3 +2056,329 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
         }, 100);
     }
 }
+
+// Create SpO2 chart for activity view
+function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, containerId, startTime, endTime, optimalInterval, activityDurationMinutes) {
+    console.log('createActivitySpo2Chart called with:', {
+        activityId: activity.activity_id,
+        spo2DataLength: spo2Data.length,
+        spo2AlertsLength: spo2Alerts.length,
+        chartId,
+        containerId
+    });
+    
+    // Log alert data
+    const alertPoints = spo2Alerts.filter(alert => alert.y !== null);
+    console.log('Activity alert points to display:', alertPoints.length);
+    if (alertPoints.length > 0) {
+        console.log('First few activity alert points:', alertPoints.slice(0, 3));
+    }
+    
+    const chartElement = document.getElementById(chartId);
+    const containerElement = document.getElementById(containerId);
+    
+    if (!chartElement || !containerElement) {
+        console.error('Activity SpO2 chart elements not found');
+        return;
+    }
+    
+    // Destroy existing chart if it exists
+    if (activitySpo2Chart) {
+        activitySpo2Chart.destroy();
+    }
+    
+    // Check if we have SpO2 data
+    if (!spo2Data || spo2Data.length === 0) {
+        containerElement.style.display = 'none';
+        containerElement.style.height = '0px';
+        return;
+    }
+    
+    // Show container and set height
+    containerElement.style.display = 'block';
+    containerElement.style.height = '120px'; // Proportional to HR chart
+    
+    const ctx = chartElement.getContext('2d');
+    
+    // Sort SpO2 data by timestamp
+    const sortedSpo2Data = spo2Data.sort((a, b) => a.x.getTime() - b.x.getTime());
+    
+    // Use standardized x-axis range passed from HR chart
+    // startTime and endTime are now parameters from the standardized Garmin activity range
+    
+    // Use shared gridline parameters passed from HR chart
+    // activityDurationMinutes and optimalInterval are now parameters
+    
+    // Create evenly spaced timeline for the standardized activity duration - simplified for exact chart area alignment
+    const labels = [startTime, endTime];
+    
+    // Create the same afterBuildTicks function for consistent gridlines
+    function createAfterBuildTicks(startTime, optimalInterval, activityDurationMinutes) {
+        return function(axis) {
+            // Replace the ticks with our custom ones at optimal intervals
+            const newTicks = [];
+            let currentTime = 0;
+            while (currentTime <= activityDurationMinutes) {
+                const tickTime = new Date(startTime.getTime() + (currentTime * 60 * 1000));
+                newTicks.push({
+                    value: tickTime.getTime(),
+                    label: (() => {
+                        const timeSinceStart = tickTime.getTime() - startTime.getTime();
+                        const totalMinutes = timeSinceStart / (1000 * 60);
+                        
+                        if (optimalInterval <= 1) {
+                            const minutes = Math.floor(totalMinutes);
+                            const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                        } else {
+                            const hours = Math.floor(totalMinutes / 60);
+                            const minutes = Math.floor(totalMinutes % 60);
+                            return `${hours}:${minutes.toString().padStart(2, '0')}`;
+                        }
+                    })()
+                });
+                currentTime += optimalInterval;
+            }
+            axis.ticks = newTicks;
+        };
+    }
+    
+    // Process SpO2 data
+    const chartLabels = [];
+    const chartData = [];
+    
+    // Add data points and insert null values for gaps > 5 minutes
+    for (let i = 0; i < sortedSpo2Data.length; i++) {
+        const currentPoint = sortedSpo2Data[i];
+        
+        // Add the current data point
+        chartLabels.push(currentPoint.x);
+        chartData.push(currentPoint.y);
+        
+        // Check if there's a gap to the next point
+        if (i < sortedSpo2Data.length - 1) {
+            const nextPoint = sortedSpo2Data[i + 1];
+            const gapMinutes = (nextPoint.x.getTime() - currentPoint.x.getTime()) / (1000 * 60);
+            
+            // If gap is > 5 minutes, add a null point to create a visual break
+            if (gapMinutes > 5) {
+                // Add a null point 1 minute after the current segment
+                const gapTimestamp = new Date(currentPoint.x.getTime() + (1 * 60 * 1000));
+                chartLabels.push(gapTimestamp);
+                chartData.push(null);
+                
+                // Add a null point 1 minute before the next segment
+                const nextGapTimestamp = new Date(nextPoint.x.getTime() - (1 * 60 * 1000));
+                chartLabels.push(nextGapTimestamp);
+                chartData.push(null);
+            }
+        }
+    }
+    
+    // Create the chart
+    const newChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                // Background dataset with SpO2 color bands
+                {
+                    label: 'Background',
+                    data: [
+                        { x: startTime, y: 100 },
+                        { x: endTime, y: 100 }
+                    ],
+                    borderColor: 'transparent',
+                    backgroundColor: function(context) {
+                        const chart = context.chart;
+                        const {ctx, chartArea} = chart;
+                        
+                        if (!chartArea) {
+                            return 'transparent';
+                        }
+                        
+                        // Create gradient for SpO2 zones
+                        const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                        
+                        // Add color stops for 8 equal SpO2 bands (top to bottom)
+                        gradient.addColorStop(0, '#28a745');     // Band 1: Green (top)
+                        gradient.addColorStop(0.25, '#28a745');  // Band 2: Green
+                        gradient.addColorStop(0.25, '#9acd32');  // Band 3: Yellow-Green
+                        gradient.addColorStop(0.375, '#9acd32'); // Band 4: Yellow
+                        gradient.addColorStop(0.375, '#ffc107'); // Band 5: Orange
+                        gradient.addColorStop(0.5, '#ffc107');   // Band 6: Red
+                        gradient.addColorStop(0.5, '#fd7e14');   // Band 7: Hot Red
+                        gradient.addColorStop(0.625, '#fd7e14'); // Band 8: Hot Red
+                        gradient.addColorStop(0.625, '#e74c3c'); // Band 8: Hot Red
+                        gradient.addColorStop(0.75, '#e74c3c');  // Band 8: Hot Red
+                        gradient.addColorStop(0.75, '#dc3545');  // Band 8: Hot Red
+                        gradient.addColorStop(1, '#dc3545');     // Band 8: Hot Red (bottom)
+                        
+                        return gradient;
+                    },
+                    borderWidth: 0,
+                    fill: true,
+                    tension: 0,
+                    pointRadius: 0,
+                    order: 100
+                },
+                // SpO2 line on top
+                {
+                    label: 'SpO2 (%)',
+                    data: chartLabels.map((label, index) => ({ x: label, y: chartData[index] })),
+                    borderColor: '#000080',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: '#000080',
+                    order: 0
+                },
+                // SpO2 alert line
+                {
+                    label: 'SpO2 Alerts',
+                    data: spo2Alerts,
+                    borderColor: '#ffc107',
+                    backgroundColor: '#ffc107',
+                    borderWidth: 0,
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: '#ffc107',
+                    order: 1 // Draw on top of SpO2 line
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            spanGaps: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'nearest',
+                    intersect: false,
+                    callbacks: {
+                        title: function(context) {
+                            const rawData = context[0].raw;
+                            if (rawData && rawData.x) {
+                                const date = new Date(rawData.x);
+                                const timeSinceStart = date.getTime() - startTime.getTime();
+                                const totalMinutes = timeSinceStart / (1000 * 60);
+                                
+                                if (optimalInterval <= 1) {
+                                    // For 30s and 1m intervals: use m:ss format
+                                    const minutes = Math.floor(totalMinutes);
+                                    const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                                    return `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                                } else {
+                                    // For 5m and larger intervals: use h:mm:ss format
+                                    const hours = Math.floor(totalMinutes / 60);
+                                    const minutes = Math.floor(totalMinutes % 60);
+                                    const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                                    return `Time: ${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                                }
+                            }
+                            return `Time: ${context[0].label}`;
+                        },
+                        label: function(context) {
+                            if (context.dataset.label === 'SpO2 (%)') {
+                                return `SpO2: ${context.parsed.y.toFixed(1)}%`;
+                            } else if (context.dataset.label === 'SpO2 Alerts') {
+                                return `SpO2 Alert: ${context.parsed.y.toFixed(1)}%`;
+                            }
+                            return null;
+                        }
+                    }
+                },
+                datalabels: {
+                    display: false
+                }
+            },
+                            scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'minute',
+                            displayFormats: {
+                                minute: 'mm:ss',
+                                second: 'mm:ss'
+                            }
+                        },
+                        display: true, // Show x-axis for gridlines
+                        min: startTime,
+                        max: endTime,
+                        ticks: {
+                            display: false, // Hide tick labels but keep gridlines
+                            maxRotation: 0,
+                            source: 'auto',
+                            callback: function(value, index, values) {
+                                // Calculate time since activity start
+                                const timestamp = new Date(value);
+                                const timeSinceStart = timestamp.getTime() - startTime.getTime();
+                                const totalMinutes = timeSinceStart / (1000 * 60);
+                                
+                                if (optimalInterval <= 1) {
+                                    // For 30s and 1m intervals: use m:ss format
+                                    const minutes = Math.floor(totalMinutes);
+                                    const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
+                                    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                                } else {
+                                    // For 5m and larger intervals: use h:mm format
+                                    const hours = Math.floor(totalMinutes / 60);
+                                    const minutes = Math.floor(totalMinutes % 60);
+                                    return `${hours}:${minutes.toString().padStart(2, '0')}`;
+                                }
+                            }
+                        },
+                        afterBuildTicks: createAfterBuildTicks(startTime, optimalInterval, activityDurationMinutes),
+                        grid: {
+                            display: true,
+                            color: 'rgba(0, 0, 0, 0.3)', // Same as HR chart
+                            drawBorder: false,
+                            z: 1 // Try to ensure gridlines are drawn above background
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'SpO2 (%)'
+                        },
+                        min: 80,
+                        max: 100,
+                        ticks: {
+                            stepSize: 5
+                        }
+                    }
+                },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    });
+    
+    // Store the chart reference
+    activitySpo2Chart = newChart;
+    // Force resize to match HR chart container
+    setTimeout(() => {
+        if (activitySpo2Chart && activityHrChart) {
+            // Copy the HR chart's width to ensure perfect alignment
+            const hrContainer = document.querySelector('.chart-container canvas#activityHrChart').parentElement;
+            const spo2Container = document.querySelector('.chart-container canvas#activitySpo2Chart').parentElement;
+            if (hrContainer && spo2Container) {
+                spo2Container.style.width = hrContainer.offsetWidth + 'px';
+                activitySpo2Chart.resize();
+            }
+        }
+    }, 100);
+}
