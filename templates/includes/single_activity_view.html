@@ -1,0 +1,123 @@
+<!-- Single Activity View Section -->
+<div class="row mt-4" id="singleActivitySection" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0" id="singleActivityTitle">Single Activity View</h5>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="deleteActivity" style="display: none;">
+                        <span>🗑️ Delete</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="downloadActivityCsv">
+                        <span>📥 CSV</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-warning" id="uploadActivityCsv">
+                        <span id="csvIcon">📤 CSV</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-info" id="editSpo2">
+                        <span>🩸 SpO2</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="closeSingleActivity">
+                        <span>×</span>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Activity Heart Rate Chart -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6 id="activityTitle">Activity Heart Rate</h6>
+                        <div id="activityBreathingChartContainer" class="chart-container" style="height: 0px; margin-bottom: 5px; display: none;">
+                            <canvas id="activityBreathingChart"></canvas>
+                        </div>
+                        <div id="activitySpo2ChartContainer" class="chart-container" style="height: 0px; margin-bottom: 5px; display: none;">
+                            <canvas id="activitySpo2Chart"></canvas>
+                        </div>
+                        
+
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="activityHrChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                
+                <!-- Activity SpO2 Distribution Charts -->
+                <div class="mb-4" id="activitySpo2DistributionChartsContainer" style="display: none;">
+                    <div class="mb-2">
+                        <div class="btn-group" role="group" aria-label="Activity SpO2 Chart Type">
+                            <input type="radio" class="btn-check" name="activitySpo2ChartType" id="activitySpo2AtOrBelowRadio" value="at_or_below" checked>
+                            <label class="btn btn-outline-primary btn-sm" for="activitySpo2AtOrBelowRadio">At or Below</label>
+                            
+                            <input type="radio" class="btn-check" name="activitySpo2ChartType" id="activitySpo2AtRadio" value="at">
+                            <label class="btn btn-outline-primary btn-sm" for="activitySpo2AtRadio">At</label>
+                        </div>
+                    </div>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="width: 50%; vertical-align: top; padding-right: 10px;">
+                                <h6 id="activitySpo2ChartTitle">SpO2 Time at or Below Level</h6>
+                                <div class="chart-container" style="height: 320px; margin: 0; width: 100%;">
+                                    <canvas id="activitySpo2AtOrBelowChart"></canvas>
+                                    <canvas id="activitySpo2AtChart" style="display: none;"></canvas>
+                                </div>
+                                <hr class="my-3">
+                                <h6>Oxygen Debt</h6>
+                                <div id="activityOxygenDebt" class="oxygen-debt-display" style="padding: 0 20px;">
+                                    <div class="row">
+                                        <div class="col-3" style="padding-left: 10px;">
+                                            <small class="text-muted">Time under 95:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="activityTimeUnder95">-</small>
+                                        </div>
+                                        <div class="col-3" style="padding-left: 10px;">
+                                            <small class="text-muted">Area under 95:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="activityAreaUnder95">-</small>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-1">
+                                        <div class="col-3" style="padding-left: 10px;">
+                                            <small class="text-muted">Time under 90:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="activityTimeUnder90">-</small>
+                                        </div>
+                                        <div class="col-3" style="padding-left: 10px;">
+                                            <small class="text-muted">Area under 90:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="activityAreaUnder90">-</small>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-1">
+                                        <div class="col-3" style="padding-left: 10px;">
+                                            <small class="text-muted">Time under 88:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="activityTimeUnder88">-</small>
+                                        </div>
+                                        <div class="col-3" style="padding-left: 10px;">
+                                            <small class="text-muted">Area under 88:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="activityAreaUnder88">-</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td style="width: 50%; vertical-align: top; padding-left: 10px;">
+                                <h6>Notes</h6>
+                                <div id="activityNotes" class="notes-field" onclick="editActivityNotes(selectedActivity ? selectedActivity.activity_id : '')">
+                                    <p class="mb-0"></p>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

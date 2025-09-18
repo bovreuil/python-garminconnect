@@ -1,0 +1,141 @@
+<!-- Single Date View Section -->
+<div class="row mt-4" id="singleDateSection" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <h5 class="mb-0" id="singleDateTitle">Single Date View</h5>
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="prevDay">
+                            <span>←</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-primary" id="singleDateTodayBtn">Today</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="nextDay">
+                            <span>→</span>
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="downloadDailyCsv">
+                        <span>📥 CSV</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-info" id="createManualActivityBtn">
+                        <span>➕ Manual</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-warning" id="editTrimp">
+                        <span id="trimpIcon">📊</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="closeSingleDate">
+                        <span>×</span>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- 24-Hour Heart Rate Chart -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6>24-Hour Heart Rate</h6>
+                        <div id="spo2ChartContainer" class="chart-container" style="height: 0px; margin-bottom: 5px; display: none;">
+                            <canvas id="spo2Chart"></canvas>
+                        </div>
+                        
+
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="hrChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+
+                
+                <!-- SpO2 Distribution Charts -->
+                <div class="mb-4" id="spo2DistributionChartsContainer" style="display: none;">
+                    <div class="mb-2">
+                        <div class="btn-group" role="group" aria-label="SpO2 Chart Type">
+                            <input type="radio" class="btn-check" name="spo2ChartType" id="spo2AtOrBelowRadio" value="at_or_below" checked>
+                            <label class="btn btn-outline-primary btn-sm" for="spo2AtOrBelowRadio">At or Below</label>
+                            
+                            <input type="radio" class="btn-check" name="spo2ChartType" id="spo2AtRadio" value="at">
+                            <label class="btn btn-outline-primary btn-sm" for="spo2AtRadio">At</label>
+                        </div>
+                    </div>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="width: 50%; vertical-align: top; padding-right: 10px;">
+                                <h6 id="spo2ChartTitle">SpO2 Time at or Below Level</h6>
+                                <div class="chart-container" style="height: 320px; margin: 0; width: 100%;">
+                                    <canvas id="spo2AtOrBelowChart"></canvas>
+                                    <canvas id="spo2AtChart" style="display: none;"></canvas>
+                                </div>
+                                <hr class="my-3">
+                                <h6>Oxygen Debt</h6>
+                                <div id="dailyOxygenDebt" class="oxygen-debt-display" style="padding: 0 20px;">
+                                    <div class="row">
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Time under 95:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyTimeUnder95">-</small>
+                                        </div>
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Area under 95:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyAreaUnder95">-</small>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-1">
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Time under 90:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyTimeUnder90">-</small>
+                                        </div>
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Area under 90:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyAreaUnder90">-</small>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-1">
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Time under 88:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyTimeUnder88">-</small>
+                                        </div>
+                                        <div class="col-3" style="padding-left: 15px;">
+                                            <small class="text-muted">Area under 88:</small>
+                                        </div>
+                                        <div class="col-3" style="text-align: right; padding-right: 50px;">
+                                            <small class="text-muted" id="dailyAreaUnder88">-</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td style="width: 50%; vertical-align: top; padding-left: 10px;">
+                                <h6>Notes</h6>
+                                <div id="dailyNotes" class="notes-field" onclick="editDailyNotes(selectedDate)">
+                                    <p class="mb-0"></p>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <!-- Activities Chart -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6>Activities</h6>
+                        <div class="chart-container" id="activitiesChartContainer" style="height: 280px;">
+                            <canvas id="activitiesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                {% include 'includes/single_activity_view.html' %}
+            </div>
+        </div>
+    </div>
+</div>
