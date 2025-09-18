@@ -868,8 +868,7 @@ function aggregateWeekData(weekData) {
 // - loadDailyNotes, editDailyNotes, etc. -> notes-management.js
 // - loadDailySpo2Distribution, toggleSpo2ChartType, etc. -> utility-functions.js
 
-// REMOVE_ALL_FUNCTIONS_BELOW_THIS_LINE
-function downloadActivityCsv_DUPLICATE_REMOVE_ME() {
+function downloadActivityCsv() {
     if (!selectedActivity) {
         console.error('No activity selected for download');
         return;
