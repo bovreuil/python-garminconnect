@@ -257,6 +257,26 @@ When time series data changes, recalculate derived data for:
 3. **Easy extension**: New derived data types follow same patterns
 4. **Clear boundaries**: Separation between data sources, processing, presentation
 
+### DRY Principle Application
+
+**When to Apply DRY** (Extract/Share):
+1. **Identical functions**: Exactly the same logic, same inputs/outputs
+2. **Time series display**: Same chart type for same data type (HR, SpO2, breathing)
+3. **Utility functions**: Color mappings, date formatting, shared calculations
+4. **Data loading patterns**: Identical API calls and response handling
+
+**When to AVOID DRY** (Keep Separate):
+1. **Similar but different logic**: Same chart type but different data sources
+2. **Evolving visualizations**: Charts that may diverge in future (line vs bar, different axes)
+3. **Page-specific behavior**: Different click handlers, different navigation flows
+4. **Premature abstractions**: When we don't yet understand the full pattern
+
+**Current Code Analysis**:
+- **Within page similarities**: 14-week vs 2-week charts differ mainly in aggregation (days→weeks vs days only) and axis scale - potential for careful abstraction
+- **Across page similarities**: Same chart types but different data sources - keep separate to allow divergent evolution
+- **Time series charts**: Day vs activity charts differ only in x-axis time scale - already well abstracted
+- **Activities charts**: Same horizontal bar logic but different data sources (TRIMP vs oxygen debt) - keep separate for now
+
 ## Known Issues & TODOs
 
 ### Manual SpO2 Entry Button (TODO: Remove)
