@@ -9,6 +9,9 @@
 <script src="{{ url_for('static', filename='js/chart-creation.js') }}"></script>
 <script src="{{ url_for('static', filename='js/view-management.js') }}"></script>
 <script src="{{ url_for('static', filename='js/event-handlers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modal-management.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notes-management.js') }}"></script>
+<script src="{{ url_for('static', filename='js/utility-functions.js') }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -859,8 +862,14 @@ function aggregateWeekData(weekData) {
 
 // showSingleActivityView and closeSingleActivityView functions moved to view-management.js
 
-// Download activity HR data as CSV
-function downloadActivityCsv() {
+// All utility functions moved to shared modules:
+// - downloadActivityCsv, downloadDailyCsv -> utility-functions.js
+// - openSpo2Editor, saveSpo2Data, etc. -> modal-management.js  
+// - loadDailyNotes, editDailyNotes, etc. -> notes-management.js
+// - loadDailySpo2Distribution, toggleSpo2ChartType, etc. -> utility-functions.js
+
+// REMOVE_ALL_FUNCTIONS_BELOW_THIS_LINE
+function downloadActivityCsv_DUPLICATE_REMOVE_ME() {
     if (!selectedActivity) {
         console.error('No activity selected for download');
         return;
@@ -896,8 +905,7 @@ function downloadDailyCsv() {
     document.body.removeChild(link);
 }
 
-// SpO2 Editor Functions
-let spo2Entries = [];
+// SpO2 Editor Functions moved to modal-management.js
 
 function openSpo2Editor() {
     if (!selectedActivity) {
@@ -1038,9 +1046,7 @@ function saveSpo2Data() {
     });
 }
 
-// TRIMP Editor Functions
-let currentTrimpOverrides = {};
-let currentDayData = null;
+// TRIMP Editor Functions moved to modal-management.js
 
 function openTrimpEditor() {
     if (!selectedDate) {

@@ -9,6 +9,9 @@
 <script src="{{ url_for('static', filename='js/chart-creation.js') }}"></script>
 <script src="{{ url_for('static', filename='js/view-management.js') }}"></script>
 <script src="{{ url_for('static', filename='js/event-handlers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modal-management.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notes-management.js') }}"></script>
+<script src="{{ url_for('static', filename='js/utility-functions.js') }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -907,8 +910,7 @@ function downloadDailyCsv() {
     document.body.removeChild(link);
 }
 
-// SpO2 Editor Functions
-let spo2Entries = [];
+// SpO2 Editor Functions moved to modal-management.js
 
 function openSpo2Editor() {
     if (!selectedActivity) {
@@ -1049,9 +1051,7 @@ function saveSpo2Data() {
     });
 }
 
-// TRIMP Editor Functions
-let currentTrimpOverrides = {};
-let currentDayData = null;
+// TRIMP Editor Functions moved to modal-management.js
 
 function openTrimpEditor() {
     if (!selectedDate) {
