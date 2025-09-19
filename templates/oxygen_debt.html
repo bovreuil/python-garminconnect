@@ -173,9 +173,9 @@ function updateTwoWeekChart(dateLabels, dataResults) {
         return `${dayName} ${dayNum}`;
     });
     
-    // Create datasets for oxygen debt zones
-    const datasets = oxygenDebtZoneOrder.map(zone => {
-        const data = labels.map((_, index) => {
+    // Create datasets using shared utility
+    const datasets = createZonedDatasets(oxygenDebtZoneOrder, oxygenDebtColors, zone => {
+        return labels.map((_, index) => {
             const dayData = dataResults[index];
             if (!dayData || !dayData.oxygen_debt) {
                 return 0;
@@ -195,15 +195,7 @@ function updateTwoWeekChart(dateLabels, dataResults) {
             }
             return 0;
         });
-        
-        return {
-            label: zone,
-            data: data,
-            backgroundColor: oxygenDebtColors[zone] || '#6c757d',
-            borderWidth: 1,
-            borderColor: '#ffffff'
-        };
-    });
+    }, { borderColor: '#ffffff' });
     
     // Calculate the maximum value for Y-axis scaling
     let maxValue = 0;
@@ -432,14 +424,10 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
         weekLabels.push(weekLabel);
     }
     
-    // Create datasets for oxygen debt zones
-    const datasets = oxygenDebtZoneOrder.map(zone => ({
-        label: zone,
-        data: weeklyData.map(weekData => weekData[zone] || 0),
-        backgroundColor: oxygenDebtColors[zone],
-        borderColor: oxygenDebtColors[zone],
-        borderWidth: 1
-    }));
+    // Create datasets using shared utility
+    const datasets = createZonedDatasets(oxygenDebtZoneOrder, oxygenDebtColors, zone =>
+        weeklyData.map(weekData => weekData[zone] || 0)
+    );
     
     // Calculate the maximum value for Y-axis scaling
     let maxValue = 0;
@@ -717,9 +705,9 @@ function createActivitiesChart(activities) {
         return activity.activity_name;
     });
     
-    // Create datasets for oxygen debt zones (horizontal bars)
-    const datasets = oxygenDebtZoneOrder.map(zone => {
-        const data = activities.map(activity => {
+    // Create datasets using shared utility
+    const datasets = createZonedDatasets(oxygenDebtZoneOrder, oxygenDebtColors, zone => {
+        return activities.map(activity => {
             // Get oxygen debt data for this activity
             const oxygenDebt = activity.oxygen_debt;
             if (!oxygenDebt) return 0;
@@ -736,16 +724,7 @@ function createActivitiesChart(activities) {
             }
             return 0;
         });
-        
-        return {
-            label: zone,
-            data: data,
-            backgroundColor: oxygenDebtColors[zone],
-            borderColor: oxygenDebtColors[zone],
-            borderWidth: 1,
-            stack: 'activities'
-        };
-    });
+    }, { stack: 'activities' });
     
     // Calculate x-axis maximum for oxygen debt data
     let maxValue = 0;

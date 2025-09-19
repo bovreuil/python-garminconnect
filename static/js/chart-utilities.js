@@ -179,3 +179,24 @@ const horizontalBarOptions = {
         }
     }
 };
+
+/**
+ * Create zoned datasets for stacked bar charts
+ * Used by all TRIMP and oxygen debt charts for consistent colored bar creation
+ * 
+ * @param {string[]} zones - Array of zone names (e.g., zoneOrder or oxygenDebtZoneOrder)
+ * @param {object} colors - Color mapping object (e.g., zoneColors or oxygenDebtColors)
+ * @param {function} dataExtractor - Function that takes a zone and returns data array
+ * @param {object} options - Additional dataset options (e.g., {stack: 'activities'})
+ * @returns {Array} - Chart.js datasets array with proper colors and structure
+ */
+function createZonedDatasets(zones, colors, dataExtractor, options = {}) {
+    return zones.map(zone => ({
+        label: zone,
+        data: dataExtractor(zone),
+        backgroundColor: colors[zone] || '#6c757d',
+        borderColor: colors[zone] || '#6c757d',
+        borderWidth: 1,
+        ...options
+    }));
+}

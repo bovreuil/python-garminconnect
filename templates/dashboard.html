@@ -172,9 +172,9 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     // Sort zones according to our defined order (bottom to top)
     const sortedZones = zoneOrder.filter(zone => allZones.has(zone));
     
-    // Create datasets for each zone in the correct order
-    const datasets = sortedZones.map(zone => {
-        const data = labels.map((_, index) => {
+    // Create datasets using shared utility
+    const datasets = createZonedDatasets(sortedZones, zoneColors, zone => {
+        return labels.map((_, index) => {
             const dayData = dataResults[index];
             if (!dayData || !dayData.presentation_buckets || !dayData.presentation_buckets[zone]) {
                 return 0;
@@ -196,15 +196,7 @@ function updateTwoWeekChart(dateLabels, dataResults) {
                 }
             }
         });
-        
-        return {
-            label: zone,
-            data: data,
-            backgroundColor: zoneColors[zone] || '#6c757d',
-            borderWidth: 1,
-            borderColor: '#ffffff'
-        };
-    });
+    }, { borderColor: '#ffffff' });
     
     // Calculate the maximum value for Y-axis scaling
     let maxValue = 0;
@@ -428,14 +420,10 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
         weekLabels.push(weekLabel);
     }
     
-    // Create datasets for each zone
-    const datasets = zoneOrder.map(zone => ({
-        label: zone,
-        data: weeklyData.map(weekData => weekData[zone] || 0),
-        backgroundColor: zoneColors[zone],
-        borderColor: zoneColors[zone],
-        borderWidth: 1
-    }));
+    // Create datasets using shared utility
+    const datasets = createZonedDatasets(zoneOrder, zoneColors, zone => 
+        weeklyData.map(weekData => weekData[zone] || 0)
+    );
     
     // Calculate the maximum value for Y-axis scaling
     let maxValue = 0;
@@ -735,9 +723,9 @@ function createActivitiesChart(activities) {
         return activity.activity_name;
     });
     
-    // Create datasets for each zone (horizontal bars)
-    const datasets = zoneOrder.map(zone => {
-        const data = activities.map(activity => {
+    // Create datasets using shared utility
+    const datasets = createZonedDatasets(zoneOrder, zoneColors, zone => {
+        return activities.map(activity => {
             if (activity.presentation_buckets && activity.presentation_buckets[zone]) {
                 return currentMetric === 'trimp' ? 
                     activity.presentation_buckets[zone].trimp : 
@@ -745,16 +733,7 @@ function createActivitiesChart(activities) {
             }
             return 0;
         });
-        
-        return {
-            label: zone,
-            data: data,
-            backgroundColor: zoneColors[zone],
-            borderColor: zoneColors[zone],
-            borderWidth: 1,
-            stack: 'activities'
-        };
-    });
+    }, { stack: 'activities' });
     
     // Calculate x-axis maximum with minimum of 100
     let maxValue = 0;
