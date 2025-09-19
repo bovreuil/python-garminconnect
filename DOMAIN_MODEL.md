@@ -360,24 +360,22 @@ Adding new derived metrics will require:
 - **Clear dependencies** with logical import ordering
 - **Consistent patterns** across all similar functionality
 
-### Identified Complex Duplication (High-Value Targets)
+### High-Value Abstractions (Completed)
 
-**1. Timeline Generation Logic** (Currently Duplicated):
-- **24-Hour Timeline**: `heart-rate-charts.js` + `spo2-charts.js` (daily views)
-- **Activity Timeline**: `heart-rate-charts.js` + `spo2-charts.js` + `breathing-charts.js` (activity views)
-- **Pattern**: Same timeline generation, different chart types
-- **Impact**: New time series charts will duplicate this complex logic
+**✅ Timeline Generation Logic**:
+- **Utilities Created**: `generate24HourTimeline()`, `generateActivityTimeline()` in `chart-timeline-utils.js`
+- **Foundation Ready**: All time series charts can use standardized timeline generation
+- **Impact**: New time series charts follow established patterns
 
-**2. Chart Period Calculation** (Currently Duplicated):
-- **14-Week Period**: `templates/dashboard.html` + `templates/oxygen_debt.html`
-- **2-Week Navigation**: Both templates use `dashboard-navigation.js` functions
-- **Pattern**: Same timing logic, different data aggregation
-- **Impact**: New trend charts will duplicate timing calculations
+**✅ Chart Period Calculation**:
+- **Utilities Created**: `calculate14WeekPeriod()` in `dashboard-navigation.js`
+- **Centralized Logic**: Complex 14-week timing calculation consolidated
+- **Impact**: New trend charts use same timing logic
 
-**3. Chart Structure Patterns** (Currently Duplicated):
-- **Stacked Bar Logic**: 14-week, 2-week, activities charts all use similar structure
-- **Click Handlers**: Navigation behavior identical across chart types
-- **Tooltip Formatting**: Similar patterns for totals and breakdowns
+**✅ Chart Structure Patterns**:
+- **Generic Functions**: `createZonedDatasets()` for stacked bar charts
+- **Week Grouping**: `groupDataByWeeks()` for 14-week aggregation
+- **Consistent Navigation**: All chart types use same interaction patterns
 
 ### Refactoring Readiness Assessment
 
