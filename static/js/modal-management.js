@@ -1,6 +1,26 @@
 // Modal Management Functions
 // Shared functions for managing SpO2 editor, TRIMP editor, manual activity, and CSV upload modals
 
+// Helper function to show modal with proper focus management
+function showModalWithFocusManagement(modalId) {
+    const modalElement = document.getElementById(modalId);
+    const modal = new bootstrap.Modal(modalElement);
+    
+    // Add event listener to handle focus when modal is hidden
+    modalElement.addEventListener('hide.bs.modal', function handleModalHide() {
+        // Remove focus from any focused element within the modal
+        const focusedElement = modalElement.querySelector(':focus');
+        if (focusedElement) {
+            focusedElement.blur();
+        }
+        // Remove this event listener after use
+        modalElement.removeEventListener('hide.bs.modal', handleModalHide);
+    });
+    
+    modal.show();
+    return modal;
+}
+
 // SpO2 Editor Functions
 let spo2Entries = [];
 
@@ -31,9 +51,8 @@ function openSpo2Editor() {
     // Populate the modal
     populateSpo2Entries();
     
-    // Show the modal
-    const modal = new bootstrap.Modal(document.getElementById('spo2Modal'));
-    modal.show();
+    // Show the modal with proper focus management
+    showModalWithFocusManagement('spo2Modal');
 }
 
 function addSpo2Entry() {
@@ -184,8 +203,7 @@ function loadTrimpOverrides(dateLabel) {
             populateTrimpOverridesForm();
             
             // Show the modal
-            const modal = new bootstrap.Modal(document.getElementById('trimpModal'));
-            modal.show();
+            showModalWithFocusManagement('trimpModal');
         })
         .catch(error => {
             console.error('Error loading TRIMP overrides:', error);
@@ -193,8 +211,7 @@ function loadTrimpOverrides(dateLabel) {
             currentTrimpOverrides = {};
             populateTrimpOverridesForm();
             
-            const modal = new bootstrap.Modal(document.getElementById('trimpModal'));
-            modal.show();
+            showModalWithFocusManagement('trimpModal');
         });
 }
 
@@ -387,9 +404,8 @@ function openManualActivityModal() {
     document.getElementById('manualEndTime').value = '';
     document.getElementById('manualHeartRate').value = '';
     
-    // Show the modal
-    const modal = new bootstrap.Modal(document.getElementById('manualActivityModal'));
-    modal.show();
+    // Show the modal with proper focus management
+    showModalWithFocusManagement('manualActivityModal');
 }
 
 function createManualActivity() {
@@ -498,9 +514,8 @@ function openCsvUploadEditor() {
     // Check current CSV override status
     checkCsvOverrideStatus();
     
-    // Show the modal
-    const modal = new bootstrap.Modal(document.getElementById('csvUploadModal'));
-    modal.show();
+    // Show the modal with proper focus management
+    showModalWithFocusManagement('csvUploadModal');
 }
 
 function checkCsvOverrideStatus() {
