@@ -401,28 +401,8 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
         fourteenWeekChart.destroy();
     }
     
-    // Group data by week (Monday to Sunday)
-    const weeklyData = [];
-    const weekLabels = [];
-    
-    for (let week = 0; week < 14; week++) {
-        const weekStart = week * 7;
-        const weekEnd = weekStart + 7;
-        const weekDates = dateLabels.slice(weekStart, weekEnd);
-        const weekData = dataResults.slice(weekStart, weekEnd);
-        
-        // Aggregate oxygen debt data for this week
-        const weekAggregated = aggregateWeekOxygenDebtData(weekData);
-        weeklyData.push(weekAggregated);
-        
-        // Create week label (e.g., "Apr 7")
-        const firstDate = new Date(weekDates[0] + 'T00:00:00');
-        const weekLabel = firstDate.toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric' 
-        });
-        weekLabels.push(weekLabel);
-    }
+    // Group data by week using shared utility
+    const { weeklyData, weekLabels } = groupDataByWeeks(dateLabels, dataResults, aggregateWeekOxygenDebtData);
     
     // Create datasets using shared utility
     const datasets = createZonedDatasets(oxygenDebtZoneOrder, oxygenDebtColors, zone =>

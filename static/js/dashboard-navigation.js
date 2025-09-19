@@ -231,3 +231,38 @@ function calculate14WeekPeriod() {
         dateLabels
     };
 }
+
+/**
+ * Group daily data into weekly aggregations
+ * Used by all 14-week charts to convert 98 daily data points into 14 weekly aggregations
+ * 
+ * @param {string[]} dateLabels - Array of 98 date labels (YYYY-MM-DD)
+ * @param {Array} dataResults - Array of 98 daily data objects
+ * @param {function} aggregationFunction - Function to aggregate week data (zone-specific)
+ * @returns {object} - {weeklyData: Array, weekLabels: string[]}
+ */
+function groupDataByWeeks(dateLabels, dataResults, aggregationFunction) {
+    const weeklyData = [];
+    const weekLabels = [];
+    
+    for (let week = 0; week < 14; week++) {
+        const weekStart = week * 7;
+        const weekEnd = weekStart + 7;
+        const weekDates = dateLabels.slice(weekStart, weekEnd);
+        const weekData = dataResults.slice(weekStart, weekEnd);
+        
+        // Aggregate data for this week using provided function
+        const weekAggregated = aggregationFunction(weekData);
+        weeklyData.push(weekAggregated);
+        
+        // Create week label (e.g., "Apr 7")
+        const firstDate = new Date(weekDates[0] + 'T00:00:00');
+        const weekLabel = firstDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+        });
+        weekLabels.push(weekLabel);
+    }
+    
+    return { weeklyData, weekLabels };
+}
