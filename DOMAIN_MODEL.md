@@ -392,6 +392,295 @@ Adding new derived metrics will require:
 2. **Chart Period Calculations**: Extract 14-week/2-week timing logic
 3. **Chart Structure Templates**: Parameterized chart configuration patterns
 
+## Development Guidelines: Coding Tasks
+
+These guidelines ensure all new development respects our refactored architecture and maintains clean separation of concerns.
+
+### Task 1: Calculate New Derived Data Type from Time Series
+
+**When**: Adding new metrics like HRV zones, recovery scores, training load, etc.
+
+**Steps**:
+1. **Backend Calculation Function** (Python in `app.py`):
+   ```python
+   def calculate_new_metric_from_timeseries(time_series_data):
+       """
+       Calculate new derived metric from time series.
+       Args: time_series_data: List of [timestamp, value] pairs
+       Returns: Dict with derived metric data
+       """
+       # Pure calculation logic here
+       return {'metric_zones': {...}, 'total_metric': 0.0}
+   ```
+
+2. **Add Caching Support** (follow TRIMP/oxygen debt patterns):
+   ```python
+   def calculate_new_metric_with_caching(target_date, time_series_data, data_type='daily'):
+       # Follow exact pattern from calculate_trimp_with_caching()
+   ```
+
+3. **Wire to Time Series Extractors** (use our clean extractors):
+   ```python
+   # For daily metrics
+   hr_series = getDayHRTimeSeries(dayData)  # JavaScript extractors
+   new_metric = calculate_new_metric_from_timeseries(hr_series)
+   
+   # For activity metrics  
+   hr_series = getActivityHRTimeSeries(activity)
+   new_metric = calculate_new_metric_from_timeseries(hr_series)
+   ```
+
+4. **Add to API Endpoints**:
+   - Add to `/api/data/<date>` for daily metrics
+   - Add to `/api/activities/<date>` for activity metrics
+   - Follow existing patterns exactly
+
+**Key Principles**:
+- ✅ **Reuse time series extractors**: Never parse raw data formats again
+- ✅ **Pure calculation functions**: Work with any time series, independent of source
+- ✅ **Follow caching patterns**: Hash-based invalidation, same as TRIMP/oxygen debt
+- ❌ **Don't mix concerns**: Keep calculation separate from data extraction and visualization
+
+### Task 2: Display New Visualization in Single Day/Activity Views
+
+**When**: Adding new components to single day or single activity detail views.
+
+**Steps**:
+1. **Create Visualization Function** (JavaScript in appropriate module):
+   ```javascript
+   // In new-metric-charts.js or existing module
+   function createNewMetricVisualization(metricData, containerId, viewType) {
+       // Pure visualization logic
+       // Uses metricData (already calculated)
+       // viewType: 'daily' or 'activity'
+   }
+   ```
+
+2. **Add to View Loading** (in `view-management.js` or chart modules):
+   ```javascript
+   // In showSingleDateView() or showSingleActivityView()
+   if (data.new_metric) {
+       createNewMetricVisualization(data.new_metric, 'newMetricContainer', 'daily');
+   }
+   ```
+
+3. **Add HTML Container** (in templates):
+   ```html
+   <!-- In single day/activity view sections -->
+   <div id="newMetricContainer" class="chart-container">
+       <h3>New Metric Analysis</h3>
+       <!-- Visualization elements -->
+   </div>
+   ```
+
+4. **Add to Cleanup** (in `data-loading.js`):
+   ```javascript
+   // In clearCharts() functions
+   if (newMetricChart) {
+       newMetricChart.destroy();
+       newMetricChart = null;
+   }
+   ```
+
+**Key Principles**:
+- ✅ **Use calculated data**: Receive derived data, don't recalculate
+- ✅ **Follow existing patterns**: Same structure as SpO2 levels, oxygen debt
+- ✅ **Unified view type**: Same function for daily/activity, use viewType parameter
+- ❌ **Don't duplicate**: Reuse existing container patterns and cleanup logic
+
+### Task 3: Display New Visualization in 14-Week, 2-Week, Activities Views
+
+**When**: Creating new trend pages (like oxygen debt page) for new derived metrics.
+
+**Steps**:
+1. **Create New Page Template** (copy `oxygen_debt.html`):
+   ```html
+   <!-- new-metric.html -->
+   {% extends "base.html" %}
+   <!-- Import same JavaScript modules -->
+   <!-- Copy structure, change only data references -->
+   ```
+
+2. **Update Chart Functions** (in template):
+   ```javascript
+   // Change only the data property names
+   function updateFourteenWeekChart() {
+       // Use new_metric instead of oxygen_debt
+       const newMetricData = dayData.new_metric;
+       // Rest identical to oxygen debt pattern
+   }
+   
+   function updateTwoWeekChart() {
+       // Same pattern, different data property
+   }
+   
+   function createActivitiesChart() {
+       // Same pattern, different data property  
+   }
+   ```
+
+3. **Add Route** (in `app.py`):
+   ```python
+   @app.route('/new-metric')
+   def new_metric_page():
+       return render_template('new_metric.html')
+   ```
+
+4. **Add Navigation** (in `base.html`):
+   ```html
+   <a href="/new-metric" class="nav-link">New Metric</a>
+   ```
+
+**Key Principles**:
+- ✅ **Copy proven patterns**: Start with oxygen debt page, change data references only
+- ✅ **Reuse navigation logic**: Use existing `dashboard-navigation.js` functions
+- ✅ **Reuse chart utilities**: Use `createZonedDatasets()` and other shared functions
+- ❌ **Don't reinvent**: Chart timing, navigation, structure should be identical
+
+### Common Anti-Patterns to Avoid
+
+**❌ Don't Parse Raw Data Formats**:
+```javascript
+// WRONG - parsing raw data in charts
+activity.heart_rate_values.forEach(point => {
+    if (Array.isArray(point)) {
+        timestamp = point[0]; hr = point[1];
+    } else {
+        timestamp = point.timestamp; hr = point.value;
+    }
+});
+
+// RIGHT - use clean extractors
+const hrTimeSeries = getActivityHRTimeSeries(activity);
+hrTimeSeries.forEach(point => {
+    const timestamp = point[0]; 
+    const hr = point[1];
+});
+```
+
+**❌ Don't Mix Calculation with Visualization**:
+```javascript
+// WRONG - calculating in chart function
+function createNewChart(rawData) {
+    // Complex calculation logic
+    const derivedData = calculateComplexMetric(rawData);
+    // Chart creation
+}
+
+// RIGHT - receive calculated data
+function createNewChart(derivedData) {
+    // Pure visualization only
+}
+```
+
+**❌ Don't Duplicate Complex Logic**:
+```javascript
+// WRONG - copying timing logic
+const fourteenWeeksAgo = new Date();
+fourteenWeeksAgo.setDate(fourteenWeeksAgo.getDate() - (14 * 7));
+// ... complex date arithmetic
+
+// RIGHT - use shared utilities  
+const { startDate, endDate } = calculate14WeekPeriod();
+```
+
+### Testing Strategy for New Features
+
+**Always Test These Scenarios**:
+1. **Data Loading**: Empty data, partial data, full data
+2. **View Switching**: 14-week → 2-week → single day → single activity
+3. **Navigation**: Left/right arrows, today button, chart clicks
+4. **Responsive**: Resize browser, mobile view
+5. **Error Cases**: Network failures, invalid data
+
+**Test in This Order**:
+1. Backend calculation function (unit test with sample data)
+2. Single day/activity views (detailed view first)
+3. 2-week chart (simpler than 14-week)
+4. 14-week chart (most complex)
+5. Navigation between views (integration test)
+
+## Architecture Evolution Summary
+
+### Recent Major Achievements (2024)
+
+**Clean Time Series Extractors** (Latest):
+- **New Module**: `time-series-extractors.js` 
+- **5 Clean Functions**: `getDayHRTimeSeries()`, `getActivityHRTimeSeries()`, `getDaySpO2TimeSeries()`, `getActivitySpO2TimeSeries()`, `getActivityBreathingTimeSeries()`
+- **Standardized Format**: All return `[[timestamp, value], ...]`
+- **Separated Concerns**: Data extraction completely isolated from visualization
+- **Foundation Ready**: Perfect base for connecting to calculation functions
+
+**SpO2 Component Abstraction**:
+- **Unified Loading**: `loadSpO2Distribution(identifier, viewType)` 
+- **Eliminated Duplication**: ~50 lines of identical code removed
+- **Fixed Toggle Bug**: SpO2 "At"/"At or Below" charts now both created
+- **Single Source**: `updateOxygenDebtDisplay()` in one location only
+
+**Time Series Background Abstraction**:
+- **Specialized Functions**: `createHRTimeSeriesBackground()`, `createSpO2TimeSeriesBackground()`
+- **Eliminated Duplication**: ~160 lines of gradient logic removed
+- **Maintained Distinction**: HR vs SpO2 gradients kept separate (avoided premature abstraction)
+- **4 Charts Updated**: Daily/activity HR and SpO2 charts
+
+**Colored Bar Dataset Abstraction**:
+- **Generic Function**: `createZonedDatasets(zones, colors, dataExtractor, options)`
+- **Flexible Design**: Works for TRIMP, oxygen debt, future metrics
+- **Spread Operator**: `...options` for easy property overrides
+
+**Template Transformation**:
+- **Before**: 5,277 lines each, 83% duplication
+- **After**: 915 lines each, 0% duplication  
+- **13 Focused Modules**: Each <1,100 lines, AI-development friendly
+- **Perfect Domain Alignment**: Code structure mirrors domain model
+
+**Module Quality Metrics**:
+- **Largest Module**: `heart-rate-charts.js` (1,052 lines) - focused on HR visualization
+- **Average Module**: 200-400 lines - perfect working size
+- **Zero Duplication**: All identical code extracted to shared utilities
+- **Single Responsibility**: Each module has clear, focused purpose
+
+### Current Architecture State
+
+**Data Flow** (Clean Pipeline):
+```
+Raw Data → Time Series Extractors → Calculation Functions → Charts
+```
+
+**Module Organization** (Domain-Perfect):
+- **Data Extraction**: `time-series-extractors.js` (new foundation)
+- **Calculations**: Backend Python functions (already clean)
+- **Visualization**: Domain-specific chart modules (HR, SpO2, breathing)
+- **Utilities**: Shared functions for common patterns
+- **Navigation**: Timing and interaction logic centralized
+
+**Abstraction Strategy** (Proven Effective):
+- ✅ **Extract Identical Code**: Aggressive deduplication of genuinely same logic
+- ✅ **Avoid Premature Abstractions**: Keep similar-but-different code separate
+- ✅ **Modular Design**: Small, focused modules with clear boundaries
+- ✅ **Test-Driven Process**: Code changes → test → commit cycle
+
+### Ready for Future Development
+
+**Foundation Complete**: 
+- Clean time series extraction ✅
+- Separated calculation functions ✅  
+- Modular visualization components ✅
+- Shared utilities for common patterns ✅
+
+**Next Development Ready**:
+- New derived metrics: Use existing extractors + add calculation functions
+- New visualizations: Follow proven patterns in single views
+- New trend pages: Copy oxygen debt page pattern
+- Advanced abstractions: Timeline generation, chart period calculations
+
+**Architecture Principles Established**:
+1. **Domain Alignment**: Code structure matches domain model exactly
+2. **Separation of Concerns**: Data extraction ≠ calculation ≠ visualization  
+3. **Reusable Components**: Time series extractors, calculation functions, chart utilities
+4. **Consistent Patterns**: Same structure for all similar functionality
+5. **Test-Driven Evolution**: Small changes, frequent testing, regular commits
+
 ## Known Issues & TODOs
 
 ### Manual SpO2 Entry Button (TODO: Remove)
