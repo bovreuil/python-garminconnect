@@ -91,21 +91,9 @@ function createHeartRateChart(dateLabel, dayData) {
     // Process heart rate values
     const hrData = dayData.heart_rate_values;
     
-    // Get the date from the selected date label
-    const chartDate = new Date(dateLabel + 'T00:00:00');
-    
-    // Create evenly spaced 24-hour timeline (every 1 minute for high resolution)
-    const labels = [];
-    const data = [];
-    
-    for (let hour = 0; hour < 24; hour++) {
-        for (let minute = 0; minute < 60; minute += 1) {
-            const timestamp = new Date(chartDate);
-            timestamp.setHours(hour, minute, 0, 0);
-            labels.push(timestamp);
-            data.push(null);
-        }
-    }
+    // Generate 24-hour timeline using shared utility
+    const { labels, chartDate } = generate24HourTimeline(dateLabel);
+    const data = new Array(labels.length).fill(null);
     
     // Sort data by timestamp
     const sortedData = hrData.sort((a, b) => {

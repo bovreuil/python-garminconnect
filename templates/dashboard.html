@@ -5,6 +5,7 @@
 {% block head %}
 <script src="{{ url_for('static', filename='js/dashboard-navigation.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chart-utilities.js') }}"></script>
+<script src="{{ url_for('static', filename='js/chart-timeline-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/data-loading.js') }}"></script>
 <script src="{{ url_for('static', filename='js/heart-rate-charts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/breathing-charts.js') }}"></script>
@@ -364,22 +365,8 @@ function updateTwoWeekChart(dateLabels, dataResults) {
 function loadFourteenWeekData() {
     showLoading();
     
-    // Calculate the 14-week period ending with the current week
-    const today = new Date();
-    const currentWeekStart = getWeekStart(today);
-    const fourteenWeekStart = new Date(currentWeekStart);
-    fourteenWeekStart.setDate(currentWeekStart.getDate() - (13 * 7)); // Go back 13 weeks
-    
-    // Generate array of 98 date labels (14 weeks × 7 days)
-    const dateLabels = [];
-    const currentDate = new Date(fourteenWeekStart);
-    for (let i = 0; i < 98; i++) {
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        dateLabels.push(`${year}-${month}-${day}`);
-        currentDate.setDate(currentDate.getDate() + 1);
-    }
+    // Calculate 14-week period using shared utility
+    const { dateLabels } = calculate14WeekPeriod();
     
     // Load data for all date labels using batch API
     fetch('/api/data/batch', {

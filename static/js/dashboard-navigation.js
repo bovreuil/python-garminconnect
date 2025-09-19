@@ -201,3 +201,33 @@ function hideLoading() {
         loadingElement.style.display = 'none';
     }
 }
+
+/**
+ * Calculate 14-week period ending with current week
+ * Used by all 14-week charts regardless of data type
+ * 
+ * @returns {object} - {startDate: Date, endDate: Date, dateLabels: string[]}
+ */
+function calculate14WeekPeriod() {
+    const today = new Date();
+    const currentWeekStart = getWeekStart(today);
+    const fourteenWeekStart = new Date(currentWeekStart);
+    fourteenWeekStart.setDate(currentWeekStart.getDate() - (13 * 7)); // Go back 13 weeks
+    
+    // Generate array of 98 date labels (14 weeks × 7 days)
+    const dateLabels = [];
+    const currentDate = new Date(fourteenWeekStart);
+    for (let i = 0; i < 98; i++) {
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        dateLabels.push(`${year}-${month}-${day}`);
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return {
+        startDate: fourteenWeekStart,
+        endDate: currentWeekStart,
+        dateLabels
+    };
+}
