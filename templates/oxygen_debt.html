@@ -29,7 +29,21 @@
     </div>
 </div>
 
-<!-- 14 Week Chart Section - REMOVED for Oxygen Debt page -->
+<!-- 14 Week Chart Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0" id="fourteenWeekTitle">14 Week Overview</h5>
+            </div>
+            <div class="card-body">
+                <div id="fourteenWeekChartContainer" class="chart-container" style="height: 360px;">
+                    <canvas id="fourteenWeekChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Two Week Chart Section -->
 <div class="row mt-4">
@@ -79,7 +93,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Oxygen debt page-specific event listeners
     document.getElementById('areaBtn').addEventListener('click', () => switchMetric('area'));
     
-    // Initialize by going to today (no 14-week chart on oxygen debt page)
+    // Initialize by loading 14-week data and going to today
+    loadFourteenWeekData();
     goToToday();
 });
 
@@ -105,7 +120,7 @@ function navigateToWeek(targetDate) {
 
 // goToSingleDateToday moved to dashboard-navigation.js
 
-// Switch between TRIMP and minutes
+// Switch between area and minutes
 function switchMetric(metric) {
     currentMetric = metric;
     
@@ -113,7 +128,8 @@ function switchMetric(metric) {
     document.getElementById('areaBtn').classList.toggle('active', metric === 'area');
     document.getElementById('minutesBtn').classList.toggle('active', metric === 'minutes');
     
-    // Skip 14-week data reload (removed for oxygen debt page)
+    // Reload 14-week data with new metric
+    loadFourteenWeekData();
     
     // Reload two-week data with new metric
     if (currentStartDate && currentEndDate) {
@@ -349,7 +365,7 @@ function updateTwoWeekChart(dateLabels, dataResults) {
 
 // updateDateRange moved to dashboard-navigation.js
 
-// Load 14 weeks of data
+// Load 14 weeks of data for oxygen debt
 function loadFourteenWeekData() {
     showLoading();
     
@@ -395,10 +411,7 @@ function loadFourteenWeekData() {
     });
 }
 
-// Get the start of the week (Monday) for a given date
-// getWeekStart moved to dashboard-navigation.js
-
-// Update 14-week chart
+// Update 14-week chart for oxygen debt
 function updateFourteenWeekChart(dateLabels, dataResults) {
     const ctx = document.getElementById('fourteenWeekChart').getContext('2d');
     
@@ -417,8 +430,8 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
         const weekDates = dateLabels.slice(weekStart, weekEnd);
         const weekData = dataResults.slice(weekStart, weekEnd);
         
-        // Aggregate data for this week
-        const weekAggregated = aggregateWeekData(weekData);
+        // Aggregate oxygen debt data for this week
+        const weekAggregated = aggregateWeekOxygenDebtData(weekData);
         weeklyData.push(weekAggregated);
         
         // Create week label (e.g., "Apr 7")
@@ -430,12 +443,12 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
         weekLabels.push(weekLabel);
     }
     
-    // Create datasets for each zone
-    const datasets = zoneOrder.map(zone => ({
+    // Create datasets for oxygen debt zones
+    const datasets = oxygenDebtZoneOrder.map(zone => ({
         label: zone,
         data: weeklyData.map(weekData => weekData[zone] || 0),
-        backgroundColor: zoneColors[zone],
-        borderColor: zoneColors[zone],
+        backgroundColor: oxygenDebtColors[zone],
+        borderColor: oxygenDebtColors[zone],
         borderWidth: 1
     }));
     
@@ -446,25 +459,8 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
         maxValue = Math.max(maxValue, weekTotal);
     });
     
-    // Calculate a proper max that aligns with Chart.js tick intervals
-    let yAxisMax;
-    if (maxValue === 0) {
-        yAxisMax = 10; // Default for no data
-    } else {
-        // Determine step size based on the range
-        let step;
-        if (maxValue <= 50) step = 10;
-        else if (maxValue <= 100) step = 20;
-        else if (maxValue <= 200) step = 20;
-        else if (maxValue <= 500) step = 50;
-        else if (maxValue <= 1000) step = 100;
-        else if (maxValue <= 2000) step = 200;
-        else if (maxValue <= 5000) step = 500;
-        else step = 1000;
-        
-        // Add one extra step for label space
-        yAxisMax = Math.ceil(maxValue / step) * step + step;
-    }
+    // Calculate Y-axis maximum using shared utility
+    const { axisMax: yAxisMax } = calculateAxisScaling(maxValue, true);
     
     fourteenWeekChart = new Chart(ctx, {
         type: 'bar',
@@ -570,7 +566,7 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
                     stacked: true,
                     title: {
                         display: true,
-                        text: currentMetric === 'trimp' ? 'TRIMP' : 'Minutes'
+                        text: currentMetric === 'area' ? 'Oxygen Debt Area' : 'Minutes'
                     },
                     max: yAxisMax
                 }
@@ -594,53 +590,39 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
     document.getElementById('fourteenWeekTitle').textContent = `${startStr} - ${endStr}`;
 }
 
-// Aggregate data for a week
-function aggregateWeekData(weekData) {
+// Aggregate oxygen debt data for a week
+function aggregateWeekOxygenDebtData(weekData) {
     const aggregated = {};
     
-    // Initialize all zones with 0
-    zoneOrder.forEach(zone => {
+    // Initialize all oxygen debt zones with 0
+    oxygenDebtZoneOrder.forEach(zone => {
         aggregated[zone] = 0;
     });
     
     // Aggregate data for each day in the week
     weekData.forEach(dayData => {
-        if (dayData) {
-            if (currentMetric === 'trimp') {
-                // Handle TRIMP data
-                if (dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0) {
-                    // Use override values
-                    Object.keys(dayData.trimp_overrides).forEach(zone => {
-                        if (zoneOrder.includes(zone)) {
-                            aggregated[zone] += dayData.trimp_overrides[zone] || 0;
-                        }
-                    });
-                } else if (dayData.presentation_buckets) {
-                    // Use calculated TRIMP values
-                    Object.keys(dayData.presentation_buckets).forEach(zone => {
-                        if (zoneOrder.includes(zone)) {
-                            aggregated[zone] += dayData.presentation_buckets[zone].trimp || 0;
-                        }
-                    });
-                }
+        if (dayData && dayData.oxygen_debt) {
+            const oxygenDebt = dayData.oxygen_debt;
+            
+            if (currentMetric === 'area') {
+                aggregated['Below 95'] += oxygenDebt.area_under_95 || 0;
+                aggregated['Below 90'] += oxygenDebt.area_under_90 || 0;
+                aggregated['Below 88'] += oxygenDebt.area_under_88 || 0;
             } else {
-                // Handle minutes data
-                if (dayData.presentation_buckets) {
-                    const hasOverrides = dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0;
-                    if (!hasOverrides) {
-                        Object.keys(dayData.presentation_buckets).forEach(zone => {
-                            if (zoneOrder.includes(zone)) {
-                                aggregated[zone] += dayData.presentation_buckets[zone].minutes || 0;
-                            }
-                        });
-                    }
-                }
+                // Convert seconds to minutes for minutes view
+                aggregated['Below 95'] += Math.round((oxygenDebt.time_under_95 || 0) / 60);
+                aggregated['Below 90'] += Math.round((oxygenDebt.time_under_90 || 0) / 60);
+                aggregated['Below 88'] += Math.round((oxygenDebt.time_under_88 || 0) / 60);
             }
         }
     });
     
     return aggregated;
 }
+
+// Old loadFourteenWeekData and updateFourteenWeekChart functions removed (replaced with oxygen debt versions above)
+
+// Old aggregateWeekData function removed (replaced with aggregateWeekOxygenDebtData above)
 
 // showLoading and hideLoading functions moved to view-management.js
 
