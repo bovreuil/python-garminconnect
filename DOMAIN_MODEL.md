@@ -264,6 +264,7 @@ When time series data changes, recalculate derived data for:
 2. **Time series display**: Same chart type for same data type (HR, SpO2, breathing)
 3. **Utility functions**: Color mappings, date formatting, shared calculations
 4. **Data loading patterns**: Identical API calls and response handling
+5. **Navigation patterns**: Chart interaction and navigation logic independent of data type
 
 **When to AVOID DRY** (Keep Separate):
 1. **Similar but different logic**: Same chart type but different data sources
@@ -276,6 +277,29 @@ When time series data changes, recalculate derived data for:
 - **Across page similarities**: Same chart types but different data sources - keep separate to allow divergent evolution
 - **Time series charts**: Day vs activity charts differ only in x-axis time scale - already well abstracted
 - **Activities charts**: Same horizontal bar logic but different data sources (TRIMP vs oxygen debt) - keep separate for now
+
+### Chart Navigation Patterns (Potential Abstraction)
+
+**Common Navigation Logic** (Independent of Data Type):
+All chart navigation follows identical patterns regardless of whether displaying TRIMP or oxygen debt data:
+
+1. **14-Week Chart Timing**: Always displays 14 weeks up to and including the week containing today
+2. **Week Click Navigation**: Clicking on a week in 14-week chart navigates 2-week chart to show that week
+3. **Minimal Navigation**: Navigation makes the smallest move possible to include the clicked week
+4. **Two-Week Chart Structure**: Always displays exactly 2 weeks, Monday to Sunday
+5. **Today Button Behavior**: Always displays today in the second week of the 2-week chart
+6. **Arrow Navigation**: Left/right buttons move 2-week chart by exactly one week
+7. **Day Click Navigation**: Clicking on a day in 2-week chart opens single day view
+
+**Within-Page Chart Similarities** (Potential Abstraction):
+- **Dashboard**: 14-week TRIMP chart vs 2-week TRIMP chart (same data source, different aggregation)
+- **Oxygen Debt**: 14-week oxygen debt chart vs 2-week oxygen debt chart (same data source, different aggregation)
+- **Pattern**: Both pairs differ only in x-axis granularity (days vs weeks) and bar count (14 vs 98 data points)
+
+**Abstraction Opportunities**:
+1. **Navigation Logic**: Extract chart click/navigation behavior (independent of data type)
+2. **Within-Page Charts**: Parameterize single chart component with day/week granularity option
+3. **Timing Calculations**: Share 14-week period and week aggregation logic
 
 ## Known Issues & TODOs
 
