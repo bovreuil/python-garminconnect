@@ -23,8 +23,18 @@ function createSpo2DistributionCharts(distribution, atOrBelowChartId, containerI
         window.activitySpo2Distribution = distribution;
     }
     
-    // Create "At or Below Level" chart by default
+    // Create "At or Below Level" chart by default (visible)
     createSpo2HorizontalBarChart(atOrBelowChartId, distribution.at_or_below_level, 'Time at or Below Level');
+    
+    // Create "At Level" chart (hidden by default)
+    const atChartId = atOrBelowChartId.replace('AtOrBelow', 'At');
+    createSpo2HorizontalBarChart(atChartId, distribution.at_level, 'Time at Level');
+    
+    // Hide the "At Level" chart initially (show "At or Below" by default)
+    const atChartElement = document.getElementById(atChartId);
+    if (atChartElement) {
+        atChartElement.style.display = 'none';
+    }
     
     // Update oxygen debt display if available
     if (distribution.oxygen_debt) {

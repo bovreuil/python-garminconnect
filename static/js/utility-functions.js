@@ -33,40 +33,67 @@ function downloadDailyCsv() {
 }
 
 // SpO2 Distribution Functions
-function loadDailySpo2Distribution(dateLabel) {
-    fetch(`/api/data/${dateLabel}/spo2-distribution`)
+/**
+ * Unified SpO2 distribution loader for daily and activity views
+ * Handles data fetching, chart creation, and notes loading
+ * 
+ * @param {string} identifier - Date label for daily view or activity ID for activity view
+ * @param {string} viewType - 'daily' or 'activity'
+ */
+function loadSpO2Distribution(identifier, viewType) {
+    // Determine API endpoint based on view type
+    const apiEndpoint = viewType === 'daily' 
+        ? `/api/data/${identifier}/spo2-distribution`
+        : `/api/activity/${identifier}/spo2-distribution`;
+    
+    // Determine chart and container IDs based on view type
+    const chartId = viewType === 'daily' 
+        ? 'spo2AtOrBelowChart' 
+        : 'activitySpo2AtOrBelowChart';
+    const containerId = viewType === 'daily' 
+        ? 'spo2DistributionChartsContainer' 
+        : 'activitySpo2DistributionChartsContainer';
+    
+    fetch(apiEndpoint)
         .then(response => response.json())
         .then(data => {
             if (data.distribution) {
-                createSpo2DistributionCharts(data.distribution, 'spo2AtOrBelowChart', 'spo2DistributionChartsContainer');
-                // Load notes for this date
-                loadDailyNotes(dateLabel);
+                // Create SpO2 distribution charts (identical logic for both view types)
+                createSpo2DistributionCharts(data.distribution, chartId, containerId);
+                
+                // Load appropriate notes (different functions but same purpose)
+                if (viewType === 'daily') {
+                    loadDailyNotes(identifier);
+                } else {
+                    loadActivityNotes(identifier);
+                }
             } else {
-                hideSpo2DistributionCharts();
+                // Hide charts if no data (different functions but same purpose)
+                if (viewType === 'daily') {
+                    hideSpo2DistributionCharts();
+                } else {
+                    hideActivitySpo2DistributionCharts();
+                }
             }
         })
         .catch(error => {
-            console.error('Error loading daily SpO2 distribution:', error);
-            hideSpo2DistributionCharts();
-        });
-}
-
-function loadActivitySpo2Distribution(activityId) {
-    fetch(`/api/activity/${activityId}/spo2-distribution`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.distribution) {
-                createSpo2DistributionCharts(data.distribution, 'activitySpo2AtOrBelowChart', 'activitySpo2DistributionChartsContainer');
-                // Load notes for this activity
-                loadActivityNotes(activityId);
+            console.error(`Error loading ${viewType} SpO2 distribution:`, error);
+            // Hide charts on error
+            if (viewType === 'daily') {
+                hideSpo2DistributionCharts();
             } else {
                 hideActivitySpo2DistributionCharts();
             }
-        })
-        .catch(error => {
-            console.error('Error loading activity SpO2 distribution:', error);
-            hideActivitySpo2DistributionCharts();
         });
+}
+
+// Legacy wrapper functions for backward compatibility
+function loadDailySpo2Distribution(dateLabel) {
+    loadSpO2Distribution(dateLabel, 'daily');
+}
+
+function loadActivitySpo2Distribution(activityId) {
+    loadSpO2Distribution(activityId, 'activity');
 }
 
 function hideSpo2DistributionCharts() {

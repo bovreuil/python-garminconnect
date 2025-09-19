@@ -169,27 +169,4 @@ function hideSpO2DistributionCharts(viewType) {
     }
 }
 
-// Update oxygen debt display
-function updateOxygenDebtDisplay(oxygenDebt, viewType) {
-    if (!oxygenDebt) return;
-    
-    const prefix = viewType === 'daily' ? 'daily' : 'activity';
-    
-    // Update time displays
-    const time95Element = document.getElementById(`${prefix}TimeUnder95`);
-    const time90Element = document.getElementById(`${prefix}TimeUnder90`);
-    const time88Element = document.getElementById(`${prefix}TimeUnder88`);
-    
-    if (time95Element) time95Element.textContent = formatTime(oxygenDebt.time_under_95 || 0);
-    if (time90Element) time90Element.textContent = formatTime(oxygenDebt.time_under_90 || 0);
-    if (time88Element) time88Element.textContent = formatTime(oxygenDebt.time_under_88 || 0);
-    
-    // Update area displays
-    const area95Element = document.getElementById(`${prefix}AreaUnder95`);
-    const area90Element = document.getElementById(`${prefix}AreaUnder90`);
-    const area88Element = document.getElementById(`${prefix}AreaUnder88`);
-    
-    if (area95Element) area95Element.textContent = oxygenDebt.area_under_95 || 0;
-    if (area90Element) area90Element.textContent = oxygenDebt.area_under_90 || 0;
-    if (area88Element) area88Element.textContent = oxygenDebt.area_under_88 || 0;
-}
+// updateOxygenDebtDisplay function moved to utility-functions.js to eliminate duplication
