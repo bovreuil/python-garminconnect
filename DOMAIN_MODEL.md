@@ -419,15 +419,18 @@ These guidelines ensure all new development respects our refactored architecture
        # Follow exact pattern from calculate_trimp_with_caching()
    ```
 
-3. **Wire to Time Series Extractors** (use our clean extractors):
+3. **Wire to Time Series Extractors** (JavaScript frontend calls Python backend):
+   ```javascript
+   // Frontend: Extract clean time series
+   const hrTimeSeries = getDayHRTimeSeries(dayData);
+   // Send to backend API with time series data
+   // Backend receives: [[timestamp, hr_value], ...] format
+   ```
    ```python
-   # For daily metrics
-   hr_series = getDayHRTimeSeries(dayData)  # JavaScript extractors
-   new_metric = calculate_new_metric_from_timeseries(hr_series)
-   
-   # For activity metrics  
-   hr_series = getActivityHRTimeSeries(activity)
-   new_metric = calculate_new_metric_from_timeseries(hr_series)
+   # Backend: Receive time series from frontend
+   def calculate_new_metric_from_timeseries(hr_series):
+       # hr_series format: [[timestamp, hr_value], ...] 
+       # Already cleaned by JavaScript extractors
    ```
 
 4. **Add to API Endpoints**:
@@ -531,6 +534,16 @@ These guidelines ensure all new development respects our refactored architecture
    <a href="/new-metric" class="nav-link">New Metric</a>
    ```
 
+5. **Import Required Modules** (copy from existing templates):
+   ```html
+   <!-- Essential modules for any new page -->
+   <script src="{{ url_for('static', filename='js/dashboard-navigation.js') }}"></script>
+   <script src="{{ url_for('static', filename='js/chart-utilities.js') }}"></script>
+   <script src="{{ url_for('static', filename='js/chart-timeline-utils.js') }}"></script>
+   <script src="{{ url_for('static', filename='js/time-series-extractors.js') }}"></script>
+   <!-- Add others as needed: data-loading.js, heart-rate-charts.js, etc. -->
+   ```
+
 **Key Principles**:
 - ✅ **Copy proven patterns**: Start with oxygen debt page, change data references only
 - ✅ **Reuse navigation logic**: Use existing `dashboard-navigation.js` functions
@@ -606,46 +619,68 @@ const { startDate, endDate } = calculate14WeekPeriod();
 
 **Clean Time Series Extractors** (Latest):
 - **New Module**: `time-series-extractors.js` 
-- **5 Clean Functions**: `getDayHRTimeSeries()`, `getActivityHRTimeSeries()`, `getDaySpO2TimeSeries()`, `getActivitySpO2TimeSeries()`, `getActivityBreathingTimeSeries()`
+- **Complete Coverage**: Functions for all time series types (day HR, activity HR, day SpO2, activity SpO2, activity breathing)
 - **Standardized Format**: All return `[[timestamp, value], ...]`
 - **Separated Concerns**: Data extraction completely isolated from visualization
 - **Foundation Ready**: Perfect base for connecting to calculation functions
 
 **SpO2 Component Abstraction**:
 - **Unified Loading**: `loadSpO2Distribution(identifier, viewType)` 
-- **Eliminated Duplication**: ~50 lines of identical code removed
+- **Eliminated Duplication**: Identical loading patterns consolidated
 - **Fixed Toggle Bug**: SpO2 "At"/"At or Below" charts now both created
 - **Single Source**: `updateOxygenDebtDisplay()` in one location only
 
 **Time Series Background Abstraction**:
 - **Specialized Functions**: `createHRTimeSeriesBackground()`, `createSpO2TimeSeriesBackground()`
-- **Eliminated Duplication**: ~160 lines of gradient logic removed
+- **Eliminated Duplication**: Complex gradient logic consolidated
 - **Maintained Distinction**: HR vs SpO2 gradients kept separate (avoided premature abstraction)
-- **4 Charts Updated**: Daily/activity HR and SpO2 charts
+- **All Time Series Charts**: Daily/activity HR and SpO2 charts updated
 
 **Colored Bar Dataset Abstraction**:
 - **Generic Function**: `createZonedDatasets(zones, colors, dataExtractor, options)`
 - **Flexible Design**: Works for TRIMP, oxygen debt, future metrics
 - **Spread Operator**: `...options` for easy property overrides
 
+**Week Grouping Logic Abstraction**:
+- **Centralized Function**: `groupDataByWeeks(dateLabels, dataResults, aggregationFunc)`
+- **Complex Week Boundaries**: Monday-to-Sunday week calculation with proper date formatting
+- **Parameterized Aggregation**: Works with any data aggregation function
+- **Universal Application**: All 14-week charts use same grouping logic
+
+**Timeline and Period Calculation Utilities**:
+- **14-Week Period**: `calculate14WeekPeriod()` - complex date arithmetic for 14 weeks up to today
+- **Timeline Generation**: `generate24HourTimeline()`, `generateActivityTimeline()` (foundation for future use)
+- **Gridline Logic**: `createAfterBuildTicks()` for consistent activity chart gridlines
+- **Data Mapping**: `mapDataToTimeline()` for time series to timeline array mapping
+
 **Template Transformation**:
-- **Before**: 5,277 lines each, 83% duplication
-- **After**: 915 lines each, 0% duplication  
-- **13 Focused Modules**: Each <1,100 lines, AI-development friendly
+- **Before**: Massive templates with 83% duplication between pages
+- **After**: Clean, page-specific logic with zero duplication
+- **Focused Modules**: Each module maintains single responsibility
 - **Perfect Domain Alignment**: Code structure mirrors domain model
 
-**Module Quality Metrics**:
-- **Largest Module**: `heart-rate-charts.js` (1,052 lines) - focused on HR visualization
-- **Average Module**: 200-400 lines - perfect working size
-- **Zero Duplication**: All identical code extracted to shared utilities
+**Module Quality Principles**:
+- **Domain Separation**: HR, SpO2, breathing charts in separate modules
 - **Single Responsibility**: Each module has clear, focused purpose
+- **Zero Duplication**: All identical code extracted to shared utilities
+- **Manageable Size**: All modules kept to reasonable working size
+- **Clean Dependencies**: Logical import ordering with clear boundaries
 
 ### Current Architecture State
 
 **Data Flow** (Clean Pipeline):
 ```
 Raw Data → Time Series Extractors → Calculation Functions → Charts
+    ↓              ↓                      ↓                ↓
+Database    [[timestamp,value]]     {derived_data}    Visualizations
+Formats     Standardized Arrays     Cached Results    Chart.js
 ```
+
+**Layer Responsibilities**:
+- **Time Series Extractors** (JavaScript): Parse raw formats → standardized arrays
+- **Calculation Functions** (Python): Process standardized arrays → derived metrics  
+- **Chart Functions** (JavaScript): Render derived metrics → interactive visualizations
+- **Shared Utilities** (JavaScript): Common patterns across all chart types
 
 **Module Organization** (Domain-Perfect):
 - **Data Extraction**: `time-series-extractors.js` (new foundation)
@@ -695,6 +730,165 @@ Raw Data → Time Series Extractors → Calculation Functions → Charts
 - **Consideration**: May need special handling for labeling and data presentation
 - **Priority**: Monitor (no clock changes experienced yet with current system)
 
+## Refactoring Methodology
+
+This section captures the proven methodology for successful refactoring that prevents "agent goes rogue" scenarios and preserves knowledge across conversations.
+
+### Core Process: Test-Driven Refactoring
+
+**Golden Rule**: Never commit untested code. Always follow this cycle:
+
+```
+Code Changes → Manual Testing → Commit → Next Change
+```
+
+**Why This Works**:
+- **Prevents regression**: Each commit is a known-good state
+- **Enables rollback**: Can always return to last working version
+- **Preserves knowledge**: Commit messages document what was changed and why
+- **Builds confidence**: Each step is validated before proceeding
+
+### Abstraction Decision Framework
+
+**When to Extract (DRY Principle)**:
+- ✅ **Identical Functions**: 100% same logic, same inputs, same outputs
+- ✅ **3+ Usage Rule**: Pattern appears in 3 or more places
+- ✅ **Clear Boundaries**: Function has single, well-defined responsibility
+- ✅ **Stable Interface**: Function signature unlikely to change
+
+**When NOT to Extract (Avoid Premature Abstraction)**:
+- ❌ **Similar-but-Different**: Would require complex parameterization
+- ❌ **Evolving Code**: Functionality likely to diverge in future
+- ❌ **Unclear Pattern**: Haven't seen the pattern enough times to understand it fully
+- ❌ **Forced Generalization**: Making code more complex to avoid small duplication
+
+**Example Decision Process**:
+```
+Question: Should we extract this repeated code?
+1. Is it 100% identical? → If no, keep separate
+2. Used in 3+ places? → If no, wait for more usage
+3. Clear single responsibility? → If no, don't extract yet
+4. Interface stable? → If no, let it evolve first
+```
+
+### Strategic Refactoring Order
+
+**Phase 1: Utilities & Pure Functions**
+- Extract calculation functions (no side effects)
+- Extract data transformation utilities
+- Extract constants and configuration
+
+**Phase 2: Common Setup & Infrastructure**
+- Extract initialization code
+- Extract shared event handlers
+- Extract common imports and dependencies
+
+**Phase 3: Data Loading & API Patterns**
+- Extract identical API calls
+- Extract data processing pipelines
+- Extract error handling patterns
+
+**Phase 4: UI Components & Visualization**
+- Extract identical UI components
+- Extract chart configuration patterns
+- Extract interaction handlers
+
+**Why This Order**:
+- **Low Risk First**: Pure functions are safest to refactor
+- **Foundation Up**: Build shared utilities before using them
+- **High Value Last**: UI changes are most visible but most complex
+
+### Root Cause Analysis Process
+
+**When Bugs Appear During Refactoring**:
+
+1. **Stop Making Changes**: Don't try to fix forward
+2. **Use Git Diff**: `git diff HEAD~1` to see exactly what changed
+3. **Identify Root Cause**: Understand why the change broke functionality
+4. **Fix Systematically**: Address the root cause, not symptoms
+5. **Test Thoroughly**: Verify fix works in all affected areas
+6. **Document Learning**: Update methodology if new pattern discovered
+
+**Common Root Causes**:
+- **Variable Renaming**: Old references not updated
+- **Function Signature Changes**: Parameters not updated everywhere
+- **Missing Imports**: New modules not imported in all templates
+- **Scope Issues**: Variables moved but references not updated
+
+### Knowledge Preservation Strategy
+
+**During Refactoring**:
+- **Commit Messages**: Detailed descriptions of what and why
+- **Domain Model Updates**: Update architecture documentation regularly
+- **Pattern Documentation**: Note new patterns as they emerge
+- **Anti-Pattern Documentation**: Record what doesn't work and why
+
+**Between Conversations**:
+- **Domain Model**: Primary knowledge repository
+- **Git History**: Detailed record of changes and reasoning
+- **Code Comments**: In-line documentation of complex decisions
+- **README Updates**: High-level changes and new patterns
+
+### Collaboration Patterns (AI + Human)
+
+**Human Responsibilities**:
+- **Strategic Direction**: Define goals and constraints
+- **Quality Gates**: Test and validate each change
+- **Domain Knowledge**: Provide context and business logic
+- **Pattern Recognition**: Identify when abstractions are premature
+
+**AI Responsibilities**:
+- **Pattern Analysis**: Find duplicate code and similar structures
+- **Implementation**: Execute refactoring changes systematically
+- **Root Cause Analysis**: Analyze git diffs and trace problems
+- **Documentation**: Update code comments and architecture docs
+
+**Communication Protocol**:
+- **Clear Objectives**: Human defines specific, measurable goals
+- **Incremental Progress**: AI implements small, testable changes
+- **Validation Loops**: Human tests before AI proceeds to next step
+- **Knowledge Capture**: AI documents learnings in domain model
+
+### Module Management Guidelines
+
+**Size Management**:
+- **Single Responsibility**: Each module should have one clear domain purpose
+- **Manageable Complexity**: Keep modules small enough for effective AI collaboration
+- **Clear Dependencies**: Explicit imports, avoid circular dependencies
+- **Domain Alignment**: Module boundaries should match domain concepts
+
+**Quality Indicators**:
+- ✅ **Clear Purpose**: Can describe module's role in one sentence
+- ✅ **Stable Interface**: Function signatures don't change frequently
+- ✅ **Minimal Dependencies**: Imports only what's needed
+- ✅ **No Duplication**: Identical code extracted to shared utilities
+
+**Warning Signs**:
+- ❌ **Mixed Concerns**: Module handles multiple unrelated responsibilities
+- ❌ **Excessive Size**: Module too large for effective understanding/modification
+- ❌ **Tight Coupling**: Changes in one module frequently require changes in others
+- ❌ **Unclear Boundaries**: Difficult to decide where new functionality belongs
+
+### Success Metrics
+
+**Code Quality**:
+- **Zero Duplication**: No identical functions across modules
+- **Clear Separation**: Data extraction ≠ calculation ≠ visualization
+- **Consistent Patterns**: Same structure for similar functionality
+- **Domain Alignment**: Code structure matches domain model
+
+**Process Quality**:
+- **No Broken Commits**: Every commit represents working code
+- **Clear History**: Git log tells story of refactoring decisions
+- **Preserved Functionality**: All existing features continue working
+- **Enhanced Maintainability**: New features easier to add
+
+**Knowledge Preservation**:
+- **Updated Documentation**: Domain model reflects current architecture
+- **Captured Patterns**: Successful abstractions documented for reuse
+- **Recorded Anti-Patterns**: Failed approaches documented to avoid repetition
+- **Clear Guidelines**: Future developers can follow established patterns
+
 ---
 
-*This document serves as the authoritative description of our domain model. All code should align with these concepts and terminology.*
+*This document serves as the authoritative description of our domain model and refactoring methodology. All code should align with these concepts and terminology.*
