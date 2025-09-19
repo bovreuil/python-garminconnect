@@ -40,8 +40,11 @@ function createHeartRateChart(dateLabel, dayData) {
         hrChart.destroy();
     }
     
+    // Extract clean HR time series using standardized extractor
+    const hrTimeSeries = getDayHRTimeSeries(dayData);
+    
     // Check if we have heart rate values
-    if (!dayData.heart_rate_values || !Array.isArray(dayData.heart_rate_values) || dayData.heart_rate_values.length === 0) {
+    if (hrTimeSeries.length === 0) {
         // No raw data available - show message
         hrChart = new Chart(ctx, {
             type: 'line',
@@ -88,38 +91,19 @@ function createHeartRateChart(dateLabel, dayData) {
         return;
     }
     
-    // Process heart rate values
-    const hrData = dayData.heart_rate_values;
-    
     // Generate 24-hour timeline using shared utility
     const { labels, chartDate } = generate24HourTimeline(dateLabel);
     const data = new Array(labels.length).fill(null);
     
-    // Sort data by timestamp
-    const sortedData = hrData.sort((a, b) => {
-        const timestampA = Array.isArray(a) ? a[0] : a.timestamp;
-        const timestampB = Array.isArray(b) ? b[0] : b.timestamp;
-        return timestampA - timestampB;
-    });
+    // hrTimeSeries is already cleaned and sorted by the extractor
     
 
     
     // Map heart rate data to the 24-hour timeline
-    sortedData.forEach(point => {
-        let timestamp, hr;
-        
-        if (Array.isArray(point)) {
-            // Format: [timestamp, value]
-            timestamp = point[0];
-            hr = point[1];
-        } else {
-            // Format: {"value": x, "timestamp": y}
-            timestamp = point.timestamp;
-            hr = point.value;
-        }
-        
-        // Skip null values
-        if (hr === null || hr === undefined) return;
+    // hrTimeSeries format: [[timestamp, hr_value], ...] - already cleaned and sorted
+    hrTimeSeries.forEach(point => {
+        const timestamp = point[0];
+        const hr = point[1];
         
         // Convert timestamp to Date object
         const date = new Date(timestamp);
@@ -183,16 +167,18 @@ function createHeartRateChart(dateLabel, dayData) {
         }
     }
     
-    // Process SpO2 data if available
+    // Process SpO2 data if available using clean extractor
+    const spo2TimeSeries = getDaySpO2TimeSeries(dayData);
     const spo2Data = [];
     const spo2Alerts = [];
-    if (dayData.spo2_values && Array.isArray(dayData.spo2_values) && dayData.spo2_values.length > 0) {
-        console.log('Processing SpO2 data for day:', dayData.spo2_values.length, 'points');
+    
+    if (spo2TimeSeries.length > 0) {
+        console.log('Processing SpO2 data for day:', spo2TimeSeries.length, 'points');
         let alertCount = 0;
-        dayData.spo2_values.forEach(spo2Point => {
+        
+        spo2TimeSeries.forEach(spo2Point => {
             const timestamp = new Date(spo2Point[0]);
             const spo2Value = spo2Point[1];
-            const spo2Reminder = spo2Point[2] || 0; // SpO2 Reminder column
             
             // Only include SpO2 data for this day
             if (timestamp.getDate() === chartDate.getDate() && 
@@ -454,8 +440,11 @@ function createActivityHeartRateChart(activity) {
         activitySpo2AtChart = null;
     }
     
+    // Extract clean HR time series using standardized extractor
+    const hrTimeSeries = getActivityHRTimeSeries(activity);
+    
     // Check if we have heart rate values for this activity
-    if (!activity.heart_rate_values || !Array.isArray(activity.heart_rate_values) || activity.heart_rate_values.length === 0) {
+    if (hrTimeSeries.length === 0) {
         console.log('No heart rate values available for activity');
         console.log('Activity data keys:', Object.keys(activity));
         console.log('heart_rate_values value:', activity.heart_rate_values);
@@ -511,20 +500,12 @@ function createActivityHeartRateChart(activity) {
         return;
     }
     
-    // Process heart rate values (Garmin activity data only)
-    const hrData = activity.heart_rate_values;
-    console.log('Activity heart rate values length:', hrData.length);
-    
-    // Calculate standardized x-axis range from Garmin activity data only
-    const sortedHrData = hrData.sort((a, b) => {
-        const timestampA = Array.isArray(a) ? a[0] : a.timestamp;
-        const timestampB = Array.isArray(b) ? b[0] : b.timestamp;
-        return timestampA - timestampB;
-    });
+    // hrTimeSeries is already cleaned and sorted by the extractor
+    console.log('Activity heart rate values length:', hrTimeSeries.length);
     
     // Get the standardized x-axis range from Garmin activity data
-    const garminStartTime = new Date(sortedHrData[0][0]); // First Garmin timestamp
-    const garminEndTime = new Date(sortedHrData[sortedHrData.length - 1][0]); // Last Garmin timestamp
+    const garminStartTime = new Date(hrTimeSeries[0][0]); // First Garmin timestamp
+    const garminEndTime = new Date(hrTimeSeries[hrTimeSeries.length - 1][0]); // Last Garmin timestamp
     
     console.log('Standardized x-axis range - Start:', garminStartTime);
     console.log('Standardized x-axis range - End:', garminEndTime);
@@ -565,11 +546,13 @@ function createActivityHeartRateChart(activity) {
         console.log('SpO2 alert points:', spo2Alerts.length);
     }
     
-    // Process breathing data if available - filter to fit within Garmin activity range
+    // Process breathing data if available using clean extractor - filter to fit within Garmin activity range
+    const breathingTimeSeries = getActivityBreathingTimeSeries(activity);
     const breathingData = [];
-    if (activity.breathing_rate_values && activity.breathing_rate_values.length > 0) {
-        console.log('Processing breathing data for activity:', activity.breathing_rate_values.length, 'points');
-        activity.breathing_rate_values.forEach(breathingPoint => {
+    
+    if (breathingTimeSeries.length > 0) {
+        console.log('Processing breathing data for activity:', breathingTimeSeries.length, 'points');
+        breathingTimeSeries.forEach(breathingPoint => {
             const breathingTimestamp = new Date(breathingPoint[0]);
             // Only include breathing data that falls within the Garmin activity range
             if (breathingTimestamp >= garminStartTime && breathingTimestamp <= garminEndTime) {
@@ -582,10 +565,10 @@ function createActivityHeartRateChart(activity) {
         console.log('Filtered breathing data points within Garmin range:', breathingData.length);
     }
     
-    console.log('First few HR data points:', hrData.slice(0, 5));
+    console.log('First few HR data points:', hrTimeSeries.slice(0, 5));
     
-    // Use the already sorted HR data from above
-    const sortedData = sortedHrData;
+    // Use the already sorted HR data from the extractor
+    const sortedData = hrTimeSeries;
     
     console.log('Sorted activity data length:', sortedData.length);
     
