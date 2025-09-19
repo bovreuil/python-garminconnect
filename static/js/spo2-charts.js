@@ -288,45 +288,9 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
         data: {
             labels: labels,
             datasets: [
-                // Background dataset with SpO2 color bands (only 2 points to avoid tooltip interference)
+                // SpO2 zone background using shared utility
                 {
-                    label: 'Background',
-                    data: [
-                        { x: labels[0], y: 100 },
-                        { x: labels[labels.length - 1], y: 100 }
-                    ],
-                    borderColor: 'transparent',
-                    backgroundColor: function(context) {
-                        const chart = context.chart;
-                        const {ctx, chartArea} = chart;
-                        
-                        if (!chartArea) {
-                            return 'transparent';
-                        }
-                        
-                        // Create gradient for SpO2 zones
-                        const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                        
-                        // Add color stops for 8 equal SpO2 bands (top to bottom)
-                        gradient.addColorStop(0, '#28a745');     // Band 1: Green (top)
-                        gradient.addColorStop(0.25, '#28a745');  // Band 2: Green
-                        gradient.addColorStop(0.25, '#9acd32');  // Band 3: Yellow-Green
-                        gradient.addColorStop(0.375, '#9acd32'); // Band 4: Yellow
-                        gradient.addColorStop(0.375, '#ffc107'); // Band 5: Orange
-                        gradient.addColorStop(0.5, '#ffc107');   // Band 6: Red
-                        gradient.addColorStop(0.5, '#fd7e14');   // Band 7: Hot Red
-                        gradient.addColorStop(0.625, '#fd7e14'); // Band 8: Hot Red
-                        gradient.addColorStop(0.625, '#e74c3c'); // Band 8: Hot Red
-                        gradient.addColorStop(0.75, '#e74c3c');  // Band 8: Hot Red
-                        gradient.addColorStop(0.75, '#dc3545');  // Band 8: Hot Red
-                        gradient.addColorStop(1, '#dc3545');     // Band 8: Hot Red (bottom)
-                        
-                        return gradient;
-                    },
-                    borderWidth: 0,
-                    fill: true,
-                    tension: 0,
-                    pointRadius: 0,
+                    ...createSpO2TimeSeriesBackground(labels),
                     order: 100
                 },
                 // SpO2 line on top
@@ -603,45 +567,9 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
         data: {
             labels: labels,
             datasets: [
-                // Background dataset with SpO2 color bands
+                // SpO2 zone background using shared utility  
                 {
-                    label: 'Background',
-                    data: [
-                        { x: startTime, y: 100 },
-                        { x: endTime, y: 100 }
-                    ],
-                    borderColor: 'transparent',
-                    backgroundColor: function(context) {
-                        const chart = context.chart;
-                        const {ctx, chartArea} = chart;
-                        
-                        if (!chartArea) {
-                            return 'transparent';
-                        }
-                        
-                        // Create gradient for SpO2 zones
-                        const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                        
-                        // Add color stops for 8 equal SpO2 bands (top to bottom)
-                        gradient.addColorStop(0, '#28a745');     // Band 1: Green (top)
-                        gradient.addColorStop(0.25, '#28a745');  // Band 2: Green
-                        gradient.addColorStop(0.25, '#9acd32');  // Band 3: Yellow-Green
-                        gradient.addColorStop(0.375, '#9acd32'); // Band 4: Yellow
-                        gradient.addColorStop(0.375, '#ffc107'); // Band 5: Orange
-                        gradient.addColorStop(0.5, '#ffc107');   // Band 6: Red
-                        gradient.addColorStop(0.5, '#fd7e14');   // Band 7: Hot Red
-                        gradient.addColorStop(0.625, '#fd7e14'); // Band 8: Hot Red
-                        gradient.addColorStop(0.625, '#e74c3c'); // Band 8: Hot Red
-                        gradient.addColorStop(0.75, '#e74c3c');  // Band 8: Hot Red
-                        gradient.addColorStop(0.75, '#dc3545');  // Band 8: Hot Red
-                        gradient.addColorStop(1, '#dc3545');     // Band 8: Hot Red (bottom)
-                        
-                        return gradient;
-                    },
-                    borderWidth: 0,
-                    fill: true,
-                    tension: 0,
-                    pointRadius: 0,
+                    ...createSpO2TimeSeriesBackground([startTime, endTime]),
                     order: 100
                 },
                 // SpO2 line on top

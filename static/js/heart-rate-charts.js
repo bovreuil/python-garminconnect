@@ -237,50 +237,8 @@ function createHeartRateChart(dateLabel, dayData) {
         const datasets = [
             // Single background dataset with gradient (only 2 points to avoid tooltip interference)
             {
-                label: 'Background',
-                data: [
-                    { x: labels[0], y: 160 },
-                    { x: labels[labels.length - 1], y: 160 }
-                ], // Full height background for 24-hour timeline
-                borderColor: 'transparent',
-                backgroundColor: function(context) {
-                    const chart = context.chart;
-                    const {ctx, chartArea} = chart;
-                    
-                    if (!chartArea) {
-                        return 'transparent';
-                    }
-                    
-                    // Create gradient
-                    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                    
-                    // Add color stops for each zone
-                    gradient.addColorStop(0, '#e74c3c'); // 160+ Red
-                    gradient.addColorStop(1/12, '#e74c3c'); // 150-159 Red
-                    gradient.addColorStop(1/12, '#fd7e14'); // 150-159 Orange
-                    gradient.addColorStop(1/6, '#fd7e14'); // 140-149 Orange
-                    gradient.addColorStop(1/6, '#ffc107'); // 140-149 Yellow
-                    gradient.addColorStop(3/12, '#ffc107'); // 130-139 Yellow
-                    gradient.addColorStop(3/12, '#9acd32'); // 130-139 Yellow-green
-                    gradient.addColorStop(1/3, '#9acd32'); // 120-129 Yellow-green
-                    gradient.addColorStop(1/3, '#28a745'); // 120-129 Green
-                    gradient.addColorStop(5/12, '#28a745'); // 110-119 Green
-                    gradient.addColorStop(5/12, '#006d5b'); // 110-119 Deep teal
-                    gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
-                    gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
-                    gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
-                    gradient.addColorStop(7/12, '#002040'); // 80-89 Midnight
-                    gradient.addColorStop(2/3, '#002040'); // 80-89 Midnight
-                    gradient.addColorStop(2/3, '#000000'); // 80-89 Black
-                    gradient.addColorStop(1, '#000000'); // Below 80 Black
-                    
-                    return gradient;
-                },
-                borderWidth: 0,
-                fill: true,
-                tension: 0,
-                pointRadius: 0,
-                order: 100 // Draw background first
+                // HR zone background using shared utility
+                ...createHRTimeSeriesBackground(labels)
             },
             // Heart rate line on top
             {
@@ -807,49 +765,11 @@ function createActivityHeartRateChart(activity) {
         // Create datasets array
         const datasets = [
             // Single background dataset with gradient
+            // HR zone background using shared utility
             {
-                label: 'Background',
-                data: chartLabels.map(timestamp => ({ x: timestamp, y: 160 })), // Full height background
-                borderColor: 'transparent',
-                backgroundColor: function(context) {
-                    const chart = context.chart;
-                    const {ctx, chartArea} = chart;
-                    
-                    if (!chartArea) {
-                        return 'transparent';
-                    }
-                    
-                    // Create gradient
-                    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                    
-                                         // Add color stops for each zone
-                     gradient.addColorStop(0, '#e74c3c'); // 160+ Red
-                     gradient.addColorStop(1/12, '#e74c3c'); // 150-159 Red
-                     gradient.addColorStop(1/12, '#fd7e14'); // 150-159 Orange
-                     gradient.addColorStop(1/6, '#fd7e14'); // 140-149 Orange
-                     gradient.addColorStop(1/6, '#ffc107'); // 140-149 Yellow
-                     gradient.addColorStop(3/12, '#ffc107'); // 130-139 Yellow
-                     gradient.addColorStop(3/12, '#9acd32'); // 130-139 Yellow-green
-                     gradient.addColorStop(1/3, '#9acd32'); // 120-129 Yellow-green
-                     gradient.addColorStop(1/3, '#28a745'); // 120-129 Green
-                     gradient.addColorStop(5/12, '#28a745'); // 110-119 Green
-                     gradient.addColorStop(5/12, '#006d5b'); // 110-119 Deep teal
-                     gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
-                     gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
-                     gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
-                     gradient.addColorStop(7/12, '#002040'); // 80-89 Midnight
-                     gradient.addColorStop(2/3, '#002040'); // 80-89 Midnight
-                     gradient.addColorStop(2/3, '#000000'); // 80-89 Black
-                     gradient.addColorStop(1, '#000000'); // Below 80 Black
-                     
-                     return gradient;
-                 },
-                 borderWidth: 0,
-                 fill: true,
-                 tension: 0,
-                 pointRadius: 0,
-                 order: 2
-             },
+                ...createHRTimeSeriesBackground(chartLabels),
+                order: 2
+            },
              // Heart rate line on top
              {
                  label: 'Heart Rate (BPM)',

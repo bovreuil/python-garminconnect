@@ -127,3 +127,105 @@ function mapDataToTimeline(timeSeriesData, timeline, chartDate) {
     
     return data;
 }
+
+/**
+ * Create HR zone background dataset for time series charts
+ * Creates the TRIMP zone colored background (160+ red to 80- black)
+ * 
+ * @param {Date[]} timeline - Timeline array (24-hour or activity duration)
+ * @returns {object} - Chart.js dataset object for HR zone background
+ */
+function createHRTimeSeriesBackground(timeline) {
+    return {
+        label: 'HR Zone Background',
+        data: [
+            { x: timeline[0], y: 160 },
+            { x: timeline[timeline.length - 1], y: 160 }
+        ],
+        borderColor: 'transparent',
+        backgroundColor: function(context) {
+            const chart = context.chart;
+            const {ctx, chartArea} = chart;
+            
+            if (!chartArea) {
+                return 'transparent';
+            }
+            
+            // Create HR zone gradient (TRIMP zones: 160+ to 80-89)
+            const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            gradient.addColorStop(0, '#e74c3c'); // 160+ Red
+            gradient.addColorStop(1/12, '#e74c3c'); // 150-159 Red
+            gradient.addColorStop(1/12, '#fd7e14'); // 150-159 Orange
+            gradient.addColorStop(1/6, '#fd7e14'); // 140-149 Orange
+            gradient.addColorStop(1/6, '#ffc107'); // 140-149 Yellow
+            gradient.addColorStop(3/12, '#ffc107'); // 130-139 Yellow
+            gradient.addColorStop(3/12, '#9acd32'); // 130-139 Yellow-green
+            gradient.addColorStop(1/3, '#9acd32'); // 120-129 Yellow-green
+            gradient.addColorStop(1/3, '#28a745'); // 120-129 Green
+            gradient.addColorStop(5/12, '#28a745'); // 110-119 Green
+            gradient.addColorStop(5/12, '#006d5b'); // 110-119 Deep teal
+            gradient.addColorStop(1/2, '#006d5b'); // 100-109 Deep teal
+            gradient.addColorStop(1/2, '#004080'); // 100-109 Night sky blue
+            gradient.addColorStop(7/12, '#004080'); // 90-99 Night sky blue
+            gradient.addColorStop(7/12, '#002040'); // 80-89 Midnight
+            gradient.addColorStop(2/3, '#002040'); // 80-89 Midnight
+            gradient.addColorStop(2/3, '#000000'); // 80-89 Black
+            gradient.addColorStop(1, '#000000'); // Below 80 Black
+            
+            return gradient;
+        },
+        borderWidth: 0,
+        fill: true,
+        tension: 0,
+        pointRadius: 0,
+        order: 100 // Behind all other datasets
+    };
+}
+
+/**
+ * Create SpO2 zone background dataset for time series charts
+ * Creates the SpO2 zone colored background (98% green to 81% red)
+ * 
+ * @param {Date[]} timeline - Timeline array (24-hour or activity duration)
+ * @returns {object} - Chart.js dataset object for SpO2 zone background
+ */
+function createSpO2TimeSeriesBackground(timeline) {
+    return {
+        label: 'SpO2 Zone Background',
+        data: [
+            { x: timeline[0], y: 100 },
+            { x: timeline[timeline.length - 1], y: 100 }
+        ],
+        borderColor: 'transparent',
+        backgroundColor: function(context) {
+            const chart = context.chart;
+            const {ctx, chartArea} = chart;
+            
+            if (!chartArea) {
+                return 'transparent';
+            }
+            
+            // Create SpO2 zone gradient (98% to 81%)
+            const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            gradient.addColorStop(0, '#28a745');     // Band 1: Green (top)
+            gradient.addColorStop(0.25, '#28a745');  // Band 2: Green
+            gradient.addColorStop(0.25, '#9acd32');  // Band 3: Yellow-Green
+            gradient.addColorStop(0.375, '#9acd32'); // Band 4: Yellow
+            gradient.addColorStop(0.375, '#ffc107'); // Band 5: Orange
+            gradient.addColorStop(0.5, '#ffc107');   // Band 6: Red
+            gradient.addColorStop(0.5, '#fd7e14');   // Band 7: Hot Red
+            gradient.addColorStop(0.625, '#fd7e14'); // Band 8: Hot Red
+            gradient.addColorStop(0.625, '#e74c3c'); // Band 8: Hot Red
+            gradient.addColorStop(0.75, '#e74c3c');  // Band 8: Hot Red
+            gradient.addColorStop(0.75, '#dc3545');  // Band 8: Hot Red
+            gradient.addColorStop(1, '#dc3545');     // Band 8: Hot Red (bottom)
+            
+            return gradient;
+        },
+        borderWidth: 0,
+        fill: true,
+        tension: 0,
+        pointRadius: 0,
+        order: 100 // Behind all other datasets
+    };
+}
