@@ -5,6 +5,137 @@
  * Handles daily and activity-level SpO2 data visualization.
  */
 
+// Create new SpO2 individual levels chart (vertical stacked bar, like TRIMP charts)
+function createSpo2IndividualLevelsChart(distribution, chartId, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) {
+        console.error('SpO2 individual levels container not found');
+        return;
+    }
+    
+    // Show container
+    container.style.display = 'block';
+    
+    // Use the "at_level" data from distribution (same as existing charts now use)
+    let levelData;
+    if (distribution && distribution.at_level && distribution.at_level.length > 0) {
+        // Convert at_level array to object for easier access
+        levelData = {};
+        distribution.at_level.forEach(item => {
+            // Convert seconds to minutes
+            levelData[item.spo2.toString()] = parseFloat((item.seconds / 60).toFixed(1));
+        });
+        console.log('Using real SpO2 at_level data:', levelData);
+    } else {
+        // Generate dummy data for testing (equal time at each level to see all colors)
+        levelData = {};
+        for (let level = 80; level <= 99; level++) {
+            levelData[level.toString()] = 30; // 30 minutes at each level
+        }
+        console.log('Using dummy SpO2 data:', levelData);
+    }
+    
+    // Create the vertical stacked bar chart
+    createSpo2VerticalStackedBarChart(chartId, levelData, 'SpO2 Level Distribution');
+}
+
+function createSpo2VerticalStackedBarChart(chartId, data, title) {
+    const ctx = document.getElementById(chartId);
+    if (!ctx) {
+        console.error(`Chart element ${chartId} not found`);
+        return;
+    }
+    
+    // Destroy existing chart if it exists
+    const existingChart = Chart.getChart(ctx);
+    if (existingChart) {
+        existingChart.destroy();
+    }
+    
+    // Create datasets for each SpO2 level (80-99), stacked from bottom to top
+    const datasets = [];
+    
+    // Process levels from 80 to 99 (bottom to top in stack)
+    for (let level = 80; level <= 99; level++) {
+        const levelStr = level.toString();
+        const value = parseFloat(data[levelStr]) || 0;
+        
+        // Only create dataset if there's data for this level
+        if (value > 0) {
+            datasets.push({
+                label: `${level}%`,
+                data: [value], // Single bar
+                backgroundColor: spo2LevelColors[levelStr],
+                borderColor: spo2LevelColors[levelStr],
+                borderWidth: 0.5
+            });
+        }
+    }
+    
+    // Create the vertical stacked bar chart
+    const chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['SpO2 Distribution'], // Single bar label
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: title,
+                    font: { size: 14, weight: 'bold' }
+                },
+                legend: {
+                    display: false // Too many levels for legend
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function() {
+                            return 'SpO2 Level Distribution';
+                        },
+                        label: function(context) {
+                            const level = context.dataset.label;
+                            const value = context.parsed.y;
+                            return `SpO2 ${level}: ${value.toFixed(1)} minutes`;
+                        }
+                    }
+                },
+                datalabels: {
+                    display: false // Remove data labels - tooltips provide the info
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    title: {
+                        display: false
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Minutes'
+                    }
+                }
+            }
+        }
+    });
+    
+    // Store chart reference for cleanup
+    if (chartId === 'spo2IndividualLevelsChart') {
+        window.spo2IndividualLevelsChart = chart;
+    } else if (chartId === 'activitySpo2IndividualLevelsChart') {
+        window.activitySpo2IndividualLevelsChart = chart;
+    }
+    
+    return chart;
+}
+
 // Create SpO2 distribution charts (horizontal bar charts)
 function createSpo2DistributionCharts(distribution, atOrBelowChartId, containerId) {
     const container = document.getElementById(containerId);
@@ -61,12 +192,12 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
         existingChart.destroy();
     }
     
-    // SpO2 color mapping (81-98) - exact specification
+    // SpO2 color mapping (80-99) - use new individual level colors
     const spo2Colors = {
-        98: '#28a745', 97: '#28a745', 96: '#28a745', 95: '#28a745', // Green
-        94: '#9acd32', 93: '#9acd32', 92: '#ffc107', 91: '#ffc107', // Yellow-Green, Yellow
-        90: '#fd7e14', 89: '#fd7e14', 88: '#e74c3c', 87: '#e74c3c', // Orange, Red
-        86: '#dc3545', 85: '#dc3545', 84: '#dc3545', 83: '#dc3545', 82: '#dc3545', 81: '#dc3545' // Hot Red
+        99: spo2LevelColors['99'], 98: spo2LevelColors['98'], 97: spo2LevelColors['97'], 96: spo2LevelColors['96'], 95: spo2LevelColors['95'],
+        94: spo2LevelColors['94'], 93: spo2LevelColors['93'], 92: spo2LevelColors['92'], 91: spo2LevelColors['91'], 90: spo2LevelColors['90'],
+        89: spo2LevelColors['89'], 88: spo2LevelColors['88'], 87: spo2LevelColors['87'], 86: spo2LevelColors['86'], 85: spo2LevelColors['85'],
+        84: spo2LevelColors['84'], 83: spo2LevelColors['83'], 82: spo2LevelColors['82'], 81: spo2LevelColors['81'], 80: spo2LevelColors['80']
     };
     
     // Convert seconds to hh:mm:ss format

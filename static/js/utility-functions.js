@@ -58,6 +58,16 @@ function loadSpO2Distribution(identifier, viewType) {
         .then(response => response.json())
         .then(data => {
             if (data.distribution) {
+                // Create new SpO2 individual levels chart (with dummy data for now)
+                const individualLevelsChartId = viewType === 'daily' 
+                    ? 'spo2IndividualLevelsChart' 
+                    : 'activitySpo2IndividualLevelsChart';
+                const individualLevelsContainerId = viewType === 'daily' 
+                    ? 'spo2IndividualLevelsContainer' 
+                    : 'activitySpo2IndividualLevelsContainer';
+                
+                createSpo2IndividualLevelsChart(data.distribution, individualLevelsChartId, individualLevelsContainerId);
+                
                 // Create SpO2 distribution charts (identical logic for both view types)
                 createSpo2DistributionCharts(data.distribution, chartId, containerId);
                 

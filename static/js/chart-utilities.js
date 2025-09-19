@@ -37,6 +37,30 @@ const oxygenDebtColors = {
     'Below 88': '#e74c3c'   // Red
 };
 
+// SpO2 individual level colors (80-99, distinct color per level)
+const spo2LevelColors = {
+    '99': '#1a8f3a',  // Purer green
+    '98': '#1e9940',  // Slightly more saturated
+    '97': '#22a346',  // Transitioning toward 95
+    '96': '#26ad4c',  // Getting closer to 95
+    '95': '#28a745',  // Good SpO2 (reference)
+    '94': '#4fb85e',  // Halfway to 93
+    '93': '#9acd32',  // Yellow-green (reference)
+    '92': '#b3d956',  // Halfway to 91
+    '91': '#cce57a',  // Halfway to 90
+    '90': '#e6d732',  // Yellow-green (tweaked to be less orange, closer to 91)
+    '89': '#ffb01a',  // Halfway to 88
+    '88': '#fd7e14',  // Orange (reference)
+    '87': '#f06530',  // Halfway to 86
+    '86': '#e74c3c',  // Red (reference)
+    '85': '#dc3545',  // Dark red (reference)
+    '84': '#b12d3c',  // Adding black (75% dc3545, 25% black)
+    '83': '#862533',  // Adding more black (50% dc3545, 50% black)
+    '82': '#5b1d2a',  // Adding more black (25% dc3545, 75% black)
+    '81': '#301521',  // Almost black with hint of red
+    '80': '#000000'   // Black (includes ≤80)
+};
+
 // Zone order for stacking (bottom to top)
 const zoneOrder = [
     '80-89',

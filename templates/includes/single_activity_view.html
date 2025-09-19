@@ -53,13 +53,22 @@
                             <label class="btn btn-outline-primary btn-sm" for="activitySpo2AtRadio">At</label>
                         </div>
                     </div>
+                    <!-- Old chart gets full width -->
+                    <h6 id="activitySpo2ChartTitle">SpO2 Time at or Below Level</h6>
+                    <div class="chart-container" style="height: 320px; margin-bottom: 20px;">
+                        <canvas id="activitySpo2AtOrBelowChart"></canvas>
+                        <canvas id="activitySpo2AtChart" style="display: none;"></canvas>
+                    </div>
+                    
                     <table style="width: 100%; border-collapse: collapse;">
                         <tr>
                             <td style="width: 50%; vertical-align: top; padding-right: 10px;">
-                                <h6 id="activitySpo2ChartTitle">SpO2 Time at or Below Level</h6>
-                                <div class="chart-container" style="height: 320px; margin: 0; width: 100%;">
-                                    <canvas id="activitySpo2AtOrBelowChart"></canvas>
-                                    <canvas id="activitySpo2AtChart" style="display: none;"></canvas>
+                                <!-- New chart goes in left column -->
+                                <div id="activitySpo2IndividualLevelsContainer" style="display: none;">
+                                    <h6>Activity SpO2 Level Distribution</h6>
+                                    <div class="chart-container" style="height: 300px; margin: 0; width: 100%;">
+                                        <canvas id="activitySpo2IndividualLevelsChart"></canvas>
+                                    </div>
                                 </div>
                                 <hr class="my-3">
                                 <h6>Oxygen Debt</h6>
@@ -117,6 +126,7 @@
                         </tr>
                     </table>
                 </div>
+
             </div>
         </div>
     </div>

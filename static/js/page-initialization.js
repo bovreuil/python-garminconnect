@@ -69,6 +69,8 @@ function initializeChartVariables() {
     window.spo2AtChart = null;
     window.activitySpo2AtOrBelowChart = null;
     window.activitySpo2AtChart = null;
+    window.spo2IndividualLevelsChart = null;
+    window.activitySpo2IndividualLevelsChart = null;
     
     // Global state variables
     window.currentStartDate = null;
@@ -99,6 +101,8 @@ function setupCommonEventListeners() {
             if (spo2AtChart) spo2AtChart.resize();
             if (activitySpo2AtOrBelowChart) activitySpo2AtOrBelowChart.resize();
             if (activitySpo2AtChart) activitySpo2AtChart.resize();
+            if (spo2IndividualLevelsChart) spo2IndividualLevelsChart.resize();
+            if (activitySpo2IndividualLevelsChart) activitySpo2IndividualLevelsChart.resize();
             
             // Keep SpO2 and HR charts aligned (dashboard specific but harmless on oxygen debt page)
             if (spo2Chart && hrChart) {

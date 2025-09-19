@@ -2932,10 +2932,18 @@ def calculate_spo2_distribution(spo2_data, start_timestamp=None, end_timestamp=N
             # Assume last point represents 1 second
             level_counts[last_spo2] += 1
     
-    # Create at_level statistics (only 81-98 for display)
+    # Create at_level statistics (80-99 for display, with same logic as individual_levels)
     at_level_stats = []
-    for level in range(98, 80, -1):  # 98 down to 81
-        seconds = level_counts[level]
+    for level in range(99, 79, -1):  # 99 down to 80
+        if level == 80:
+            # Special case: level 80 includes all time at 80 or below
+            seconds = 0
+            for l in range(80, -1, -1):  # From 80 down to 0
+                seconds += level_counts[l]
+        else:
+            # Regular case: just time at this specific level
+            seconds = level_counts[level]
+        
         percent = (seconds / total_spo2_seconds * 100) if total_spo2_seconds > 0 else 0
         at_level_stats.append({
             'spo2': level,
@@ -2943,13 +2951,19 @@ def calculate_spo2_distribution(spo2_data, start_timestamp=None, end_timestamp=N
             'percent': round(percent, 0)  # 0 decimal places
         })
     
-    # Create at_or_below_level statistics (only 81-98 for display)
+    # Create at_or_below_level statistics (80-99 for display)
     at_or_below_stats = []
-    for level in range(98, 80, -1):  # 98 down to 81
-        # Calculate cumulative time from current level down to 81
+    for level in range(99, 79, -1):  # 99 down to 80
+        # Calculate cumulative time from current level down to 80 (inclusive)
         cumulative_seconds = 0
-        for l in range(level, 80, -1):  # From current level down to 81
-            cumulative_seconds += level_counts[l]
+        for l in range(level, 79, -1):  # From current level down to 80
+            if l == 80:
+                # For level 80, include all time at 80 or below
+                for ll in range(80, -1, -1):
+                    cumulative_seconds += level_counts[ll]
+            else:
+                cumulative_seconds += level_counts[l]
+        
         percent = (cumulative_seconds / total_spo2_seconds * 100) if total_spo2_seconds > 0 else 0
         at_or_below_stats.append({
             'spo2': level,

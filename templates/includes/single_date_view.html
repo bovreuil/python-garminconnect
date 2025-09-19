@@ -59,13 +59,23 @@
                             <label class="btn btn-outline-primary btn-sm" for="spo2AtRadio">At</label>
                         </div>
                     </div>
+                    
+                    <!-- Old chart gets full width -->
+                    <h6 id="spo2ChartTitle">SpO2 Time at or Below Level</h6>
+                    <div class="chart-container" style="height: 320px; margin-bottom: 20px;">
+                        <canvas id="spo2AtOrBelowChart"></canvas>
+                        <canvas id="spo2AtChart" style="display: none;"></canvas>
+                    </div>
+                    
                     <table style="width: 100%; border-collapse: collapse;">
                         <tr>
                             <td style="width: 50%; vertical-align: top; padding-right: 10px;">
-                                <h6 id="spo2ChartTitle">SpO2 Time at or Below Level</h6>
-                                <div class="chart-container" style="height: 320px; margin: 0; width: 100%;">
-                                    <canvas id="spo2AtOrBelowChart"></canvas>
-                                    <canvas id="spo2AtChart" style="display: none;"></canvas>
+                                <!-- New chart goes in left column -->
+                                <div id="spo2IndividualLevelsContainer" style="display: none;">
+                                    <h6>SpO2 Level Distribution</h6>
+                                    <div class="chart-container" style="height: 300px; margin: 0; width: 100%;">
+                                        <canvas id="spo2IndividualLevelsChart"></canvas>
+                                    </div>
                                 </div>
                                 <hr class="my-3">
                                 <h6>Oxygen Debt</h6>
@@ -123,7 +133,7 @@
                         </tr>
                     </table>
                 </div>
-                
+
                 <!-- Activities Chart -->
                 <div class="row mb-4">
                     <div class="col-12">
