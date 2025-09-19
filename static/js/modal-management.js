@@ -506,36 +506,36 @@ function openCsvUploadEditor() {
 function checkCsvOverrideStatus() {
     if (!selectedActivity) return;
     
-    fetch(`/api/activity/${selectedActivity.activity_id}/csv-status`)
+    fetch(`/api/activity/${selectedActivity.activity_id}/hr-csv-status`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                updateCsvIcon(data.has_override);
-                updateCsvStatus(data.has_override);
+                updateCsvIcon(data.has_csv_override);
+                updateCsvStatus(data.has_csv_override);
             }
         })
         .catch(error => {
             console.error('Error checking CSV override status:', error);
+            updateCsvIcon(false);
+            updateCsvStatus(false);
         });
 }
 
 function updateCsvIcon(hasOverride) {
     const icon = document.getElementById('csvIcon');
     if (hasOverride) {
-        icon.textContent = '📤✅ CSV';
-        icon.parentElement.title = 'HR data has been overridden with CSV';
+        icon.innerHTML = '📤 CSV*'; // Show override indicator
     } else {
-        icon.textContent = '📤 CSV';
-        icon.parentElement.title = 'Upload CSV to override HR data';
+        icon.innerHTML = '📤 CSV'; // Show default icon
     }
 }
 
 function updateCsvStatus(hasOverride) {
     const statusDiv = document.getElementById('csvStatus');
     if (hasOverride) {
-        statusDiv.innerHTML = '<div class="alert alert-success">This activity has HR data overridden with CSV.</div>';
+        statusDiv.innerHTML = '<div class="alert alert-warning">This activity has uploaded CSV data that overrides the original HR data.</div>';
     } else {
-        statusDiv.innerHTML = '';
+        statusDiv.innerHTML = '<div class="alert alert-info">No CSV override is currently active for this activity.</div>';
     }
 }
 

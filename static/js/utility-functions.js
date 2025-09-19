@@ -37,8 +37,10 @@ function loadDailySpo2Distribution(dateLabel) {
     fetch(`/api/data/${dateLabel}/spo2-distribution`)
         .then(response => response.json())
         .then(data => {
-            if (data.success && data.distribution) {
-                createSpo2DistributionCharts(data.distribution, 'daily');
+            if (data.distribution) {
+                createSpo2DistributionCharts(data.distribution, 'spo2AtOrBelowChart', 'spo2DistributionChartsContainer');
+                // Load notes for this date
+                loadDailyNotes(dateLabel);
             } else {
                 hideSpo2DistributionCharts();
             }
@@ -53,8 +55,10 @@ function loadActivitySpo2Distribution(activityId) {
     fetch(`/api/activity/${activityId}/spo2-distribution`)
         .then(response => response.json())
         .then(data => {
-            if (data.success && data.distribution) {
-                createSpo2DistributionCharts(data.distribution, 'activity');
+            if (data.distribution) {
+                createSpo2DistributionCharts(data.distribution, 'activitySpo2AtOrBelowChart', 'activitySpo2DistributionChartsContainer');
+                // Load notes for this activity
+                loadActivityNotes(activityId);
             } else {
                 hideActivitySpo2DistributionCharts();
             }

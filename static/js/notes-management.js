@@ -8,7 +8,7 @@ function loadDailyNotes(dateLabel) {
         .then(data => {
             const notesElement = document.getElementById('dailyNotes');
             if (data.success && data.notes) {
-                notesElement.innerHTML = `<p class="mb-0">${data.notes}</p>`;
+                notesElement.innerHTML = `<p class="mb-0">${data.notes.replace(/\n/g, '<br>')}</p>`;
             } else {
                 notesElement.innerHTML = '<p class="mb-0 text-muted">Click to add notes...</p>';
             }
@@ -51,7 +51,7 @@ function saveDailyNotes(dateLabel) {
     .then(data => {
         if (data.success) {
             if (notes) {
-                notesElement.innerHTML = `<p class="mb-0">${notes}</p>`;
+                notesElement.innerHTML = `<p class="mb-0">${notes.replace(/\n/g, '<br>')}</p>`;
             } else {
                 notesElement.innerHTML = '<p class="mb-0 text-muted">Click to add notes...</p>';
             }
@@ -78,7 +78,7 @@ function loadActivityNotes(activityId) {
         .then(data => {
             const notesElement = document.getElementById('activityNotes');
             if (data.success && data.notes) {
-                notesElement.innerHTML = `<p class="mb-0">${data.notes}</p>`;
+                notesElement.innerHTML = `<p class="mb-0">${data.notes.replace(/\n/g, '<br>')}</p>`;
             } else {
                 notesElement.innerHTML = '<p class="mb-0 text-muted">Click to add notes...</p>';
             }
@@ -121,7 +121,7 @@ function saveActivityNotes(activityId) {
     .then(data => {
         if (data.success) {
             if (notes) {
-                notesElement.innerHTML = `<p class="mb-0">${notes}</p>`;
+                notesElement.innerHTML = `<p class="mb-0">${notes.replace(/\n/g, '<br>')}</p>`;
             } else {
                 notesElement.innerHTML = '<p class="mb-0 text-muted">Click to add notes...</p>';
             }

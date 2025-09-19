@@ -45,9 +45,6 @@ function showSingleDateView(dateLabel, dayData) {
         // Create 24-hour heart rate chart
         createHeartRateChart(dateLabel, dayData);
         
-        // Load notes for this date
-        loadDailyNotes(dateLabel);
-        
         // Check for TRIMP overrides and update icon
         checkTrimpOverrides(dateLabel);
     }
@@ -128,9 +125,6 @@ function showSingleActivityView(activity) {
         // Create the activity heart rate chart
         createActivityHeartRateChart(activity);
     }, 50);
-    
-    // Load notes for this activity
-    loadActivityNotes(activity.activity_id);
     
     // Scroll to the section
     document.getElementById('singleActivitySection').scrollIntoView({ 
