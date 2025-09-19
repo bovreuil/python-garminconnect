@@ -94,6 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Dashboard-specific event listeners
     document.getElementById('trimpBtn').addEventListener('click', () => switchMetric('trimp'));
+    document.getElementById('minutesBtn').addEventListener('click', () => switchMetric('minutes'));
     
     // Initialize by loading 14-week data and going to today
     loadFourteenWeekData();

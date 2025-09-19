@@ -28,8 +28,8 @@ function loadDateData(dateLabel) {
                             // Apply TRIMP overrides (even if all values are 0)
                             data.trimp_overrides = overridesData.trimp_overrides;
                             
-                            // Update total TRIMP if we're viewing TRIMP metric
-                            if (currentMetric === 'trimp') {
+                            // Update total TRIMP if we're on dashboard and viewing TRIMP metric
+                            if (typeof currentMetric !== 'undefined' && currentMetric === 'trimp') {
                                 let totalOverride = 0;
                                 Object.values(overridesData.trimp_overrides).forEach(value => {
                                     totalOverride += value;
@@ -38,7 +38,7 @@ function loadDateData(dateLabel) {
                             }
                             
                             // For minutes view, set minutes to 0 when overrides exist
-                            if (currentMetric === 'minutes' && data.presentation_buckets) {
+                            if (typeof currentMetric !== 'undefined' && currentMetric === 'minutes' && data.presentation_buckets) {
                                 Object.keys(data.presentation_buckets).forEach(zone => {
                                     data.presentation_buckets[zone].minutes = 0;
                                 });
