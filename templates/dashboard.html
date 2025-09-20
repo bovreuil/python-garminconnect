@@ -8,6 +8,8 @@
     <script src="{{ url_for('static', filename='js/chart-timeline-utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/time-series-extractors.js') }}"></script>
 <script src="{{ url_for('static', filename='js/data-loading.js') }}"></script>
+<script src="{{ url_for('static', filename='js/page-configurations.js') }}"></script>
+<script src="{{ url_for('static', filename='js/unified-charts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/heart-rate-charts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/breathing-charts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/spo2-charts.js') }}"></script>
@@ -81,13 +83,13 @@
 {% include 'includes/modals.html' %}
 
 <script>
-// Dashboard-specific initialization
-let currentMetric = 'trimp'; // 'trimp' or 'minutes'
-
-// Initialize the dashboard
+// Dashboard-specific initialization using unified chart system
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize common page elements
     initializePage();
+    
+    // Initialize page-specific charts
+    initializePageCharts();
     
     // Setup common event listeners
     setupCommonEventListeners();
@@ -113,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // goToSingleDateToday moved to dashboard-navigation.js
 
-// Switch between TRIMP and minutes
+// Switch between metrics using unified system
 function switchMetric(metric) {
     currentMetric = metric;
     
