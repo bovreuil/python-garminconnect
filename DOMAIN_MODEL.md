@@ -887,6 +887,131 @@ Question: Should we extract this repeated code?
 - **Recorded Anti-Patterns**: Failed approaches documented to avoid repetition
 - **Clear Guidelines**: Future developers can follow established patterns
 
+## Page-Aware Chart Architecture (September 2025)
+
+### Lessons Learned from SpO2 Distribution Page Implementation
+
+**Initial Attempt Challenges**:
+- **Assumption-driven development**: Previous agent assumed chart structure without analyzing existing patterns
+- **Configuration guessing**: Created new chart functions instead of understanding existing architecture
+- **Massive duplication**: 848 lines of inline JavaScript violated modularity principles
+- **Scope confusion**: Mixed page creation with architectural refactoring
+
+**Root Cause Analysis**:
+The core issue was that chart functions were hardcoded for specific data types (TRIMP vs oxygen debt) rather than being data-agnostic. This made adding new pages with different data types require complete duplication of chart logic.
+
+### Architectural Solution: Page Configuration System
+
+**Core Innovation**: Separate chart logic from data extraction through configuration objects.
+
+```javascript
+// Each page defines its data extraction rules
+const PAGE_CONFIGS = {
+    dashboard: { dataType: 'trimp', zones: zoneOrder, colors: zoneColors, ... },
+    'oxygen-debt': { dataType: 'oxygen_debt', zones: oxygenDebtZoneOrder, colors: oxygenDebtColors, ... },
+    'spo2-distribution': { dataType: 'spo2_distribution', zones: ['80'...'99'], colors: spo2LevelColors, ... }
+};
+
+// Universal chart functions work with any configuration
+function updateTwoWeekChart(dateLabels, dataResults) {
+    const config = getCurrentPageConfig();
+    const datasets = createZonedDatasets(config.zones, config.colors, zone => {
+        return labels.map((_, index) => config.dataExtractor.getZoneData(dataResults[index], zone, currentMetric));
+    });
+    // ... rest of chart creation is identical
+}
+```
+
+**Benefits**:
+1. **Zero Duplication**: Same chart functions work for all pages
+2. **Easy Extension**: Adding new pages requires only configuration, not new chart functions
+3. **Type Safety**: Data extraction logic centralized and testable
+4. **Domain Alignment**: Page differences captured in configuration, not scattered through code
+
+### Implementation Pattern for New Pages
+
+**Step 1: Add Page Configuration**
+```javascript
+// In page-configurations.js
+'new-page': {
+    name: 'New Page Analysis',
+    dataType: 'new_metric',
+    zones: ['zone1', 'zone2', ...],
+    colors: newMetricColors,
+    metrics: { primary: { key: 'value', label: 'New Metric' } },
+    dataExtractor: { /* extraction logic */ },
+    aggregateWeekData: function(weekData, metric) { /* aggregation logic */ }
+}
+```
+
+**Step 2: Create Template (Copy Dashboard)**
+```html
+<!-- Copy dashboard.html, change only: -->
+- Page title and header
+- Toggle buttons (if different metrics needed)
+- Include unified chart modules
+```
+
+**Step 3: Add Route**
+```python
+@app.route('/new-page')
+def new_page():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('new_page.html')
+```
+
+**Result**: All three charts (14-week, 2-week, activities) automatically work with the new data type.
+
+### Chart Legend Management
+
+**Discovery**: Legend display should be based on number of zones:
+- **≤10 zones**: Show legend (TRIMP: 9 zones, Oxygen debt: 3 zones)
+- **>10 zones**: Hide legend (SpO2 distribution: 20 zones)
+
+**Implementation**:
+```javascript
+legend: {
+    display: currentPageConfig.zones.length <= 10
+}
+```
+
+### Navigation Integration
+
+**Page-Aware Navigation**: The `dashboard-navigation.js` module automatically detects page type and calls appropriate data loading functions:
+
+```javascript
+// Automatically works for all pages
+if (typeof loadTwoWeekSpo2Data === 'function') {
+    loadTwoWeekSpo2Data(startDate, endDate);
+} else {
+    loadTwoWeekData(startDate, endDate);
+}
+```
+
+**Future Enhancement**: With unified architecture, this conditional logic can be simplified to always use the same function names.
+
+### Anti-Patterns Avoided
+
+1. **Page-Specific Chart Functions**: ❌ Don't create `updateTwoWeekChartForSpO2()`
+2. **Hardcoded Data Types**: ❌ Don't check `if (pageType === 'spo2')` in chart functions
+3. **Inline Chart Definitions**: ❌ Don't put 800+ lines of chart code in templates
+4. **Mixed Responsibilities**: ❌ Don't combine page creation with architectural changes
+
+### Success Metrics for New Page Implementation
+
+**Code Metrics**:
+- **Template size**: <100 lines (mostly HTML structure)
+- **New JavaScript**: <50 lines (only page-specific initialization)
+- **Duplication**: 0% (all chart logic reused)
+- **Configuration**: <100 lines (data extraction rules)
+
+**Functionality Metrics**:
+- **Chart types**: All 3 charts (14-week, 2-week, activities) working
+- **Navigation**: Week/day navigation working
+- **Single views**: Day and activity views working
+- **Data integrity**: Correct data displayed with proper colors/labels
+
 ---
 
 *This document serves as the authoritative description of our domain model and refactoring methodology. All code should align with these concepts and terminology.*
