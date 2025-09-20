@@ -22,7 +22,24 @@ function loadDailyNotes(dateLabel) {
 
 function editDailyNotes(dateLabel) {
     const notesElement = document.getElementById('dailyNotes');
-    const currentNotes = notesElement.textContent === 'Click to add notes...' ? '' : notesElement.textContent;
+    
+    // Check if we're already in edit mode
+    const existingEditor = document.getElementById('dailyNotesEditor');
+    if (existingEditor) {
+        // Already in edit mode, just focus the textarea
+        existingEditor.focus();
+        return;
+    }
+    
+    // Get the current notes, converting <br> tags back to newlines
+    let currentNotes = '';
+    if (notesElement.textContent !== 'Click to add notes...') {
+        // Extract text from the paragraph, converting <br> tags to newlines
+        const paragraph = notesElement.querySelector('p');
+        if (paragraph) {
+            currentNotes = paragraph.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+        }
+    }
     
     notesElement.innerHTML = `
         <textarea class="form-control" rows="3" id="dailyNotesEditor">${currentNotes}</textarea>
@@ -92,7 +109,24 @@ function loadActivityNotes(activityId) {
 
 function editActivityNotes(activityId) {
     const notesElement = document.getElementById('activityNotes');
-    const currentNotes = notesElement.textContent === 'Click to add notes...' ? '' : notesElement.textContent;
+    
+    // Check if we're already in edit mode
+    const existingEditor = document.getElementById('activityNotesEditor');
+    if (existingEditor) {
+        // Already in edit mode, just focus the textarea
+        existingEditor.focus();
+        return;
+    }
+    
+    // Get the current notes, converting <br> tags back to newlines
+    let currentNotes = '';
+    if (notesElement.textContent !== 'Click to add notes...') {
+        // Extract text from the paragraph, converting <br> tags to newlines
+        const paragraph = notesElement.querySelector('p');
+        if (paragraph) {
+            currentNotes = paragraph.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+        }
+    }
     
     notesElement.innerHTML = `
         <textarea class="form-control" rows="3" id="activityNotesEditor">${currentNotes}</textarea>
