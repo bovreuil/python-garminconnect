@@ -592,4 +592,139 @@ def invalidate_cached_oxygen_debt_data(date, data_type='daily'):
         
     finally:
         cur.close()
-        conn.close() 
+        conn.close()
+
+def get_cached_spo2_distribution_data(date, data_type='daily'):
+    """
+    Get cached SpO2 distribution data for a date or activity.
+    
+    Args:
+        date: Date string (YYYY-MM-DD) or activity_id
+        data_type: 'daily' or 'activity'
+        
+    Returns:
+        Cached SpO2 distribution data dict or None if not found/invalid
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        if data_type == 'daily':
+            cur.execute("""
+                SELECT cached_spo2_distribution_data, spo2_distribution_calculation_hash
+                FROM daily_data 
+                WHERE date = ?
+            """, (date,))
+        else:  # activity
+            cur.execute("""
+                SELECT cached_spo2_distribution_data, spo2_distribution_calculation_hash
+                FROM activity_data 
+                WHERE activity_id = ?
+            """, (date,))
+        
+        result = cur.fetchone()
+        
+        if result and result['cached_spo2_distribution_data']:
+            return {
+                'spo2_distribution_data': json.loads(result['cached_spo2_distribution_data']),
+                'hash': result['spo2_distribution_calculation_hash']
+            }
+        return None
+        
+    finally:
+        cur.close()
+        conn.close()
+
+def save_cached_spo2_distribution_data(date, spo2_distribution_data, data_hash, data_type='daily'):
+    """
+    Save cached SpO2 distribution data for a date or activity.
+    
+    Args:
+        date: Date string (YYYY-MM-DD) or activity_id
+        spo2_distribution_data: SpO2 distribution calculation results dict
+        data_hash: Hash of the input data used for calculation
+        data_type: 'daily' or 'activity'
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        spo2_distribution_json = json.dumps(spo2_distribution_data) if spo2_distribution_data else None
+        
+        if data_type == 'daily':
+            cur.execute("""
+                UPDATE daily_data 
+                SET cached_spo2_distribution_data = ?, spo2_distribution_calculation_hash = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE date = ?
+            """, (spo2_distribution_json, data_hash, date))
+        else:  # activity
+            cur.execute("""
+                UPDATE activity_data 
+                SET cached_spo2_distribution_data = ?, spo2_distribution_calculation_hash = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE activity_id = ?
+            """, (spo2_distribution_json, data_hash, date))
+        
+        conn.commit()
+        
+    finally:
+        cur.close()
+        conn.close()
+
+def invalidate_cached_spo2_distribution_data(date, data_type='daily'):
+    """
+    Invalidate cached SpO2 distribution data for a date or activity.
+    
+    Args:
+        date: Date string (YYYY-MM-DD) or activity_id
+        data_type: 'daily' or 'activity'
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        if data_type == 'daily':
+            cur.execute("""
+                UPDATE daily_data 
+                SET cached_spo2_distribution_data = NULL, spo2_distribution_calculation_hash = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE date = ?
+            """, (date,))
+        else:  # activity
+            cur.execute("""
+                UPDATE activity_data 
+                SET cached_spo2_distribution_data = NULL, spo2_distribution_calculation_hash = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE activity_id = ?
+            """, (date,))
+        
+        conn.commit()
+        
+    finally:
+        cur.close()
+        conn.close()
+
+def invalidate_spo2_distribution_cache_for_date_range(start_date, end_date):
+    """
+    Invalidate cached SpO2 distribution data for a date range.
+    
+    Args:
+        start_date: Start date string (YYYY-MM-DD)
+        end_date: End date string (YYYY-MM-DD)
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute("""
+            UPDATE daily_data 
+            SET cached_spo2_distribution_data = NULL, spo2_distribution_calculation_hash = NULL, updated_at = CURRENT_TIMESTAMP
+            WHERE date >= ? AND date <= ?
+        """, (start_date, end_date))
+        
+        conn.commit()
+        logger.info(f"Invalidated SpO2 distribution cache for date range {start_date} to {end_date}")
+        
+    except Exception as e:
+        logger.error(f"Error invalidating SpO2 distribution cache for date range: {e}")
+        
+    finally:
+        cur.close()
+        conn.close()

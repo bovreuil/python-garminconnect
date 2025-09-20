@@ -39,6 +39,9 @@ from database import (
     get_cached_oxygen_debt_data,
     save_cached_oxygen_debt_data,
     invalidate_cached_oxygen_debt_data,
+    get_cached_spo2_distribution_data,
+    save_cached_spo2_distribution_data,
+    invalidate_cached_spo2_distribution_data,
     get_config_value,
     set_config_value
 )
@@ -2981,19 +2984,28 @@ def get_spo2_distribution_batch_data():
             data = cur.fetchone()
             
             if data:
-                # Calculate SpO2 distribution data from raw O2Ring data
-                from datetime import datetime
-                import pytz
-                uk_tz = pytz.timezone('Europe/London')
-                start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
-                end_of_day = start_of_day + timedelta(days=1)
-                start_timestamp = int(start_of_day.timestamp() * 1000)
-                end_timestamp = int(end_of_day.timestamp() * 1000)
+                # Get SpO2 distribution data from cache
+                from database import get_cached_spo2_distribution_data
+                cached_spo2_distribution = get_cached_spo2_distribution_data(date, 'daily')
                 
-                o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
                 spo2_distribution_data = {}
-                if o2ring_data:
-                    spo2_distribution_data = calculate_spo2_distribution(o2ring_data)
+                
+                if cached_spo2_distribution:
+                    # Use cached SpO2 distribution data
+                    spo2_distribution_data = cached_spo2_distribution['spo2_distribution_data']
+                else:
+                    # Fallback: calculate SpO2 distribution from raw O2Ring data (rare case)
+                    from datetime import datetime
+                    import pytz
+                    uk_tz = pytz.timezone('Europe/London')
+                    start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
+                    end_of_day = start_of_day + timedelta(days=1)
+                    start_timestamp = int(start_of_day.timestamp() * 1000)
+                    end_timestamp = int(end_of_day.timestamp() * 1000)
+                    
+                    o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
+                    if o2ring_data:
+                        spo2_distribution_data = calculate_spo2_distribution_with_caching(date, o2ring_data, 'daily')
                 
                 results[date] = {
                     'date': date,
@@ -3230,6 +3242,43 @@ def calculate_oxygen_debt_with_caching(target_date, spo2_data, data_type='daily'
     save_cached_oxygen_debt_data(target_date, oxygen_debt_data, data_hash, data_type)
     
     return oxygen_debt_data
+
+def calculate_spo2_distribution_with_caching(target_date, spo2_data, data_type='daily'):
+    """
+    Calculate SpO2 distribution with caching support.
+    
+    Args:
+        target_date: Date string or activity_id
+        spo2_data: List of [timestamp, spo2_value, spo2_reminder] tuples
+        data_type: 'daily' or 'activity'
+        
+    Returns:
+        Dict with SpO2 distribution data
+    """
+    if not spo2_data or len(spo2_data) < 2:
+        return {
+            'at_level': [],
+            'at_or_below_level': [],
+            'total_seconds': 0
+        }
+    
+    # Calculate hash of input data
+    data_hash = calculate_data_hash(spo2_data)
+    
+    # Check for cached data
+    cached_data = get_cached_spo2_distribution_data(target_date, data_type)
+    if cached_data and cached_data['hash'] == data_hash:
+        logger.info(f"calculate_spo2_distribution_with_caching: Using cached SpO2 distribution data for {target_date}")
+        return cached_data['spo2_distribution_data']
+    
+    # Calculate SpO2 distribution
+    logger.info(f"calculate_spo2_distribution_with_caching: Calculating SpO2 distribution for {target_date}")
+    spo2_distribution_data = calculate_spo2_distribution(spo2_data)
+    
+    # Cache the result
+    save_cached_spo2_distribution_data(target_date, spo2_distribution_data, data_hash, data_type)
+    
+    return spo2_distribution_data
 
 if __name__ == '__main__':
     init_database()

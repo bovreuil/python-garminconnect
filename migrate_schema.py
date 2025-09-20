@@ -95,6 +95,36 @@ def migrate_database():
         else:
             logger.info("oxygen_debt_calculation_hash column already exists in activity_data table")
         
+        # Check and add SpO2 distribution caching columns to daily_data table
+        logger.info("Checking SpO2 distribution caching columns in daily_data table...")
+        
+        if not check_column_exists(conn, 'daily_data', 'cached_spo2_distribution_data'):
+            logger.info("Adding cached_spo2_distribution_data column to daily_data table")
+            cur.execute("ALTER TABLE daily_data ADD COLUMN cached_spo2_distribution_data JSON")
+        else:
+            logger.info("cached_spo2_distribution_data column already exists in daily_data table")
+        
+        if not check_column_exists(conn, 'daily_data', 'spo2_distribution_calculation_hash'):
+            logger.info("Adding spo2_distribution_calculation_hash column to daily_data table")
+            cur.execute("ALTER TABLE daily_data ADD COLUMN spo2_distribution_calculation_hash VARCHAR(64)")
+        else:
+            logger.info("spo2_distribution_calculation_hash column already exists in daily_data table")
+        
+        # Check and add SpO2 distribution caching columns to activity_data table
+        logger.info("Checking SpO2 distribution caching columns in activity_data table...")
+        
+        if not check_column_exists(conn, 'activity_data', 'cached_spo2_distribution_data'):
+            logger.info("Adding cached_spo2_distribution_data column to activity_data table")
+            cur.execute("ALTER TABLE activity_data ADD COLUMN cached_spo2_distribution_data JSON")
+        else:
+            logger.info("cached_spo2_distribution_data column already exists in activity_data table")
+        
+        if not check_column_exists(conn, 'activity_data', 'spo2_distribution_calculation_hash'):
+            logger.info("Adding spo2_distribution_calculation_hash column to activity_data table")
+            cur.execute("ALTER TABLE activity_data ADD COLUMN spo2_distribution_calculation_hash VARCHAR(64)")
+        else:
+            logger.info("spo2_distribution_calculation_hash column already exists in activity_data table")
+        
         # Commit changes
         conn.commit()
         logger.info("Migration completed successfully!")
