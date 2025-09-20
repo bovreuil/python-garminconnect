@@ -1,11 +1,11 @@
 // Modal Management Functions
 // Shared functions for managing SpO2 editor, TRIMP editor, manual activity, and CSV upload modals
 
-// Helper function to show modal with proper focus management
+// Helper function to show modal with proper focus managemen
 function showModalWithFocusManagement(modalId) {
     const modalElement = document.getElementById(modalId);
     const modal = new bootstrap.Modal(modalElement);
-    
+
     // Add event listener to handle focus when modal is hidden
     modalElement.addEventListener('hide.bs.modal', function handleModalHide() {
         // Remove focus from any focused element within the modal
@@ -16,7 +16,7 @@ function showModalWithFocusManagement(modalId) {
         // Remove this event listener after use
         modalElement.removeEventListener('hide.bs.modal', handleModalHide);
     });
-    
+
     modal.show();
     return modal;
 }
@@ -29,35 +29,35 @@ function openSpo2Editor() {
         console.error('No activity selected for SpO2 editing');
         return;
     }
-    
+
     // Load existing SpO2 data if available
     spo2Entries = [];
     if (selectedActivity.spo2_values && selectedActivity.spo2_values.length > 0) {
-        // Convert existing SpO2 data to entries format
+        // Convert existing SpO2 data to entries forma
         const firstHrTimestamp = selectedActivity.heart_rate_values[0][0];
         selectedActivity.spo2_values.forEach(spo2Point => {
             const timeOffsetMs = spo2Point[0] - firstHrTimestamp;
             const minutes = Math.floor(timeOffsetMs / 60000);
             const seconds = Math.floor((timeOffsetMs % 60000) / 1000);
             const timeOffset = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-            
+
             spo2Entries.push({
                 time_offset: timeOffset,
                 spo2_value: spo2Point[1]
             });
         });
     }
-    
+
     // Populate the modal
     populateSpo2Entries();
-    
-    // Show the modal with proper focus management
+
+    // Show the modal with proper focus managemen
     showModalWithFocusManagement('spo2Modal');
 }
 
 function addSpo2Entry() {
     let defaultTime = '0:00';
-    
+
     // If there are existing entries, calculate the next time (15 seconds after the last entry)
     if (spo2Entries.length > 0) {
         const lastEntry = spo2Entries[spo2Entries.length - 1];
@@ -69,7 +69,7 @@ function addSpo2Entry() {
             defaultTime = `${newMinutes}:${newSeconds.toString().padStart(2, '0')}`;
         }
     }
-    
+
     spo2Entries.push({
         time_offset: defaultTime,
         spo2_value: ''
@@ -85,19 +85,19 @@ function removeSpo2Entry(index) {
 function populateSpo2Entries() {
     const container = document.getElementById('spo2Entries');
     container.innerHTML = '';
-    
+
     spo2Entries.forEach((entry, index) => {
         const entryDiv = document.createElement('div');
         entryDiv.className = 'row mb-2 align-items-center';
         entryDiv.innerHTML = `
             <div class="col-5">
-                <input type="text" class="form-control" placeholder="MM:SS" 
-                       value="${entry.time_offset}" 
+                <input type="text" class="form-control" placeholder="MM:SS"
+                       value="${entry.time_offset}"
                        onchange="updateSpo2Entry(${index}, 'time_offset', this.value)">
             </div>
             <div class="col-5">
                 <input type="number" class="form-control" placeholder="SpO2 %" min="0" max="100"
-                       value="${entry.spo2_value}" 
+                       value="${entry.spo2_value}"
                        onchange="updateSpo2Entry(${index}, 'spo2_value', parseInt(this.value))">
             </div>
             <div class="col-2">
@@ -121,15 +121,15 @@ function saveSpo2Data() {
         console.error('No activity selected for saving SpO2 data');
         return;
     }
-    
+
     // Validate entries
-    const validEntries = spo2Entries.filter(entry => 
-        entry.time_offset && entry.time_offset.match(/^\d+:\d{2}$/) && 
+    const validEntries = spo2Entries.filter(entry =>
+        entry.time_offset && entry.time_offset.match(/^\d+:\d{2}$/) &&
         entry.spo2_value !== '' && entry.spo2_value >= 0 && entry.spo2_value <= 100
     );
-    
+
     // Allow empty entries - this will clear the SpO2 data
-    
+
     // Send data to server
     fetch(`/api/activity/${selectedActivity.activity_id}/spo2`, {
         method: 'POST',
@@ -145,10 +145,10 @@ function saveSpo2Data() {
         if (data.success) {
             // Update the selected activity with new SpO2 data (null if empty)
             selectedActivity.spo2_values = data.spo2_series || [];
-            
+
             // Refresh the activity chart to show SpO2 data
             createActivityHeartRateChart(selectedActivity);
-            
+
             // Close the modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('spo2Modal'));
             modal.hide();
@@ -171,7 +171,7 @@ function openTrimpEditor() {
         console.error('No date selected for TRIMP editing');
         return;
     }
-    
+
     // Load current day data and TRIMP overrides
     loadTrimpOverrides(selectedDate);
 }
@@ -187,7 +187,7 @@ function loadTrimpOverrides(dateLabel) {
         })
         .then(dayData => {
             currentDayData = dayData;
-            
+
             // Then load existing TRIMP overrides
             return fetch(`/api/data/${dateLabel}/trimp-overrides`);
         })
@@ -198,10 +198,10 @@ function loadTrimpOverrides(dateLabel) {
             } else {
                 currentTrimpOverrides = {};
             }
-            
+
             // Populate the modal
             populateTrimpOverridesForm();
-            
+
             // Show the modal
             showModalWithFocusManagement('trimpModal');
         })
@@ -210,7 +210,7 @@ function loadTrimpOverrides(dateLabel) {
             currentDayData = null;
             currentTrimpOverrides = {};
             populateTrimpOverridesForm();
-            
+
             showModalWithFocusManagement('trimpModal');
         });
 }
@@ -218,21 +218,21 @@ function loadTrimpOverrides(dateLabel) {
 function populateTrimpOverridesForm() {
     const container = document.getElementById('trimpOverridesForm');
     container.innerHTML = '';
-    
+
     // Create form fields for each zone
     zoneOrder.forEach(zone => {
         const zoneDiv = document.createElement('div');
         zoneDiv.className = 'row mb-2 align-items-center';
-        
+
         // Get calculated value for this zone
         let calculatedValue = 0;
         if (currentDayData && currentDayData.presentation_buckets && currentDayData.presentation_buckets[zone]) {
             calculatedValue = currentDayData.presentation_buckets[zone].trimp || 0;
         }
-        
+
         // Get override value if it exists
         const overrideValue = currentTrimpOverrides[zone] !== undefined ? currentTrimpOverrides[zone] : '';
-        
+
         zoneDiv.innerHTML = `
             <div class="col-3">
                 <label class="form-label">${zone}</label>
@@ -241,7 +241,7 @@ function populateTrimpOverridesForm() {
                 <span class="text-muted">${calculatedValue.toFixed(1)}</span>
             </div>
             <div class="col-4">
-                <input type="number" class="form-control" placeholder="Override" 
+                <input type="number" class="form-control" placeholder="Override"
                        value="${overrideValue}" step="0.1" min="0"
                        onchange="updateTrimpOverride('${zone}', parseFloat(this.value) || null)">
             </div>
@@ -251,7 +251,7 @@ function populateTrimpOverridesForm() {
         `;
         container.appendChild(zoneDiv);
     });
-    
+
     // Update total
     updateTotalTrimpOverride();
 }
@@ -275,7 +275,7 @@ function clearTrimpOverrides() {
         console.error('No date selected for clearing TRIMP overrides');
         return;
     }
-    
+
     fetch(`/api/data/${selectedDate}/trimp-overrides`, {
         method: 'DELETE',
         headers: {
@@ -286,18 +286,18 @@ function clearTrimpOverrides() {
     .then(data => {
         if (data.success) {
             currentTrimpOverrides = {};
-            
+
             // Refresh the form
             populateTrimpOverridesForm();
-            
+
             // Update the icon
             updateTrimpIcon(false);
-            
+
             // Refresh charts if we're on the single date view
             if (selectedDate) {
                 loadDateData(selectedDate);
             }
-            
+
             // Close the modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('trimpModal'));
             modal.hide();
@@ -316,7 +316,7 @@ function saveTrimpOverrides() {
         console.error('No date selected for saving TRIMP overrides');
         return;
     }
-    
+
     fetch(`/api/data/${selectedDate}/trimp-overrides`, {
         method: 'POST',
         headers: {
@@ -331,12 +331,12 @@ function saveTrimpOverrides() {
         if (data.success) {
             // Update the icon
             updateTrimpIcon(Object.keys(currentTrimpOverrides).length > 0);
-            
+
             // Refresh charts if we're on the single date view
             if (selectedDate) {
                 loadDateData(selectedDate);
             }
-            
+
             // Close the modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('trimpModal'));
             modal.hide();
@@ -361,7 +361,7 @@ function createTrimpIcon() {
     svg.setAttribute('width', '16');
     svg.setAttribute('height', '16');
     svg.setAttribute('viewBox', '0 0 16 16');
-    
+
     // Create bars for each zone (stacked vertically)
     zoneOrder.forEach((zone, index) => {
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -372,7 +372,7 @@ function createTrimpIcon() {
         rect.setAttribute('fill', zoneColors[zone]);
         svg.appendChild(rect);
     });
-    
+
     return svg;
 }
 
@@ -398,13 +398,13 @@ function openManualActivityModal() {
         alert('No date selected');
         return;
     }
-    
+
     // Clear form fields
     document.getElementById('manualStartTime').value = '';
     document.getElementById('manualEndTime').value = '';
     document.getElementById('manualHeartRate').value = '';
-    
-    // Show the modal with proper focus management
+
+    // Show the modal with proper focus managemen
     showModalWithFocusManagement('manualActivityModal');
 }
 
@@ -413,30 +413,30 @@ function createManualActivity() {
         alert('No date selected');
         return;
     }
-    
+
     const startTime = document.getElementById('manualStartTime').value;
     const endTime = document.getElementById('manualEndTime').value;
     const heartRate = document.getElementById('manualHeartRate').value;
-    
+
     if (!startTime || !endTime || !heartRate) {
         alert('Please fill in all fields');
         return;
     }
-    
+
     // Validate time format (HH:MM)
     const timePattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
     if (!timePattern.test(startTime) || !timePattern.test(endTime)) {
         alert('Please enter times in HH:MM format (e.g., 14:30)');
         return;
     }
-    
+
     // Validate heart rate
     const hr = parseInt(heartRate);
     if (isNaN(hr) || hr < 30 || hr > 220) {
         alert('Please enter a valid heart rate between 30 and 220');
         return;
     }
-    
+
     // Create the manual activity
     fetch('/api/create-manual-activity', {
         method: 'POST',
@@ -456,7 +456,7 @@ function createManualActivity() {
             // Close the modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('manualActivityModal'));
             modal.hide();
-            
+
             // Refresh the single date view to show the new activity
             loadDateData(selectedDate);
         } else {
@@ -473,7 +473,7 @@ function deleteActivity(activityId) {
     if (!confirm('Are you sure you want to delete this activity?')) {
         return;
     }
-    
+
     fetch(`/api/activity/${activityId}`, {
         method: 'DELETE',
         headers: {
@@ -485,7 +485,7 @@ function deleteActivity(activityId) {
         if (data.success) {
             // Close the single activity view
             closeSingleActivityView();
-            
+
             // Refresh the single date view to remove the deleted activity
             if (selectedDate) {
                 loadDateData(selectedDate);
@@ -506,21 +506,21 @@ function openCsvUploadEditor() {
         console.error('No activity selected for CSV upload');
         return;
     }
-    
+
     // Clear the file input and status
     document.getElementById('csvFile').value = '';
     document.getElementById('csvStatus').innerHTML = '';
-    
+
     // Check current CSV override status
     checkCsvOverrideStatus();
-    
-    // Show the modal with proper focus management
+
+    // Show the modal with proper focus managemen
     showModalWithFocusManagement('csvUploadModal');
 }
 
 function checkCsvOverrideStatus() {
     if (!selectedActivity) return;
-    
+
     fetch(`/api/activity/${selectedActivity.activity_id}/hr-csv-status`)
         .then(response => response.json())
         .then(data => {
@@ -559,27 +559,27 @@ function uploadCsvData() {
         console.error('No activity selected for CSV upload');
         return;
     }
-    
+
     const fileInput = document.getElementById('csvFile');
     const file = fileInput.files[0];
-    
+
     if (!file) {
         alert('Please select a CSV file to upload');
         return;
     }
-    
+
     if (!file.name.toLowerCase().endsWith('.csv')) {
         alert('Please select a CSV file');
         return;
     }
-    
+
     const formData = new FormData();
     formData.append('csv_file', file);
-    
+
     // Show uploading status
     const statusDiv = document.getElementById('csvStatus');
     statusDiv.innerHTML = '<div class="alert alert-info">Uploading and processing CSV...</div>';
-    
+
     fetch(`/api/activity/${selectedActivity.activity_id}/upload-csv`, {
         method: 'POST',
         body: formData
@@ -590,28 +590,28 @@ function uploadCsvData() {
             // Update the selected activity with new HR data
             selectedActivity.heart_rate_values = data.heart_rate_series;
             selectedActivity.has_hr_override = true;
-            
+
             // Update CSV icon
             updateCsvIcon(true);
-            
-            // Refresh the activity chart
+
+            // Refresh the activity char
             createActivityHeartRateChart(selectedActivity);
-            
+
             // Show success status
             statusDiv.innerHTML = '<div class="alert alert-success">CSV uploaded successfully! HR data has been updated.</div>';
-            
+
             // Close the modal after a short delay
             setTimeout(() => {
                 const modal = bootstrap.Modal.getInstance(document.getElementById('csvUploadModal'));
                 modal.hide();
             }, 2000);
-            
-            // Refresh the 14-week chart
+
+            // Refresh the 14-week char
             if (typeof loadFourteenWeekData === 'function') {
                 loadFourteenWeekData();
             }
-            
-            // Refresh the two-week chart
+
+            // Refresh the two-week char
             if (selectedDate) {
                 loadDateData(selectedDate);
             }
@@ -630,11 +630,11 @@ function clearCsvOverride() {
         console.error('No activity selected for clearing CSV override');
         return;
     }
-    
+
     if (!confirm('Are you sure you want to clear the CSV override and restore original HR data?')) {
         return;
     }
-    
+
     fetch(`/api/activity/${selectedActivity.activity_id}/clear-csv-override`, {
         method: 'POST',
         headers: {
@@ -647,29 +647,29 @@ function clearCsvOverride() {
             // Update the selected activity with original HR data
             selectedActivity.heart_rate_values = data.heart_rate_series;
             selectedActivity.has_hr_override = false;
-            
+
             // Update CSV icon
             updateCsvIcon(false);
-            
-            // Refresh the activity chart
+
+            // Refresh the activity char
             createActivityHeartRateChart(selectedActivity);
-            
+
             // Show success status
             const statusDiv = document.getElementById('csvStatus');
             statusDiv.innerHTML = '<div class="alert alert-success">CSV override cleared! Original HR data restored.</div>';
-            
+
             // Close the modal after a short delay
             setTimeout(() => {
                 const modal = bootstrap.Modal.getInstance(document.getElementById('csvUploadModal'));
                 modal.hide();
             }, 2000);
-            
-            // Refresh the 14-week chart
+
+            // Refresh the 14-week char
             if (typeof loadFourteenWeekData === 'function') {
                 loadFourteenWeekData();
             }
-            
-            // Refresh the two-week chart
+
+            // Refresh the two-week char
             if (selectedDate) {
                 loadDateData(selectedDate);
             }

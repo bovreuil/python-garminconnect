@@ -1,13 +1,13 @@
 /**
  * Chart Utilities and Configuration
- * 
+ *
  * Shared chart configuration, colors, and utility functions
  * used across dashboard pages.
  */
 
 // TRIMP zone colors (9 zones)
 const zoneColors = {
-    '80-89': '#002040',    // Midnight
+    '80-89': '#002040',    // Midnigh
     '90-99': '#004080',    // Night sky blue
     '100-109': '#006d5b',  // Deep teal
     '110-119': '#28a745',  // Green
@@ -33,7 +33,7 @@ const spo2ZoneColors = {
 // Oxygen debt zone colors (3 zones)
 const oxygenDebtColors = {
     'Below 95': '#9acd32',  // Yellow-green
-    'Below 90': '#fd7e14',  // Orange  
+    'Below 90': '#fd7e14',  // Orange
     'Below 88': '#e74c3c'   // Red
 };
 
@@ -65,7 +65,7 @@ const spo2LevelColors = {
 const zoneOrder = [
     '80-89',
     '90-99',
-    '100-109', 
+    '100-109',
     '110-119',
     '120-129',
     '130-139',
@@ -80,7 +80,7 @@ const oxygenDebtZoneOrder = ['Below 95', 'Below 90', 'Below 88'];
 /**
  * Calculate appropriate step size and axis maximum for charts
  * Uses Chart.js-like logic for nice number intervals
- * 
+ *
  * @param {number} maxValue - Maximum value in the data
  * @param {boolean} addExtraStep - Whether to add extra step for label space (true for Y-axis, false for X-axis)
  * @param {number} minConstraint - Minimum axis value (optional)
@@ -91,7 +91,7 @@ function calculateAxisScaling(maxValue, addExtraStep = false, minConstraint = nu
         const defaultMax = minConstraint || 10;
         return { step: 10, axisMax: defaultMax };
     }
-    
+
     // Unified step size logic - uses the perfected oxygen debt logic that handles all ranges
     let step;
     if (maxValue <= 1000) step = 100;        // 497 → 100, 809 → 100
@@ -104,27 +104,27 @@ function calculateAxisScaling(maxValue, addExtraStep = false, minConstraint = nu
     else if (maxValue <= 150000) step = 20000; // 93739 → 20000
     else if (maxValue <= 400000) step = 50000; // 191404 → 50000
     else step = 100000;
-    
+
     // Round up to next tick boundary
     let axisMax = Math.ceil(maxValue / step) * step;
-    
+
     // Add extra step for label space if requested (Y-axis charts)
     if (addExtraStep) {
         axisMax += step;
     }
-    
+
     // Apply minimum constraint if specified
     if (minConstraint) {
         axisMax = Math.max(axisMax, minConstraint);
     }
-    
+
     return { step, axisMax };
 }
 
 /**
- * Calculate axis maximum with minimum constraint
+ * Calculate axis maximum with minimum constrain
  * Used for activities charts that need a minimum axis size
- * 
+ *
  * @param {number} maxValue - Maximum value in the data
  * @param {number} minConstraint - Minimum axis value (default 100)
  * @returns {number} - Calculated axis maximum
@@ -133,14 +133,14 @@ function calculateAxisMaxWithMinimum(maxValue, minConstraint = 100) {
     if (maxValue === 0) {
         return minConstraint;
     }
-    
+
     const { axisMax } = calculateAxisScaling(maxValue, false);
     return Math.max(axisMax, minConstraint);
 }
 
 /**
  * Get chart title based on metric type
- * 
+ *
  * @param {string} metric - Current metric ('trimp', 'minutes', 'area')
  * @returns {string} - Appropriate chart title
  */
@@ -207,7 +207,7 @@ const horizontalBarOptions = {
 /**
  * Create zoned datasets for stacked bar charts
  * Used by all TRIMP and oxygen debt charts for consistent colored bar creation
- * 
+ *
  * @param {string[]} zones - Array of zone names (e.g., zoneOrder or oxygenDebtZoneOrder)
  * @param {object} colors - Color mapping object (e.g., zoneColors or oxygenDebtColors)
  * @param {function} dataExtractor - Function that takes a zone and returns data array

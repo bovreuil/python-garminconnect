@@ -1,6 +1,6 @@
 /**
  * SpO2 Chart Functions
- * 
+ *
  * Chart creation functions for SpO2 time series and distribution data.
  * Handles daily and activity-level SpO2 data visualization.
  */
@@ -12,10 +12,10 @@ function createSpo2IndividualLevelsChart(distribution, chartId, containerId) {
         console.error('SpO2 individual levels container not found');
         return;
     }
-    
+
     // Show container
     container.style.display = 'block';
-    
+
     // Use the "at_level" data from distribution (same as existing charts now use)
     let levelData;
     if (distribution && distribution.at_level && distribution.at_level.length > 0) {
@@ -34,8 +34,8 @@ function createSpo2IndividualLevelsChart(distribution, chartId, containerId) {
         }
         console.log('Using dummy SpO2 data:', levelData);
     }
-    
-    // Create the vertical stacked bar chart
+
+    // Create the vertical stacked bar char
     createSpo2VerticalStackedBarChart(chartId, levelData, 'SpO2 Level Distribution');
 }
 
@@ -45,21 +45,21 @@ function createSpo2VerticalStackedBarChart(chartId, data, title) {
         console.error(`Chart element ${chartId} not found`);
         return;
     }
-    
+
     // Destroy existing chart if it exists
     const existingChart = Chart.getChart(ctx);
     if (existingChart) {
         existingChart.destroy();
     }
-    
+
     // Create datasets for each SpO2 level (80-99), stacked from bottom to top
     const datasets = [];
-    
+
     // Process levels from 80 to 99 (bottom to top in stack)
     for (let level = 80; level <= 99; level++) {
         const levelStr = level.toString();
         const value = parseFloat(data[levelStr]) || 0;
-        
+
         // Only create dataset if there's data for this level
         if (value > 0) {
             datasets.push({
@@ -71,8 +71,8 @@ function createSpo2VerticalStackedBarChart(chartId, data, title) {
             });
         }
     }
-    
-    // Create the vertical stacked bar chart
+
+    // Create the vertical stacked bar char
     const chart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -103,9 +103,6 @@ function createSpo2VerticalStackedBarChart(chartId, data, title) {
                         }
                     }
                 },
-                datalabels: {
-                    display: false // Remove data labels - tooltips provide the info
-                }
             },
             scales: {
                 x: {
@@ -125,14 +122,14 @@ function createSpo2VerticalStackedBarChart(chartId, data, title) {
             }
         }
     });
-    
+
     // Store chart reference for cleanup
     if (chartId === 'spo2IndividualLevelsChart') {
         window.spo2IndividualLevelsChart = chart;
     } else if (chartId === 'activitySpo2IndividualLevelsChart') {
         window.activitySpo2IndividualLevelsChart = chart;
     }
-    
+
     return chart;
 }
 
@@ -143,30 +140,30 @@ function createSpo2DistributionCharts(distribution, atOrBelowChartId, containerI
         console.error('SpO2 distribution container not found');
         return;
     }
-    
+
     // Show container
     container.style.display = 'block';
-    
+
     // Store the distribution data for toggling
     if (containerId === 'spo2DistributionChartsContainer') {
         window.dailySpo2Distribution = distribution;
     } else if (containerId === 'activitySpo2DistributionChartsContainer') {
         window.activitySpo2Distribution = distribution;
     }
-    
+
     // Create "At or Below Level" chart by default (visible)
     createSpo2HorizontalBarChart(atOrBelowChartId, distribution.at_or_below_level, 'Time at or Below Level');
-    
+
     // Create "At Level" chart (hidden by default)
     const atChartId = atOrBelowChartId.replace('AtOrBelow', 'At');
     createSpo2HorizontalBarChart(atChartId, distribution.at_level, 'Time at Level');
-    
+
     // Hide the "At Level" chart initially (show "At or Below" by default)
     const atChartElement = document.getElementById(atChartId);
     if (atChartElement) {
         atChartElement.style.display = 'none';
     }
-    
+
     // Update oxygen debt display if available
     if (distribution.oxygen_debt) {
         const viewType = containerId === 'spo2DistributionChartsContainer' ? 'daily' : 'activity';
@@ -180,18 +177,18 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
         console.error(`Chart element ${chartId} not found`);
         return;
     }
-    
+
     // Destroy existing chart if it exists
     let existingChart = null;
     if (chartId === 'spo2AtOrBelowChart') existingChart = spo2AtOrBelowChart;
     else if (chartId === 'spo2AtChart') existingChart = spo2AtChart;
     else if (chartId === 'activitySpo2AtOrBelowChart') existingChart = activitySpo2AtOrBelowChart;
     else if (chartId === 'activitySpo2AtChart') existingChart = activitySpo2AtChart;
-    
+
     if (existingChart) {
         existingChart.destroy();
     }
-    
+
     // SpO2 color mapping (80-99) - use new individual level colors
     const spo2Colors = {
         99: spo2LevelColors['99'], 98: spo2LevelColors['98'], 97: spo2LevelColors['97'], 96: spo2LevelColors['96'], 95: spo2LevelColors['95'],
@@ -199,15 +196,15 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
         89: spo2LevelColors['89'], 88: spo2LevelColors['88'], 87: spo2LevelColors['87'], 86: spo2LevelColors['86'], 85: spo2LevelColors['85'],
         84: spo2LevelColors['84'], 83: spo2LevelColors['83'], 82: spo2LevelColors['82'], 81: spo2LevelColors['81'], 80: spo2LevelColors['80']
     };
-    
-    // Convert seconds to hh:mm:ss format
+
+    // Convert seconds to hh:mm:ss forma
     function formatTime(seconds) {
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
-    
+
     const chartData = {
         labels: data.map(item => item.spo2), // Remove % from labels
         datasets: [{
@@ -219,12 +216,12 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
             borderRadius: 2
         }]
     };
-    
+
     const newChart = new Chart(ctx, {
         type: 'bar',
         data: chartData,
         options: {
-            indexAxis: 'y', // Horizontal bar chart
+            indexAxis: 'y', // Horizontal bar char
             responsive: true,
             maintainAspectRatio: false,
             layout: {
@@ -245,20 +242,6 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
                                 `Percentage: ${Math.round(item.percent)}%`
                             ];
                         }
-                    }
-                },
-                datalabels: {
-                    display: true,
-                    anchor: 'end',
-                    align: 'right',
-                    offset: 10,
-                    color: '#333',
-                    font: {
-                        size: 11
-                    },
-                    formatter: function(value, context) {
-                        const item = data[context.dataIndex];
-                        return `${Math.round(item.percent)}%`;
                     }
                 }
             },
@@ -290,7 +273,7 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
             }
         }
     });
-    
+
     // Store the chart reference globally
     if (chartId === 'spo2AtOrBelowChart') spo2AtOrBelowChart = newChart;
     else if (chartId === 'spo2AtChart') spo2AtChart = newChart;
@@ -307,44 +290,44 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
         chartId,
         containerId
     });
-    
+
     // Log alert data
     const alertPoints = spo2Alerts.filter(alert => alert.y !== null);
     console.log('Alert points to display:', alertPoints.length);
     if (alertPoints.length > 0) {
         console.log('First few alert points:', alertPoints.slice(0, 3));
     }
-    
+
     const chartElement = document.getElementById(chartId);
     const containerElement = document.getElementById(containerId);
-    
+
     if (!chartElement || !containerElement) {
         console.error('SpO2 chart elements not found');
         return;
     }
-    
+
     // Destroy existing chart if it exists
     const existingChart = chartId === 'spo2Chart' ? spo2Chart : activitySpo2Chart;
     if (existingChart) {
         existingChart.destroy();
     }
-    
+
     // Check if we have SpO2 data
     if (!spo2Data || spo2Data.length === 0) {
         containerElement.style.display = 'none';
         containerElement.style.height = '0px';
         return;
     }
-    
-    // Show container and set height
+
+    // Show container and set heigh
     containerElement.style.display = 'block';
-    containerElement.style.height = '120px'; // Proportional to HR chart
-    
+    containerElement.style.height = '120px'; // Proportional to HR char
+
     const ctx = chartElement.getContext('2d');
-    
+
     // Get the date from the selected date label
     const chartDate = new Date(dateLabel + 'T00:00:00');
-    
+
     // Create evenly spaced 24-hour timeline (every 1 minute for high resolution)
     const labels = [];
     for (let hour = 0; hour < 24; hour++) {
@@ -354,37 +337,37 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
             labels.push(timestamp);
         }
     }
-    
+
     // Process SpO2 data with smoothing (one point per minute, averaged from raw data)
     const chartLabels = [];
     const chartData = [];
-    
+
     // Sort SpO2 data by timestamp
     const sortedSpo2Data = spo2Data.sort((a, b) => a.x.getTime() - b.x.getTime());
-    
+
     // First, create averaged data points for each minute
     const averagedDataPoints = [];
-    
+
     // Process each minute
     for (let hour = 0; hour < 24; hour++) {
         for (let minute = 0; minute < 60; minute += 1) {
             const minuteStart = new Date(chartDate);
             minuteStart.setHours(hour, minute, 0, 0);
-            
+
             const minuteEnd = new Date(chartDate);
             minuteEnd.setHours(hour, minute, 59, 999);
-            
+
             // Find all data points within this minute
             const pointsInMinute = sortedSpo2Data.filter(point => {
                 const pointTime = point.x.getTime();
                 return pointTime >= minuteStart.getTime() && pointTime <= minuteEnd.getTime();
             });
-            
+
             if (pointsInMinute.length > 0) {
                 // Calculate average of all points in this minute
                 const sum = pointsInMinute.reduce((acc, point) => acc + point.y, 0);
                 const average = sum / pointsInMinute.length;
-                
+
                 // Add the average point at the middle of the minute
                 const minuteMiddle = new Date(minuteStart.getTime() + 30 * 1000); // 30 seconds into the minute
                 averagedDataPoints.push({
@@ -394,36 +377,36 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
             }
         }
     }
-    
+
     // Add data points and insert null values for gaps > 5 minutes (same logic as HR chart)
     for (let i = 0; i < averagedDataPoints.length; i++) {
         const currentPoint = averagedDataPoints[i];
-        
-        // Add the current data point
+
+        // Add the current data poin
         chartLabels.push(currentPoint.timestamp);
         chartData.push(currentPoint.value);
-        
-        // Check if there's a gap to the next point
+
+        // Check if there's a gap to the next poin
         if (i < averagedDataPoints.length - 1) {
             const nextPoint = averagedDataPoints[i + 1];
             const gapMinutes = (nextPoint.timestamp.getTime() - currentPoint.timestamp.getTime()) / (1000 * 60);
-            
+
             // If gap is > 5 minutes, add a null point to create a visual break
             if (gapMinutes > 5) {
-                // Add a null point 1 minute after the current segment
-                const gapTimestamp = new Date(currentPoint.timestamp.getTime() + (1 * 60 * 1000)); // 1 minute after current
+                // Add a null point 1 minute after the current segmen
+                const gapTimestamp = new Date(currentPoint.timestamp.getTime() + (1 * 60 * 1000)); // 1 minute after curren
                 chartLabels.push(gapTimestamp);
                 chartData.push(null);
-                
-                // Add a null point 1 minute before the next segment
-                const nextGapTimestamp = new Date(nextPoint.timestamp.getTime() - (1 * 60 * 1000)); // 1 minute before next
+
+                // Add a null point 1 minute before the next segmen
+                const nextGapTimestamp = new Date(nextPoint.timestamp.getTime() - (1 * 60 * 1000)); // 1 minute before nex
                 chartLabels.push(nextGapTimestamp);
                 chartData.push(null);
             }
         }
     }
-    
-    // Create the chart
+
+    // Create the char
     const newChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -500,9 +483,6 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
                         }
                     }
                 },
-                datalabels: {
-                    display: false
-                }
             },
                             scales: {
                     x: {
@@ -524,7 +504,7 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
                         },
                         grid: {
                             display: true,
-                            color: 'rgba(0, 0, 0, 0.3)', // Same as HR chart
+                            color: 'rgba(0, 0, 0, 0.3)', // Same as HR char
                             drawBorder: false,
                             z: 1 // Try to ensure gridlines are drawn above background
                         }
@@ -551,14 +531,14 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
             }
         }
     });
-    
+
     // Store the chart reference
     if (chartId === 'spo2Chart') {
         spo2Chart = newChart;
         // Force resize to match HR chart container
         setTimeout(() => {
             if (spo2Chart && hrChart) {
-                // Copy the HR chart's width to ensure perfect alignment
+                // Copy the HR chart's width to ensure perfect alignmen
                 const hrContainer = document.querySelector('.chart-container canvas#hrChart').parentElement;
                 const spo2Container = document.querySelector('.chart-container canvas#spo2Chart').parentElement;
                 if (hrContainer && spo2Container) {
@@ -572,7 +552,7 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
         // Force resize to match HR chart container
         setTimeout(() => {
             if (activitySpo2Chart && activityHrChart) {
-                // Copy the HR chart's width to ensure perfect alignment
+                // Copy the HR chart's width to ensure perfect alignmen
                 const hrContainer = document.querySelector('.chart-container canvas#activityHrChart').parentElement;
                 const spo2Container = document.querySelector('.chart-container canvas#activitySpo2Chart').parentElement;
                 if (hrContainer && spo2Container) {
@@ -593,52 +573,52 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
         chartId,
         containerId
     });
-    
+
     // Log alert data
     const alertPoints = spo2Alerts.filter(alert => alert.y !== null);
     console.log('Activity alert points to display:', alertPoints.length);
     if (alertPoints.length > 0) {
         console.log('First few activity alert points:', alertPoints.slice(0, 3));
     }
-    
+
     const chartElement = document.getElementById(chartId);
     const containerElement = document.getElementById(containerId);
-    
+
     if (!chartElement || !containerElement) {
         console.error('Activity SpO2 chart elements not found');
         return;
     }
-    
+
     // Destroy existing chart if it exists
     if (activitySpo2Chart) {
         activitySpo2Chart.destroy();
     }
-    
+
     // Check if we have SpO2 data
     if (!spo2Data || spo2Data.length === 0) {
         containerElement.style.display = 'none';
         containerElement.style.height = '0px';
         return;
     }
-    
-    // Show container and set height
+
+    // Show container and set heigh
     containerElement.style.display = 'block';
-    containerElement.style.height = '120px'; // Proportional to HR chart
-    
+    containerElement.style.height = '120px'; // Proportional to HR char
+
     const ctx = chartElement.getContext('2d');
-    
+
     // Sort SpO2 data by timestamp
     const sortedSpo2Data = spo2Data.sort((a, b) => a.x.getTime() - b.x.getTime());
-    
-    // Use standardized x-axis range passed from HR chart
+
+    // Use standardized x-axis range passed from HR char
     // startTime and endTime are now parameters from the standardized Garmin activity range
-    
-    // Use shared gridline parameters passed from HR chart
+
+    // Use shared gridline parameters passed from HR char
     // activityDurationMinutes and optimalInterval are now parameters
-    
-    // Create evenly spaced timeline for the standardized activity duration - simplified for exact chart area alignment
+
+    // Create evenly spaced timeline for the standardized activity duration - simplified for exact chart area alignmen
     const labels = [startTime, endTime];
-    
+
     // Create the same afterBuildTicks function for consistent gridlines
     function createAfterBuildTicks(startTime, optimalInterval, activityDurationMinutes) {
         return function(axis) {
@@ -652,7 +632,7 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
                     label: (() => {
                         const timeSinceStart = tickTime.getTime() - startTime.getTime();
                         const totalMinutes = timeSinceStart / (1000 * 60);
-                        
+
                         if (optimalInterval <= 1) {
                             const minutes = Math.floor(totalMinutes);
                             const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
@@ -669,46 +649,46 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
             axis.ticks = newTicks;
         };
     }
-    
+
     // Process SpO2 data
     const chartLabels = [];
     const chartData = [];
-    
+
     // Add data points and insert null values for gaps > 5 minutes
     for (let i = 0; i < sortedSpo2Data.length; i++) {
         const currentPoint = sortedSpo2Data[i];
-        
-        // Add the current data point
+
+        // Add the current data poin
         chartLabels.push(currentPoint.x);
         chartData.push(currentPoint.y);
-        
-        // Check if there's a gap to the next point
+
+        // Check if there's a gap to the next poin
         if (i < sortedSpo2Data.length - 1) {
             const nextPoint = sortedSpo2Data[i + 1];
             const gapMinutes = (nextPoint.x.getTime() - currentPoint.x.getTime()) / (1000 * 60);
-            
+
             // If gap is > 5 minutes, add a null point to create a visual break
             if (gapMinutes > 5) {
-                // Add a null point 1 minute after the current segment
+                // Add a null point 1 minute after the current segmen
                 const gapTimestamp = new Date(currentPoint.x.getTime() + (1 * 60 * 1000));
                 chartLabels.push(gapTimestamp);
                 chartData.push(null);
-                
-                // Add a null point 1 minute before the next segment
+
+                // Add a null point 1 minute before the next segmen
                 const nextGapTimestamp = new Date(nextPoint.x.getTime() - (1 * 60 * 1000));
                 chartLabels.push(nextGapTimestamp);
                 chartData.push(null);
             }
         }
     }
-    
-    // Create the chart
+
+    // Create the char
     const newChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [
-                // SpO2 zone background using shared utility  
+                // SpO2 zone background using shared utility
                 {
                     ...createSpO2TimeSeriesBackground([startTime, endTime]),
                     order: 100
@@ -761,14 +741,14 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
                                 const date = new Date(rawData.x);
                                 const timeSinceStart = date.getTime() - startTime.getTime();
                                 const totalMinutes = timeSinceStart / (1000 * 60);
-                                
+
                                 if (optimalInterval <= 1) {
-                                    // For 30s and 1m intervals: use m:ss format
+                                    // For 30s and 1m intervals: use m:ss forma
                                     const minutes = Math.floor(totalMinutes);
                                     const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
                                     return `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
                                 } else {
-                                    // For 5m and larger intervals: use h:mm:ss format
+                                    // For 5m and larger intervals: use h:mm:ss forma
                                     const hours = Math.floor(totalMinutes / 60);
                                     const minutes = Math.floor(totalMinutes % 60);
                                     const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
@@ -787,9 +767,6 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
                         }
                     }
                 },
-                datalabels: {
-                    display: false
-                }
             },
                             scales: {
                     x: {
@@ -809,18 +786,18 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
                             maxRotation: 0,
                             source: 'auto',
                             callback: function(value, index, values) {
-                                // Calculate time since activity start
+                                // Calculate time since activity star
                                 const timestamp = new Date(value);
                                 const timeSinceStart = timestamp.getTime() - startTime.getTime();
                                 const totalMinutes = timeSinceStart / (1000 * 60);
-                                
+
                                 if (optimalInterval <= 1) {
-                                    // For 30s and 1m intervals: use m:ss format
+                                    // For 30s and 1m intervals: use m:ss forma
                                     const minutes = Math.floor(totalMinutes);
                                     const seconds = Math.floor((timeSinceStart % (1000 * 60)) / 1000);
                                     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
                                 } else {
-                                    // For 5m and larger intervals: use h:mm format
+                                    // For 5m and larger intervals: use h:mm forma
                                     const hours = Math.floor(totalMinutes / 60);
                                     const minutes = Math.floor(totalMinutes % 60);
                                     return `${hours}:${minutes.toString().padStart(2, '0')}`;
@@ -830,7 +807,7 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
                         afterBuildTicks: createAfterBuildTicks(startTime, optimalInterval, activityDurationMinutes),
                         grid: {
                             display: true,
-                            color: 'rgba(0, 0, 0, 0.3)', // Same as HR chart
+                            color: 'rgba(0, 0, 0, 0.3)', // Same as HR char
                             drawBorder: false,
                             z: 1 // Try to ensure gridlines are drawn above background
                         }
@@ -857,13 +834,13 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
             }
         }
     });
-    
+
     // Store the chart reference
     activitySpo2Chart = newChart;
     // Force resize to match HR chart container
     setTimeout(() => {
         if (activitySpo2Chart && activityHrChart) {
-            // Copy the HR chart's width to ensure perfect alignment
+            // Copy the HR chart's width to ensure perfect alignmen
             const hrContainer = document.querySelector('.chart-container canvas#activityHrChart').parentElement;
             const spo2Container = document.querySelector('.chart-container canvas#activitySpo2Chart').parentElement;
             if (hrContainer && spo2Container) {

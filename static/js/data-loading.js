@@ -1,6 +1,6 @@
 /**
  * Data Loading Functions
- * 
+ *
  * Shared data loading and view management functions
  * used across dashboard pages.
  */
@@ -8,7 +8,7 @@
 // Load data for a single date label (string)
 function loadDateData(dateLabel) {
     console.log(`Loading data for ${dateLabel}`);
-    
+
     return fetch(`/api/data/${dateLabel}`)
         .then(response => {
             if (!response.ok) {
@@ -19,7 +19,7 @@ function loadDateData(dateLabel) {
         })
         .then(data => {
             if (data) {
-                
+
                 // Load TRIMP overrides for this date
                 return fetch(`/api/data/${dateLabel}/trimp-overrides`)
                     .then(response => response.json())
@@ -27,7 +27,7 @@ function loadDateData(dateLabel) {
                         if (overridesData.success && overridesData.trimp_overrides && Object.keys(overridesData.trimp_overrides).length > 0) {
                             // Apply TRIMP overrides (even if all values are 0)
                             data.trimp_overrides = overridesData.trimp_overrides;
-                            
+
                             // Update total TRIMP if we're on dashboard and viewing TRIMP metric
                             if (typeof currentMetric !== 'undefined' && currentMetric === 'trimp') {
                                 let totalOverride = 0;
@@ -36,8 +36,8 @@ function loadDateData(dateLabel) {
                                 });
                                 data.total_trimp = totalOverride;
                             }
-                            
-                            // For minutes view, set minutes to 0 when overrides exist
+
+                            // For minutes view, set minutes to 0 when overrides exis
                             if (typeof currentMetric !== 'undefined' && currentMetric === 'minutes' && data.presentation_buckets) {
                                 Object.keys(data.presentation_buckets).forEach(zone => {
                                     data.presentation_buckets[zone].minutes = 0;
@@ -62,7 +62,7 @@ function loadDateData(dateLabel) {
                                 trimp_overrides: overridesData.trimp_overrides,
                                 presentation_buckets: {} // Empty buckets for zones
                             };
-                            
+
                             // Create empty buckets for all zones
                             zoneOrder.forEach(zone => {
                                 overrideData.presentation_buckets[zone] = {
@@ -70,7 +70,7 @@ function loadDateData(dateLabel) {
                                     trimp: 0
                                 };
                             });
-                            
+
                             return overrideData;
                         }
                         return null;
@@ -113,29 +113,29 @@ function loadActivitiesForDate(dateLabel) {
 function showSingleDateView(dateLabel, dayData) {
     // Close single activity view when switching to a different date
     closeSingleActivityView();
-    
+
     selectedDate = dateLabel; // Store the selected date label globally
-    
+
     // Update the title with the formatted date
     const date = new Date(dateLabel);
-    const formattedDate = date.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+    const formattedDate = date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
     });
     document.getElementById('singleDateTitle').textContent = formattedDate;
-    
+
     // Show the section
     document.getElementById('singleDateSection').style.display = 'block';
-    
+
     // Load activities for this date
     loadActivitiesForDate(dateLabel);
-    
+
     // Scroll to the section
-    document.getElementById('singleDateSection').scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
+    document.getElementById('singleDateSection').scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
     });
 }
 
@@ -143,13 +143,13 @@ function showSingleDateView(dateLabel, dayData) {
 function closeSingleDateView() {
     document.getElementById('singleDateSection').style.display = 'none';
     selectedDate = null;
-    
+
     if (activitiesChart) {
         activitiesChart.destroy();
         activitiesChart = null;
     }
-    
-    // Destroy SpO2 distribution charts if they exist
+
+    // Destroy SpO2 distribution charts if they exis
     if (spo2AtOrBelowChart) {
         spo2AtOrBelowChart.destroy();
         spo2AtOrBelowChart = null;
@@ -163,23 +163,23 @@ function closeSingleDateView() {
 // Show single activity view
 function showSingleActivityView(activity) {
     selectedActivity = activity; // Store the selected activity globally
-    
+
     // Create a Date object for display formatting
     const activityDate = new Date(selectedDate + 'T00:00:00');
-    const activityDateStr = activityDate.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+    const activityDateStr = activityDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
     });
-    
+
     // Update the single activity title with date and activity name
     document.getElementById('singleActivityTitle').textContent = `${activityDateStr} - ${activity.activity_name}`;
     document.getElementById('activityTitle').textContent = 'Activity Heart Rate';
-    
+
     // Show the section
     document.getElementById('singleActivitySection').style.display = 'block';
-    
+
     // Show/hide delete button for manual activities
     const deleteBtn = document.getElementById('deleteActivity');
     if (activity.activity_type === 'manual') {
@@ -187,16 +187,16 @@ function showSingleActivityView(activity) {
     } else {
         deleteBtn.style.display = 'none';
     }
-    
-    // Small delay to ensure DOM is fully updated before creating chart
+
+    // Small delay to ensure DOM is fully updated before creating char
     setTimeout(() => {
-        // Create the activity heart rate chart
+        // Create the activity heart rate char
         createActivityHeartRateChart(activity);
     }, 50);
-    
+
     // Display activity summary
     let summaryHtml = '<div class="row">';
-    
+
     if (activity.total_trimp !== undefined) {
         summaryHtml += `
             <div class="col-6">
@@ -207,13 +207,13 @@ function showSingleActivityView(activity) {
             </div>
         `;
     }
-    
+
     if (activity.presentation_buckets) {
         let totalMinutes = 0;
         Object.values(activity.presentation_buckets).forEach(bucket => {
             totalMinutes += bucket.minutes || 0;
         });
-        
+
         summaryHtml += `
             <div class="col-6">
                 <div class="text-center p-3 bg-light rounded">
@@ -223,33 +223,33 @@ function showSingleActivityView(activity) {
             </div>
         `;
     }
-    
+
     summaryHtml += '</div>';
     document.getElementById('activitySummary').innerHTML = summaryHtml;
-    
+
     // Display zone breakdown
     if (activity.presentation_buckets) {
         let zoneHtml = '<div class="table-responsive"><table class="table table-sm">';
         zoneHtml += '<thead><tr><th>Zone</th><th>Minutes</th><th>TRIMP</th><th>%</th></tr></thead><tbody>';
-        
+
         const sortedZones = zoneOrder.filter(zone => activity.presentation_buckets[zone]).reverse();
         let totalMinutes = 0;
         let totalTrimp = 0;
-        
-        // Calculate totals first
+
+        // Calculate totals firs
         sortedZones.forEach(zone => {
             const bucket = activity.presentation_buckets[zone];
             totalMinutes += bucket.minutes || 0;
             totalTrimp += bucket.trimp || 0;
         });
-        
+
         // Display each zone
         sortedZones.forEach(zone => {
             const bucket = activity.presentation_buckets[zone];
             const minutes = bucket.minutes || 0;
             const trimp = bucket.trimp || 0;
             const percentage = totalMinutes > 0 ? ((minutes / totalMinutes) * 100).toFixed(1) : '0.0';
-            
+
             zoneHtml += `
                 <tr>
                     <td>
@@ -261,20 +261,20 @@ function showSingleActivityView(activity) {
                 </tr>
             `;
         });
-        
+
         zoneHtml += '</tbody></table></div>';
         document.getElementById('activityZoneBreakdown').innerHTML = zoneHtml;
     } else {
         document.getElementById('activityZoneBreakdown').innerHTML = '<p class="text-muted">No zone data available</p>';
     }
-    
+
     // Load notes for this activity
     loadActivityNotes(activity.activity_id);
-    
+
     // Scroll to the section
-    document.getElementById('singleActivitySection').scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
+    document.getElementById('singleActivitySection').scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
     });
 }
 
@@ -282,7 +282,7 @@ function showSingleActivityView(activity) {
 function closeSingleActivityView() {
     document.getElementById('singleActivitySection').style.display = 'none';
     selectedActivity = null;
-    
+
     if (activityHrChart) {
         activityHrChart.destroy();
         activityHrChart = null;

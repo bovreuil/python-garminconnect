@@ -9,15 +9,15 @@ function setupEventHandlers() {
     document.getElementById('prevDay').addEventListener('click', () => navigateSingleDay(-1));
     document.getElementById('singleDateTodayBtn').addEventListener('click', goToSingleDateToday);
     document.getElementById('nextDay').addEventListener('click', () => navigateSingleDay(1));
-    
+
     // View control event handlers
     document.getElementById('closeSingleDate').addEventListener('click', closeSingleDateView);
     document.getElementById('closeSingleActivity').addEventListener('click', closeSingleActivityView);
-    
+
     // Download event handlers
     document.getElementById('downloadActivityCsv').addEventListener('click', downloadActivityCsv);
     document.getElementById('downloadDailyCsv').addEventListener('click', downloadDailyCsv);
-    
+
     // Modal event handlers
     document.getElementById('editSpo2').addEventListener('click', openSpo2Editor);
     document.getElementById('addSpo2Entry').addEventListener('click', addSpo2Entry);
@@ -25,7 +25,7 @@ function setupEventHandlers() {
     document.getElementById('editTrimp').addEventListener('click', openTrimpEditor);
     document.getElementById('saveTrimpOverrides').addEventListener('click', saveTrimpOverrides);
     document.getElementById('clearTrimpOverrides').addEventListener('click', clearTrimpOverrides);
-    
+
     // Manual activity event handlers
     document.getElementById('createManualActivityBtn').addEventListener('click', openManualActivityModal);
     document.getElementById('createManualActivity').addEventListener('click', createManualActivity);
@@ -37,7 +37,7 @@ function setupEventHandlers() {
         }
     });
     document.getElementById('clearCsvOverride').addEventListener('click', clearCsvOverride);
-    
+
     // SpO2 chart type toggle event listeners
     document.getElementById('spo2AtOrBelowRadio').addEventListener('change', function() {
         if (this.checked) toggleSpo2ChartType('at_or_below', 'daily');
@@ -51,7 +51,7 @@ function setupEventHandlers() {
     document.getElementById('activitySpo2AtRadio').addEventListener('change', function() {
         if (this.checked) toggleSpo2ChartType('at', 'activity');
     });
-    
+
     // Window resize handler for chart responsiveness
     window.addEventListener('resize', function() {
         setTimeout(() => {

@@ -1,6 +1,6 @@
 /**
  * Shared Data Functions
- * 
+ *
  * Data loading and processing functions that are identical across
  * dashboard and oxygen debt pages.
  */
@@ -8,7 +8,7 @@
 // Load data for a single date label (string) - IDENTICAL in both pages
 function loadDateData(dateLabel) {
     console.log(`Loading data for ${dateLabel}`);
-    
+
     return fetch(`/api/data/${dateLabel}`)
         .then(response => {
             if (!response.ok) {
@@ -19,7 +19,7 @@ function loadDateData(dateLabel) {
         })
         .then(data => {
             if (data) {
-                
+
                 // Load TRIMP overrides for this date
                 return fetch(`/api/data/${dateLabel}/trimp-overrides`)
                     .then(response => response.json())
@@ -27,7 +27,7 @@ function loadDateData(dateLabel) {
                         if (overridesData.success && overridesData.trimp_overrides && Object.keys(overridesData.trimp_overrides).length > 0) {
                             // Apply TRIMP overrides (even if all values are 0)
                             data.trimp_overrides = overridesData.trimp_overrides;
-                            
+
                             // Update total TRIMP if we're on dashboard and viewing TRIMP metric
                             if (typeof currentMetric !== 'undefined' && currentMetric === 'trimp') {
                                 let totalOverride = 0;
@@ -36,8 +36,8 @@ function loadDateData(dateLabel) {
                                 });
                                 data.total_trimp = totalOverride;
                             }
-                            
-                            // For minutes view, set minutes to 0 when overrides exist
+
+                            // For minutes view, set minutes to 0 when overrides exis
                             if (typeof currentMetric !== 'undefined' && currentMetric === 'minutes' && data.presentation_buckets) {
                                 Object.keys(data.presentation_buckets).forEach(zone => {
                                     data.presentation_buckets[zone].minutes = 0;
@@ -62,7 +62,7 @@ function loadDateData(dateLabel) {
                                 trimp_overrides: overridesData.trimp_overrides,
                                 presentation_buckets: {} // Empty buckets for zones
                             };
-                            
+
                             // Create empty buckets for all zones
                             zoneOrder.forEach(zone => {
                                 overrideData.presentation_buckets[zone] = {
@@ -70,7 +70,7 @@ function loadDateData(dateLabel) {
                                     trimp: 0
                                 };
                             });
-                            
+
                             return overrideData;
                         }
                         return null;
@@ -126,10 +126,10 @@ function downloadActivityCsv() {
         console.error('No activity selected for download');
         return;
     }
-    
+
     const activityId = selectedActivity.activity_id;
     const downloadUrl = `/api/activity/${activityId}/hr-csv`;
-    
+
     // Create a temporary link element to trigger the download
     const link = document.createElement('a');
     link.href = downloadUrl;
@@ -145,9 +145,9 @@ function downloadDailyCsv() {
         console.error('No date selected for download');
         return;
     }
-    
+
     const downloadUrl = `/api/data/${selectedDate}/hr-csv`;
-    
+
     // Create a temporary link element to trigger the download
     const link = document.createElement('a');
     link.href = downloadUrl;

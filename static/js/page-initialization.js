@@ -1,6 +1,6 @@
 /**
  * Page Initialization
- * 
+ *
  * Common initialization code shared between dashboard and oxygen debt pages.
  * Includes CSS injection, Chart.js setup, and variable declarations.
  */
@@ -9,13 +9,13 @@
 function initializePage() {
     // Register the DataLabels plugin
     // Chart.register(ChartDataLabels); // Temporarily disabled for debugging
-    
+
     // Add CSS for notes fields
     injectNotesCSS();
-    
+
     // Configure Chart.js defaults
     configureChartDefaults();
-    
+
     // Initialize global chart variables
     initializeChartVariables();
 }
@@ -33,12 +33,12 @@ function injectNotesCSS() {
             min-height: 2.5rem;
             transition: all 0.2s ease-in-out;
         }
-        
+
         .notes-field:hover {
             background-color: #e9ecef;
             border-color: #adb5bd;
         }
-        
+
         .notes-field p {
             margin: 0;
             min-height: 1.5rem;
@@ -71,7 +71,7 @@ function initializeChartVariables() {
     window.activitySpo2AtChart = null;
     window.spo2IndividualLevelsChart = null;
     window.activitySpo2IndividualLevelsChart = null;
-    
+
     // Global state variables
     window.currentStartDate = null;
     window.currentEndDate = null;
@@ -84,11 +84,11 @@ function initializeChartVariables() {
 function setupCommonEventListeners() {
     // Set up shared event listeners
     setupEventHandlers();
-    
+
     // Add enhanced window resize listener to keep charts aligned
     window.addEventListener('resize', function() {
         setTimeout(() => {
-            // Resize all charts if they exist
+            // Resize all charts if they exis
             if (twoWeekChart) twoWeekChart.resize();
             if (fourteenWeekChart) fourteenWeekChart.resize();
             if (hrChart) hrChart.resize();
@@ -103,7 +103,7 @@ function setupCommonEventListeners() {
             if (activitySpo2AtChart) activitySpo2AtChart.resize();
             if (spo2IndividualLevelsChart) spo2IndividualLevelsChart.resize();
             if (activitySpo2IndividualLevelsChart) activitySpo2IndividualLevelsChart.resize();
-            
+
             // Keep SpO2 and HR charts aligned (dashboard specific but harmless on oxygen debt page)
             if (spo2Chart && hrChart) {
                 const hrContainer = document.querySelector('.chart-container canvas#hrChart').parentElement;

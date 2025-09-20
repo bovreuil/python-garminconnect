@@ -14,25 +14,25 @@ function hideLoading() {
 function showSingleDateView(dateLabel, dayData) {
     // Close single activity view when switching to a different date
     closeSingleActivityView();
-    
-    selectedDate = dateLabel; // Store the selected date label globally
-    
 
-    
+    selectedDate = dateLabel; // Store the selected date label globally
+
+
+
     // Create a Date object just for display formatting
     const date = new Date(dateLabel + 'T00:00:00');
-    const dateDisplayStr = date.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+    const dateDisplayStr = date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
     });
-    
+
     // Update the single date title with the formatted date
     document.getElementById('singleDateTitle').textContent = dateDisplayStr;
-    
+
     if (!dayData) {
-        // Clear heart rate chart
+        // Clear heart rate char
         if (hrChart) {
             hrChart.destroy();
             hrChart = null;
@@ -42,23 +42,23 @@ function showSingleDateView(dateLabel, dayData) {
             spo2Chart = null;
         }
     } else {
-        // Create 24-hour heart rate chart
+        // Create 24-hour heart rate char
         createHeartRateChart(dateLabel, dayData);
-        
+
         // Check for TRIMP overrides and update icon
         checkTrimpOverrides(dateLabel);
     }
-    
+
     // Show the section
     document.getElementById('singleDateSection').style.display = 'block';
-    
+
     // Load and display activities for this date
     loadActivitiesForDate(dateLabel);
-    
+
     // Scroll to the section
-    document.getElementById('singleDateSection').scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
+    document.getElementById('singleDateSection').scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
     });
 }
 
@@ -66,28 +66,28 @@ function showSingleDateView(dateLabel, dayData) {
 function closeSingleDateView() {
     document.getElementById('singleDateSection').style.display = 'none';
     selectedDate = null; // Clear the selected date
-    
+
     // Destroy activities chart if it exists
     if (activitiesChart) {
         activitiesChart.destroy();
         activitiesChart = null;
     }
-    
+
     // Destroy heart rate chart if it exists
     if (hrChart) {
         hrChart.destroy();
         hrChart = null;
     }
-    
+
     // Destroy spo2 chart if it exists
     if (spo2Chart) {
         spo2Chart.destroy();
         spo2Chart = null;
     }
-    
+
     // Hide SpO2 distribution charts
     hideSpO2DistributionCharts('daily');
-    
+
     // Close single activity view as well
     closeSingleActivityView();
 }
@@ -95,23 +95,23 @@ function closeSingleDateView() {
 // Show single activity view
 function showSingleActivityView(activity) {
     selectedActivity = activity; // Store the selected activity globally
-    
+
     // Create a Date object for display formatting using selectedDate
     const activityDate = new Date(selectedDate + 'T00:00:00');
-    const activityDateStr = activityDate.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+    const activityDateStr = activityDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
     });
-    
+
     // Update the single activity title with date and activity name
     document.getElementById('singleActivityTitle').textContent = `${activityDateStr} - ${activity.activity_name}`;
     document.getElementById('activityTitle').textContent = 'Activity Heart Rate';
-    
+
     // Show the section
     document.getElementById('singleActivitySection').style.display = 'block';
-    
+
     // Show/hide delete button for manual activities
     const deleteBtn = document.getElementById('deleteActivity');
     if (activity.activity_type === 'manual') {
@@ -119,38 +119,38 @@ function showSingleActivityView(activity) {
     } else {
         deleteBtn.style.display = 'none';
     }
-    
+
     // Small delay to ensure DOM is fully updated before creating charts
     setTimeout(() => {
-        // Create the activity heart rate chart
+        // Create the activity heart rate char
         createActivityHeartRateChart(activity);
-        
+
         // Create activity SpO2 chart if SpO2 data is available
         if (activity.spo2_values && activity.spo2_values.length > 0) {
             createActivitySpo2Chart(activity);
         }
-        
-        // Create activity breathing chart if breathing data is available  
+
+        // Create activity breathing chart if breathing data is available
         if (activity.breathing_values && activity.breathing_values.length > 0) {
             createActivityBreathingChart(activity);
         }
-        
+
         // Load activity SpO2 distribution data and charts
         loadActivitySpo2Distribution(activity.activity_id);
-        
+
         // Load activity notes
         loadActivityNotes(activity.activity_id);
-        
+
         // Load and display activity oxygen debt summary
         if (activity.oxygen_debt) {
             displayActivityOxygenDebt(activity.oxygen_debt);
         }
     }, 50);
-    
+
     // Scroll to the section
-    document.getElementById('singleActivitySection').scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
+    document.getElementById('singleActivitySection').scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
     });
 }
 
@@ -158,25 +158,25 @@ function showSingleActivityView(activity) {
 function closeSingleActivityView() {
     document.getElementById('singleActivitySection').style.display = 'none';
     selectedActivity = null; // Clear the selected activity
-    
+
     // Destroy activity heart rate chart if it exists
     if (activityHrChart) {
         activityHrChart.destroy();
         activityHrChart = null;
     }
-    
+
     // Destroy activity breathing chart if it exists
     if (activityBreathingChart) {
         activityBreathingChart.destroy();
         activityBreathingChart = null;
     }
-    
+
     // Destroy activity spo2 chart if it exists
     if (activitySpo2Chart) {
         activitySpo2Chart.destroy();
         activitySpo2Chart = null;
     }
-    
+
     // Hide activity SpO2 distribution charts
     hideSpO2DistributionCharts('activity');
 }

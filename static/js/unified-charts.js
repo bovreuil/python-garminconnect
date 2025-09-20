@@ -1,6 +1,6 @@
 /**
  * Unified Chart Creation System
- * 
+ *
  * Page-aware chart functions that work with any data type based on page configuration.
  * This replaces the duplicated chart functions in each template.
  */
@@ -21,9 +21,6 @@ function initializePageCharts() {
     currentMetric = currentPageConfig.metrics.primary.key;
 
     console.log(`Initializing charts for ${currentPageConfig.name} page`);
-    console.log(`Data type: ${currentPageConfig.dataType}, Zones: ${currentPageConfig.zones.length}`);
-    console.log(`URL path: ${window.location.pathname}`);
-    console.log(`Current metric: ${currentMetric}`);
 }
 
 // Load two weeks of data (universal function)
@@ -69,16 +66,16 @@ function loadTwoWeekData(startDate, endDate) {
 // Load 14 weeks of data (universal function)
 function loadFourteenWeekData() {
     console.log('Loading 14-week data...');
-    
+
     showLoading();
-    
+
     // Calculate date range for 14 weeks (98 days)
     const endDate = new Date();
     endDate.setHours(0, 0, 0, 0);
-    
+
     const startDate = new Date(endDate);
     startDate.setDate(startDate.getDate() - 97); // 98 days total (including today)
-    
+
     // Generate date labels
     const dateLabels = [];
     const currentDate = new Date(startDate);
@@ -86,9 +83,9 @@ function loadFourteenWeekData() {
         dateLabels.push(currentDate.toISOString().split('T')[0]);
         currentDate.setDate(currentDate.getDate() + 1);
     }
-    
+
     console.log(`Loading data for ${dateLabels.length} days: ${dateLabels[0]} to ${dateLabels[dateLabels.length - 1]}`);
-    
+
     // Fetch data using batch API
     fetch('/api/data/batch', {
         method: 'POST',
@@ -117,20 +114,20 @@ function loadFourteenWeekData() {
 // Update 14-week chart (universal function)
 function updateFourteenWeekChart(dateLabels, dataResults) {
     const ctx = document.getElementById('fourteenWeekChart').getContext('2d');
-    
+
     if (fourteenWeekChart) {
         fourteenWeekChart.destroy();
     }
-    
+
     console.log(`Updating 14-week chart with ${currentPageConfig.name} data`);
-    
+
     // Group data by weeks using page-specific aggregation
     const { weeklyData, weekLabels } = groupDataByWeeks(dateLabels, dataResults, (weekData) => {
         return currentPageConfig.aggregateWeekData(weekData, currentMetric);
     });
-    
+
     // Create datasets using page configuration
-    const datasets = createZonedDatasets(currentPageConfig.zones, currentPageConfig.colors, zone => 
+    const datasets = createZonedDatasets(currentPageConfig.zones, currentPageConfig.colors, zone =>
         weekLabels.map((_, index) => {
             const weekData = weeklyData[index];
             if (!weekData || !weekData[zone]) {
@@ -139,7 +136,7 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
             return weekData[zone];
         })
     , { borderColor: '#ffffff' });
-    
+
     // Calculate Y-axis maximum
     let maxValue = 0;
     weeklyData.forEach(weekData => {
@@ -148,9 +145,9 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
             maxValue = Math.max(maxValue, weekTotal);
         }
     });
-    
+
     const { axisMax: yAxisMax } = calculateAxisScaling(maxValue, true);
-    
+
     fourteenWeekChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -166,16 +163,16 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
                 const rect = canvas.getBoundingClientRect();
                 const x = event.native.x - rect.left;
                 const y = event.native.y - rect.top;
-                
+
                 const chartArea = fourteenWeekChart.chartArea;
                 if (!chartArea) return;
-                
-                if (x >= chartArea.left && x <= chartArea.right && 
+
+                if (x >= chartArea.left && x <= chartArea.right &&
                     y >= chartArea.top && y <= chartArea.bottom) {
-                    
+
                     const xAxis = fourteenWeekChart.scales.x;
                     const clickIndex = xAxis.getValueForPixel(x);
-                    
+
                     if (clickIndex >= 0 && clickIndex < weekLabels.length) {
                         const weekStartDate = new Date(dateLabels[clickIndex * 7]);
                         const monday = getWeekStart(weekStartDate);
@@ -206,9 +203,6 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
                     display: currentPageConfig.zones.length <= 10, // Hide legend for pages with many zones
                     position: 'top'
                 },
-                datalabels: {
-                    display: false // Remove clutter numbers on bar segments
-                },
                 tooltip: {
                     callbacks: {
                         title: function(context) {
@@ -224,39 +218,31 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
 // Update two-week chart (universal function)
 function updateTwoWeekChart(dateLabels, dataResults) {
     const ctx = document.getElementById('twoWeekChart').getContext('2d');
-    
+
     if (twoWeekChart) {
         twoWeekChart.destroy();
     }
-    
+
     console.log(`Updating 2-week chart with ${currentPageConfig.name} data`);
-    console.log('Current page config:', currentPageConfig);
-    console.log('Current metric:', currentMetric);
-    
-    // Prepare data for stacked column chart
+
+    // Prepare data for stacked column char
     const labels = dateLabels.map(dateLabel => {
         const date = new Date(dateLabel + 'T00:00:00');
         const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
         const dayNum = date.getDate();
         return `${dayName} ${dayNum}`;
     });
-    
+
     // Create datasets using page configuration
-    console.log('Creating datasets for zones:', currentPageConfig.zones);
-    console.log('Sample data for first day:', dataResults[0]);
-    console.log('SpO2 distribution in sample data:', dataResults[0] ? dataResults[0].spo2_distribution : 'NO SPO2 DISTRIBUTION');
-    
+
     const datasets = createZonedDatasets(currentPageConfig.zones, currentPageConfig.colors, zone => {
         return labels.map((_, index) => {
             const dayData = dataResults[index];
             const value = currentPageConfig.dataExtractor.getZoneData(dayData, zone, currentMetric);
-            if (index === 0) { // Debug first day
-                console.log(`Zone ${zone}: ${value}`);
-            }
             return value;
         });
     }, { borderColor: '#ffffff' });
-    
+
     // Calculate maximum value for Y-axis scaling
     let maxValue = 0;
     dataResults.forEach(dayData => {
@@ -265,10 +251,10 @@ function updateTwoWeekChart(dateLabels, dataResults) {
             maxValue = Math.max(maxValue, dayTotal);
         }
     });
-    
+
     const { axisMax: yAxisMax } = calculateAxisScaling(maxValue, true);
-    
-    
+
+
     twoWeekChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -284,16 +270,16 @@ function updateTwoWeekChart(dateLabels, dataResults) {
                 const rect = canvas.getBoundingClientRect();
                 const x = event.native.x - rect.left;
                 const y = event.native.y - rect.top;
-                
+
                 const chartArea = twoWeekChart.chartArea;
                 if (!chartArea) return;
-                
-                if (x >= chartArea.left && x <= chartArea.right && 
+
+                if (x >= chartArea.left && x <= chartArea.right &&
                     y >= chartArea.top && y <= chartArea.bottom) {
-                    
+
                     const xAxis = twoWeekChart.scales.x;
                     const clickIndex = xAxis.getValueForPixel(x);
-                    
+
                     if (clickIndex >= 0 && clickIndex < dateLabels.length) {
                         const dateLabel = dateLabels[clickIndex];
                         loadDateData(dateLabel).then(dayData => {
@@ -345,21 +331,18 @@ function updateTwoWeekChart(dateLabels, dataResults) {
 // Create activities chart (universal function)
 function createActivitiesChart(activities, selectedDate) {
     const ctx = document.getElementById('activitiesChart').getContext('2d');
-    
+
     if (activitiesChart) {
         activitiesChart.destroy();
     }
-    
+
     if (!activities || activities.length === 0) {
         console.log('No activities to display');
         return;
     }
-    
+
     console.log(`Creating activities chart with ${currentPageConfig.name} data for ${activities.length} activities`);
-    console.log('Current page config for activities:', currentPageConfig);
-    console.log('Current metric for activities:', currentMetric);
-    console.log('Sample activity data:', activities[0]);
-    
+
     // Create datasets using page configuration
     const datasets = createZonedDatasets(currentPageConfig.zones, currentPageConfig.colors, zone => {
         return activities.map(activity => {
@@ -371,7 +354,7 @@ function createActivitiesChart(activities, selectedDate) {
             }
         });
     }, { borderColor: '#ffffff' });
-    
+
     // Calculate x-axis maximum
     let maxValue = 0;
     activities.forEach(activity => {
@@ -384,9 +367,9 @@ function createActivitiesChart(activities, selectedDate) {
             maxValue = Math.max(maxValue, activityTotal);
         }
     });
-    
+
     const { axisMax: xAxisMax } = calculateAxisScaling(maxValue, true, 100);
-    
+
     activitiesChart = new Chart(ctx, {
         type: 'bar',
         data: {

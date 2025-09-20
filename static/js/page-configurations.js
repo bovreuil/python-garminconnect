@@ -1,6 +1,6 @@
 /**
  * Page Configuration System
- * 
+ *
  * Defines data sources, zones, colors, and aggregation logic for each page.
  * This enables the same chart functions to work with different data types.
  */
@@ -22,7 +22,7 @@ const PAGE_CONFIGS = {
                 if (!dayData || !dayData.presentation_buckets || !dayData.presentation_buckets[zone]) {
                     return 0;
                 }
-                
+
                 if (metric === 'trimp') {
                     // Use override values if available, otherwise use calculated values
                     if (dayData.trimp_overrides && dayData.trimp_overrides[zone] !== undefined) {
@@ -31,7 +31,7 @@ const PAGE_CONFIGS = {
                         return dayData.presentation_buckets[zone].trimp || 0;
                     }
                 } else {
-                    // For minutes view, show 0 if overrides exist
+                    // For minutes view, show 0 if overrides exis
                     if (dayData.trimp_overrides && Object.keys(dayData.trimp_overrides).length > 0) {
                         return 0;
                     } else {
@@ -39,11 +39,11 @@ const PAGE_CONFIGS = {
                     }
                 }
             },
-            
+
             // Calculate total for tooltip display
             getTotal: (dayData, metric) => {
                 if (!dayData) return 0;
-                
+
                 if (metric === 'trimp') {
                     // Use override total if available, otherwise use calculated total
                     let trimpTotal = dayData.total_trimp || 0;
@@ -65,16 +65,16 @@ const PAGE_CONFIGS = {
                 }
             }
         },
-        
+
         // Week aggregation function
         aggregateWeekData: function(weekData, metric) {
             const aggregated = {};
-            
+
             // Initialize all zones with 0
             this.zones.forEach(zone => {
                 aggregated[zone] = 0;
             });
-            
+
             // Aggregate data for each day in the week
             weekData.forEach(dayData => {
                 if (dayData) {
@@ -83,7 +83,7 @@ const PAGE_CONFIGS = {
                     });
                 }
             });
-            
+
             return aggregated;
         }
     },
@@ -102,9 +102,9 @@ const PAGE_CONFIGS = {
                 if (!dayData || !dayData.oxygen_debt) {
                     return 0;
                 }
-                
+
                 const oxygenDebt = dayData.oxygen_debt;
-                
+
                 if (metric === 'area') {
                     if (zone === 'Below 95') return oxygenDebt.area_under_95 || 0;
                     if (zone === 'Below 90') return oxygenDebt.area_under_90 || 0;
@@ -117,36 +117,36 @@ const PAGE_CONFIGS = {
                 }
                 return 0;
             },
-            
+
             getTotal: (dayData, metric) => {
                 if (!dayData || !dayData.oxygen_debt) return 0;
-                
+
                 const oxygenDebt = dayData.oxygen_debt;
-                
+
                 if (metric === 'area') {
                     // Calculate total oxygen debt area for this day
-                    const totalArea = (oxygenDebt.area_under_95 || 0) + 
-                                     (oxygenDebt.area_under_90 || 0) + 
+                    const totalArea = (oxygenDebt.area_under_95 || 0) +
+                                     (oxygenDebt.area_under_90 || 0) +
                                      (oxygenDebt.area_under_88 || 0);
                     return totalArea;
                 } else {
                     // Calculate total oxygen debt minutes for this day
-                    const totalMinutes = Math.round(((oxygenDebt.time_under_95 || 0) + 
-                                                   (oxygenDebt.time_under_90 || 0) + 
+                    const totalMinutes = Math.round(((oxygenDebt.time_under_95 || 0) +
+                                                   (oxygenDebt.time_under_90 || 0) +
                                                    (oxygenDebt.time_under_88 || 0)) / 60);
                     return totalMinutes;
                 }
             }
         },
-        
+
         aggregateWeekData: function(weekData, metric) {
             const aggregated = {};
-            
+
             // Initialize all oxygen debt zones with 0
             this.zones.forEach(zone => {
                 aggregated[zone] = 0;
             });
-            
+
             // Aggregate data for each day in the week
             weekData.forEach(dayData => {
                 if (dayData) {
@@ -155,7 +155,7 @@ const PAGE_CONFIGS = {
                     });
                 }
             });
-            
+
             return aggregated;
         }
     },
@@ -173,48 +173,48 @@ const PAGE_CONFIGS = {
                 if (!dayData || !dayData.spo2_distribution || !dayData.spo2_distribution.at_level) {
                     return 0;
                 }
-                
+
                 // Find the SpO2 level data (only 'at' metric for SpO2 distribution)
                 const levelData = dayData.spo2_distribution.at_level.find(item => item.spo2 === parseInt(level));
                 return levelData ? levelData.percent : 0;
             },
-            
+
             getTotal: (dayData, metric) => {
                 if (!dayData || !dayData.spo2_distribution || !dayData.spo2_distribution.at_level) return 0;
-                
+
                 // Calculate total percentage (should be 100% for SpO2 distribution)
                 const totalPercent = dayData.spo2_distribution.at_level.reduce((sum, item) => sum + item.percent, 0);
                 return totalPercent;
             },
-            
+
             // Activity-specific data extraction (activities have different structure)
             getActivityZoneData: (activity, level, metric) => {
                 if (!activity || !activity.spo2_distribution || !activity.spo2_distribution.at_level) {
                     return 0;
                 }
-                
+
                 // Find the SpO2 level data for activity
                 const levelData = activity.spo2_distribution.at_level.find(item => item.spo2 === parseInt(level));
                 return levelData ? levelData.percent : 0;
             },
-            
+
             getActivityTotal: (activity, metric) => {
                 if (!activity || !activity.spo2_distribution || !activity.spo2_distribution.at_level) return 0;
-                
+
                 // Calculate total percentage for activity
                 const totalPercent = activity.spo2_distribution.at_level.reduce((sum, item) => sum + item.percent, 0);
                 return totalPercent;
             }
         },
-        
+
         aggregateWeekData: function(weekData, metric) {
             const aggregated = {};
-            
+
             // Initialize all SpO2 levels with 0
             this.zones.forEach(level => {
                 aggregated[level] = 0;
             });
-            
+
             // For SpO2 distribution, we average the percentages across the week
             let validDays = 0;
             weekData.forEach(dayData => {
@@ -225,14 +225,14 @@ const PAGE_CONFIGS = {
                     });
                 }
             });
-            
+
             // Average the percentages
             if (validDays > 0) {
                 this.zones.forEach(level => {
                     aggregated[level] = aggregated[level] / validDays;
                 });
             }
-            
+
             return aggregated;
         }
     }
@@ -241,7 +241,7 @@ const PAGE_CONFIGS = {
 // Get current page configuration based on URL path
 function getCurrentPageConfig() {
     const path = window.location.pathname;
-    
+
     if (path === '/oxygen-debt') {
         return PAGE_CONFIGS['oxygen-debt'];
     } else if (path === '/spo2-distribution') {

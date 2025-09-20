@@ -22,7 +22,7 @@ function loadDailyNotes(dateLabel) {
 
 function editDailyNotes(dateLabel) {
     const notesElement = document.getElementById('dailyNotes');
-    
+
     // Check if we're already in edit mode
     const existingEditor = document.getElementById('dailyNotesEditor');
     if (existingEditor) {
@@ -30,7 +30,7 @@ function editDailyNotes(dateLabel) {
         existingEditor.focus();
         return;
     }
-    
+
     // Get the current notes, converting <br> tags back to newlines
     let currentNotes = '';
     if (notesElement.textContent !== 'Click to add notes...') {
@@ -40,7 +40,7 @@ function editDailyNotes(dateLabel) {
             currentNotes = paragraph.innerHTML.replace(/<br\s*\/?>/gi, '\n');
         }
     }
-    
+
     notesElement.innerHTML = `
         <textarea class="form-control" rows="3" id="dailyNotesEditor">${currentNotes}</textarea>
         <div class="mt-2">
@@ -48,7 +48,7 @@ function editDailyNotes(dateLabel) {
             <button class="btn btn-sm btn-secondary" onclick="cancelDailyNotes('${dateLabel}')">Cancel</button>
         </div>
     `;
-    
+
     document.getElementById('dailyNotesEditor').focus();
 }
 
@@ -56,7 +56,7 @@ function saveDailyNotes(dateLabel) {
     const notesElement = document.getElementById('dailyNotes');
     const editor = document.getElementById('dailyNotesEditor');
     const notes = editor.value.trim();
-    
+
     fetch(`/api/data/${dateLabel}/notes`, {
         method: 'POST',
         headers: {
@@ -109,7 +109,7 @@ function loadActivityNotes(activityId) {
 
 function editActivityNotes(activityId) {
     const notesElement = document.getElementById('activityNotes');
-    
+
     // Check if we're already in edit mode
     const existingEditor = document.getElementById('activityNotesEditor');
     if (existingEditor) {
@@ -117,7 +117,7 @@ function editActivityNotes(activityId) {
         existingEditor.focus();
         return;
     }
-    
+
     // Get the current notes, converting <br> tags back to newlines
     let currentNotes = '';
     if (notesElement.textContent !== 'Click to add notes...') {
@@ -127,7 +127,7 @@ function editActivityNotes(activityId) {
             currentNotes = paragraph.innerHTML.replace(/<br\s*\/?>/gi, '\n');
         }
     }
-    
+
     notesElement.innerHTML = `
         <textarea class="form-control" rows="3" id="activityNotesEditor">${currentNotes}</textarea>
         <div class="mt-2">
@@ -135,7 +135,7 @@ function editActivityNotes(activityId) {
             <button class="btn btn-sm btn-secondary" onclick="cancelActivityNotes('${activityId}')">Cancel</button>
         </div>
     `;
-    
+
     document.getElementById('activityNotesEditor').focus();
 }
 
@@ -143,7 +143,7 @@ function saveActivityNotes(activityId) {
     const notesElement = document.getElementById('activityNotes');
     const editor = document.getElementById('activityNotesEditor');
     const notes = editor.value.trim();
-    
+
     fetch(`/api/activity/${activityId}/notes`, {
         method: 'POST',
         headers: {
