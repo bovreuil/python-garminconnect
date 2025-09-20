@@ -238,6 +238,9 @@
                             <a class="nav-link" href="{{ url_for('oxygen_debt') }}">Oxygen Debt</a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('spo2_distribution') }}">SpO2 Distribution</a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('resting_hr') }}">Resting HR</a>
                         </li>
                         {% if session.user_role == 'admin' %}

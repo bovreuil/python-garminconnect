@@ -16,12 +16,54 @@ let currentMetric = null;
 // Initialize page-specific charts
 function initializePageCharts() {
     currentPageConfig = getCurrentPageConfig();
-    
+
     // Set initial metric
     currentMetric = currentPageConfig.metrics.primary.key;
-    
+
     console.log(`Initializing charts for ${currentPageConfig.name} page`);
     console.log(`Data type: ${currentPageConfig.dataType}, Zones: ${currentPageConfig.zones.length}`);
+    console.log(`URL path: ${window.location.pathname}`);
+    console.log(`Current metric: ${currentMetric}`);
+}
+
+// Load two weeks of data (universal function)
+function loadTwoWeekData(startDate, endDate) {
+    showLoading();
+    console.log(`Loading two-week data for ${startDate} to ${endDate}`);
+
+    // Generate array of 14 date labels
+    const dateLabels = [];
+    const currentDate = new Date(startDate);
+    for (let i = 0; i < 14; i++) {
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        dateLabels.push(`${year}-${month}-${day}`);
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    fetch('/api/data/batch', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ dates: dateLabels })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Two-week batch data loaded successfully');
+            const dataResults = dateLabels.map(dateLabel => data.data[dateLabel] || null);
+            updateTwoWeekChart(dateLabels, dataResults);
+        } else {
+            console.error('Failed to load two-week batch data:', data.error);
+        }
+        hideLoading();
+    })
+    .catch(error => {
+        console.error('Error loading two-week data:', error);
+        hideLoading();
+    });
 }
 
 // Load 14 weeks of data (universal function)
@@ -59,7 +101,7 @@ function loadFourteenWeekData() {
     .then(data => {
         if (data.success) {
             console.log('14-week batch data loaded successfully');
-            const dataResults = dateLabels.map(dateLabel => data.results[dateLabel] || null);
+            const dataResults = dateLabels.map(dateLabel => data.data[dateLabel] || null);
             updateFourteenWeekChart(dateLabels, dataResults);
         } else {
             console.error('Failed to load 14-week batch data:', data.error);
@@ -164,6 +206,9 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
                     display: currentPageConfig.zones.length <= 10, // Hide legend for pages with many zones
                     position: 'top'
                 },
+                datalabels: {
+                    display: false // Remove clutter numbers on bar segments
+                },
                 tooltip: {
                     callbacks: {
                         title: function(context) {
@@ -185,6 +230,8 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     }
     
     console.log(`Updating 2-week chart with ${currentPageConfig.name} data`);
+    console.log('Current page config:', currentPageConfig);
+    console.log('Current metric:', currentMetric);
     
     // Prepare data for stacked column chart
     const labels = dateLabels.map(dateLabel => {
@@ -195,10 +242,18 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     });
     
     // Create datasets using page configuration
+    console.log('Creating datasets for zones:', currentPageConfig.zones);
+    console.log('Sample data for first day:', dataResults[0]);
+    console.log('SpO2 distribution in sample data:', dataResults[0] ? dataResults[0].spo2_distribution : 'NO SPO2 DISTRIBUTION');
+    
     const datasets = createZonedDatasets(currentPageConfig.zones, currentPageConfig.colors, zone => {
         return labels.map((_, index) => {
             const dayData = dataResults[index];
-            return currentPageConfig.dataExtractor.getZoneData(dayData, zone, currentMetric);
+            const value = currentPageConfig.dataExtractor.getZoneData(dayData, zone, currentMetric);
+            if (index === 0) { // Debug first day
+                console.log(`Zone ${zone}: ${value}`);
+            }
+            return value;
         });
     }, { borderColor: '#ffffff' });
     
@@ -213,6 +268,7 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     
     const { axisMax: yAxisMax } = calculateAxisScaling(maxValue, true);
     
+    
     twoWeekChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -222,14 +278,6 @@ function updateTwoWeekChart(dateLabels, dataResults) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: currentPageConfig.zones.length <= 10 // Hide legend for pages with many zones
-                },
-                datalabels: {
-                    display: false // No data labels on charts
-                }
-            },
             onClick: function(event, elements) {
                 // Handle day click navigation
                 const canvas = event.native.target;
@@ -308,19 +356,33 @@ function createActivitiesChart(activities, selectedDate) {
     }
     
     console.log(`Creating activities chart with ${currentPageConfig.name} data for ${activities.length} activities`);
+    console.log('Current page config for activities:', currentPageConfig);
+    console.log('Current metric for activities:', currentMetric);
+    console.log('Sample activity data:', activities[0]);
     
     // Create datasets using page configuration
     const datasets = createZonedDatasets(currentPageConfig.zones, currentPageConfig.colors, zone => {
         return activities.map(activity => {
-            return currentPageConfig.dataExtractor.getZoneData(activity, zone, currentMetric);
+            // Use activity-specific data extraction if available, otherwise fall back to regular
+            if (currentPageConfig.dataExtractor.getActivityZoneData) {
+                return currentPageConfig.dataExtractor.getActivityZoneData(activity, zone, currentMetric);
+            } else {
+                return currentPageConfig.dataExtractor.getZoneData(activity, zone, currentMetric);
+            }
         });
     }, { borderColor: '#ffffff' });
     
     // Calculate x-axis maximum
     let maxValue = 0;
     activities.forEach(activity => {
-        const activityTotal = currentPageConfig.dataExtractor.getTotal(activity, currentMetric);
-        maxValue = Math.max(maxValue, activityTotal);
+        // Use activity-specific total calculation if available, otherwise fall back to regular
+        if (currentPageConfig.dataExtractor.getActivityTotal) {
+            const activityTotal = currentPageConfig.dataExtractor.getActivityTotal(activity, currentMetric);
+            maxValue = Math.max(maxValue, activityTotal);
+        } else {
+            const activityTotal = currentPageConfig.dataExtractor.getTotal(activity, currentMetric);
+            maxValue = Math.max(maxValue, activityTotal);
+        }
     });
     
     const { axisMax: xAxisMax } = calculateAxisScaling(maxValue, true, 100);
@@ -328,7 +390,7 @@ function createActivitiesChart(activities, selectedDate) {
     activitiesChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: activities.map(activity => activity.name || 'Activity'),
+            labels: activities.map(activity => activity.activity_name || activity.name || 'Activity'),
             datasets: datasets
         },
         options: {
@@ -337,16 +399,66 @@ function createActivitiesChart(activities, selectedDate) {
             indexAxis: 'y', // Horizontal bars
             plugins: {
                 legend: {
-                    display: currentPageConfig.zones.length <= 10 // Hide legend for pages with many zones
-                }
+                    display: currentPageConfig.zones.length <= 10, // Hide legend for pages with many zones
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20
+                    }
+                },
+                tooltip: {
+                    mode: 'nearest',
+                    intersect: false,
+                    callbacks: {
+                        title: function(context) {
+                            return context[0].label;
+                        },
+                        label: function(context) {
+                            const value = context.parsed.x;
+                            const zone = context.dataset.label;
+                            return `${zone}: ${value.toFixed(1)}%`;
+                        }
+                    }
+                },
             },
             onClick: function(event, elements) {
-                if (elements.length > 0) {
-                    const activityIndex = elements[0].index;
-                    const activity = activities[activityIndex];
-                    if (activity && activity.activity_id) {
-                        showSingleActivityView(activity.activity_id, selectedDate);
+                const canvas = event.native.target;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.native.x - rect.left;
+                const y = event.native.y - rect.top;
+
+                const chartArea = activitiesChart.chartArea;
+                if (!chartArea) return;
+
+                if (x >= chartArea.left && x <= chartArea.right &&
+                    y >= chartArea.top && y <= chartArea.bottom) {
+
+                    const yAxis = activitiesChart.scales.y;
+                    const clickIndex = yAxis.getValueForPixel(y);
+
+                    if (clickIndex >= 0 && clickIndex < activities.length) {
+                        const activity = activities[clickIndex];
+                        showSingleActivityView(activity);
                     }
+                }
+            },
+            onHover: function(event, elements) {
+                const canvas = event.native.target;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.native.x - rect.left;
+                const y = event.native.y - rect.top;
+
+                const chartArea = activitiesChart.chartArea;
+                if (!chartArea) {
+                    event.native.target.style.cursor = 'default';
+                    return;
+                }
+
+                if (x >= chartArea.left && x <= chartArea.right &&
+                    y >= chartArea.top && y <= chartArea.bottom) {
+                    canvas.style.cursor = 'pointer';
+                } else {
+                    canvas.style.cursor = 'default';
                 }
             },
             scales: {

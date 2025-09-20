@@ -185,6 +185,25 @@ const PAGE_CONFIGS = {
                 // Calculate total percentage (should be 100% for SpO2 distribution)
                 const totalPercent = dayData.spo2_distribution.at_level.reduce((sum, item) => sum + item.percent, 0);
                 return totalPercent;
+            },
+            
+            // Activity-specific data extraction (activities have different structure)
+            getActivityZoneData: (activity, level, metric) => {
+                if (!activity || !activity.spo2_distribution || !activity.spo2_distribution.at_level) {
+                    return 0;
+                }
+                
+                // Find the SpO2 level data for activity
+                const levelData = activity.spo2_distribution.at_level.find(item => item.spo2 === parseInt(level));
+                return levelData ? levelData.percent : 0;
+            },
+            
+            getActivityTotal: (activity, metric) => {
+                if (!activity || !activity.spo2_distribution || !activity.spo2_distribution.at_level) return 0;
+                
+                // Calculate total percentage for activity
+                const totalPercent = activity.spo2_distribution.at_level.reduce((sum, item) => sum + item.percent, 0);
+                return totalPercent;
             }
         },
         

@@ -120,10 +120,31 @@ function showSingleActivityView(activity) {
         deleteBtn.style.display = 'none';
     }
     
-    // Small delay to ensure DOM is fully updated before creating chart
+    // Small delay to ensure DOM is fully updated before creating charts
     setTimeout(() => {
         // Create the activity heart rate chart
         createActivityHeartRateChart(activity);
+        
+        // Create activity SpO2 chart if SpO2 data is available
+        if (activity.spo2_values && activity.spo2_values.length > 0) {
+            createActivitySpo2Chart(activity);
+        }
+        
+        // Create activity breathing chart if breathing data is available  
+        if (activity.breathing_values && activity.breathing_values.length > 0) {
+            createActivityBreathingChart(activity);
+        }
+        
+        // Load activity SpO2 distribution data and charts
+        loadActivitySpo2Distribution(activity.activity_id);
+        
+        // Load activity notes
+        loadActivityNotes(activity.activity_id);
+        
+        // Load and display activity oxygen debt summary
+        if (activity.oxygen_debt) {
+            displayActivityOxygenDebt(activity.oxygen_debt);
+        }
     }, 50);
     
     // Scroll to the section

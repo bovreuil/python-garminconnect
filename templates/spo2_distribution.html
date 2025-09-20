@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Oxygen Debt - Garmin Heart Rate Analyzer{% endblock %}
+{% block title %}SpO2 Distribution - Garmin Heart Rate Analyzer{% endblock %}
 
 {% block head %}
 <script src="{{ url_for('static', filename='js/dashboard-navigation.js') }}"></script>
@@ -26,11 +26,7 @@
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>Oxygen Debt Analysis</h1>
-            <div class="btn-group" role="group">
-                <button type="button" class="btn btn-outline-secondary active" id="areaBtn">Area</button>
-                <button type="button" class="btn btn-outline-secondary" id="minutesBtn">Minutes</button>
-            </div>
+            <h1>SpO2 Distribution Analysis</h1>
         </div>
     </div>
 </div>
@@ -80,12 +76,10 @@
 
 {% include 'includes/single_date_view.html' %}
 
-
 {% include 'includes/modals.html' %}
 
-
 <script>
-// Oxygen debt page-specific initialization using unified chart system
+// Dashboard-specific initialization using unified chart system
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize common page elements
     initializePage();
@@ -96,9 +90,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Setup common event listeners
     setupCommonEventListeners();
     
-    // Oxygen debt page-specific event listeners
-    document.getElementById('areaBtn').addEventListener('click', () => switchMetric('area'));
-    document.getElementById('minutesBtn').addEventListener('click', () => switchMetric('minutes'));
+    // SpO2 Distribution page-specific event listeners (no metric switching needed)
     
     // Initialize by loading 14-week data and going to today
     loadFourteenWeekData();
@@ -111,58 +103,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // goToToday moved to dashboard-navigation.js
 
-// Navigate to a specific week in the two-week view
-function navigateToWeek(targetDate) {
-    // Close single date view and single activity view when navigating
-    closeSingleDateView();
-    closeSingleActivityView();
-    
-    // Calculate the two-week period with the target date in the second week
-    const { startDate, endDate } = calculateTwoWeekPeriod(targetDate, true);
-    
-    loadTwoWeekData(startDate, endDate);
-}
+// navigateToWeek moved to dashboard-navigation.js
 
 // navigateSingleDay moved to dashboard-navigation.js
 
 // goToSingleDateToday moved to dashboard-navigation.js
 
-// Switch between area and minutes using unified system
-function switchMetric(metric) {
-    currentMetric = metric;
-    
-    // Update button states
-    document.getElementById('areaBtn').classList.toggle('active', metric === 'area');
-    document.getElementById('minutesBtn').classList.toggle('active', metric === 'minutes');
-    
-    // Reload 14-week data with new metric
-    loadFourteenWeekData();
-    
-    // Reload two-week data with new metric
-    if (currentStartDate && currentEndDate) {
-        loadTwoWeekData(currentStartDate, currentEndDate);
-    }
-    
-    // Update activities chart if single date view is open and we have a selected date
-    const singleDateSection = document.getElementById('singleDateSection');
-    if (singleDateSection.style.display !== 'none' && selectedDate) {
-        loadActivitiesForDate(selectedDate);
-    }
-    
-    // Update activity HR chart if single activity view is open and we have a selected activity
-    const singleActivitySection = document.getElementById('singleActivitySection');
-    if (singleActivitySection.style.display !== 'none' && selectedActivity) {
-        createActivityHeartRateChart(selectedActivity);
-    }
-}
+// Switch between metrics using unified system
+// No metric switching needed for SpO2 distribution (only uses 'at' values)
 
+// loadTwoWeekData moved to shared-data-functions.js
 
-// All chart functions moved to unified-charts.js:
-// - updateTwoWeekChart: universal function uses page configuration  
-// - updateFourteenWeekChart: universal function uses page configuration
-// - createActivitiesChart: universal function uses page configuration
+// loadDateData moved to shared-data-functions.js
+
+// Chart functions moved to unified-charts.js - page automatically uses SpO2 distribution data
+
+// All chart functions now handled by unified-charts.js
+// - updateTwoWeekChart: universal function uses SpO2 distribution data
+// - updateFourteenWeekChart: universal function uses SpO2 distribution data  
+// - createActivitiesChart: universal function uses SpO2 distribution data
 // - loadFourteenWeekData: universal function loads any page's data type
-// - aggregateWeekOxygenDebtData: page-specific function in page-configurations.js
+// - aggregateWeekData: page-specific function in page-configurations.js
 
 </script>
 {% endblock %}

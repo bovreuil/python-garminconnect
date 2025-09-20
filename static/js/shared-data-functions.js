@@ -87,51 +87,7 @@ function loadDateData(dateLabel) {
         });
 }
 
-// Load two weeks of data - NEARLY IDENTICAL (just variable normalization differs)
-function loadTwoWeekData(startDate, endDate) {
-    // Normalize dates to start of day to avoid time component issues
-    currentStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-    currentEndDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-    
-    showLoading();
-    updateDateRange();
-    
-    // Generate array of 14 date labels (strings, not Date objects)
-    const dateLabels = [];
-    const currentDate = new Date(startDate);
-    for (let i = 0; i < 14; i++) {
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        dateLabels.push(`${year}-${month}-${day}`);
-        currentDate.setDate(currentDate.getDate() + 1);
-    }
-    
-    // Load data for all date labels using batch API
-    fetch('/api/data/batch', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ dates: dateLabels })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Convert batch response to array format expected by chart
-            const results = dateLabels.map(dateLabel => data.data[dateLabel] || null);
-            currentDataResults = results; // Store for click handling
-            updateTwoWeekChart(dateLabels, results);
-        } else {
-            console.error('Error loading two week data:', data.error);
-        }
-        hideLoading();
-    })
-    .catch(error => {
-        console.error('Error loading two week data:', error);
-        hideLoading();
-    });
-}
+// loadTwoWeekData function moved to unified-charts.js
 
 // Load activities for a specific date label - IDENTICAL in both pages
 function loadActivitiesForDate(dateLabel) {

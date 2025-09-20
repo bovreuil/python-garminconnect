@@ -164,6 +164,13 @@ def oxygen_debt():
         return redirect(url_for('login'))
     return render_template('oxygen_debt.html')
 
+@app.route('/spo2-distribution')
+def spo2_distribution():
+    """SpO2 Distribution page route."""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('spo2_distribution.html')
+
 @app.route('/<date>')
 def date_view(date):
     """Route for specific date navigation."""
@@ -541,6 +548,11 @@ def get_data(date):
         cur.close()
         conn.close()
         
+        # Calculate SpO2 distribution data
+        spo2_distribution_data = {}
+        if o2ring_data:
+            spo2_distribution_data = calculate_spo2_distribution(o2ring_data)
+        
         return jsonify({
             'date': date,
             'heart_rate_values': enriched_hr_series,
@@ -549,7 +561,8 @@ def get_data(date):
             'daily_score': data['daily_score'],
             'activity_type': data['activity_type'],
             'spo2_values': o2ring_data,
-            'oxygen_debt': oxygen_debt_data
+            'oxygen_debt': oxygen_debt_data,
+            'spo2_distribution': spo2_distribution_data
         })
     else:
         # Check if there are TRIMP overrides for this date (even without daily data)
@@ -2789,6 +2802,9 @@ def get_batch_data():
                 from database import get_cached_oxygen_debt_data
                 cached_oxygen_debt = get_cached_oxygen_debt_data(date, 'daily')
                 
+                oxygen_debt_data = {}
+                spo2_distribution_data = {}
+                
                 if cached_oxygen_debt:
                     # Use cached oxygen debt data
                     oxygen_debt_data = cached_oxygen_debt['oxygen_debt_data']
@@ -2803,10 +2819,22 @@ def get_batch_data():
                     end_timestamp = int(end_of_day.timestamp() * 1000)
                     
                     o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
-                    oxygen_debt_data = {}
                     if o2ring_data:
                         spo2_series = [[row[0], row[1]] for row in o2ring_data]
                         oxygen_debt_data = calculate_oxygen_debt_with_caching(date, spo2_series, 'daily')
+                
+                # Calculate SpO2 distribution data (always calculate for consistency)
+                from datetime import datetime
+                import pytz
+                uk_tz = pytz.timezone('Europe/London')
+                start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
+                end_of_day = start_of_day + timedelta(days=1)
+                start_timestamp = int(start_of_day.timestamp() * 1000)
+                end_timestamp = int(end_of_day.timestamp() * 1000)
+                
+                o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
+                if o2ring_data:
+                    spo2_distribution_data = calculate_spo2_distribution(o2ring_data)
                 
                 results[date] = {
                     'date': date,
@@ -2814,7 +2842,8 @@ def get_batch_data():
                     'total_trimp': total_trimp,
                     'daily_score': data['daily_score'],
                     'activity_type': data['activity_type'],
-                    'oxygen_debt': oxygen_debt_data
+                    'oxygen_debt': oxygen_debt_data,
+                    'spo2_distribution': spo2_distribution_data
                 }
             else:
                 # Check for TRIMP overrides even when there's no daily data
