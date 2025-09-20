@@ -693,6 +693,35 @@ def get_activities(date):
         if combined_spo2:
             activity_oxygen_debt = calculate_oxygen_debt_with_caching(activity['activity_id'], combined_spo2, 'activity')
 
+        # Calculate SpO2 distribution for this activity
+        activity_spo2_distribution = {}
+        if o2ring_data and activity['start_time_local'] and activity['duration_seconds']:
+            try:
+                # Parse activity start time (reuse the logic from above)
+                start_time_str = activity['start_time_local']
+                if start_time_str.endswith('.0'):
+                    start_time_str = start_time_str[:-2]
+                
+                try:
+                    start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                except ValueError:
+                    start_time = datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S')
+                    uk_tz = pytz.timezone('Europe/London')
+                    start_time = uk_tz.localize(start_time)
+                
+                if start_time.tzinfo is None:
+                    uk_tz = pytz.timezone('Europe/London')
+                    start_time = uk_tz.localize(start_time)
+                
+                end_time = start_time + timedelta(seconds=activity['duration_seconds'])
+                start_timestamp = int(start_time.timestamp() * 1000)
+                end_timestamp = int(end_time.timestamp() * 1000)
+                
+                # Calculate SpO2 distribution
+                activity_spo2_distribution = calculate_spo2_distribution(o2ring_data, start_timestamp, end_timestamp)
+            except Exception as e:
+                logger.error(f"Error calculating SpO2 distribution for activity {activity['activity_id']}: {e}")
+
         activities_list.append({
             'activity_id': activity['activity_id'],
             'activity_name': activity['activity_name'],
@@ -710,7 +739,8 @@ def get_activities(date):
             'heart_rate_values': heart_rate_series,
             'breathing_rate_values': breathing_rate_series,
             'spo2_values': combined_spo2,
-            'oxygen_debt': activity_oxygen_debt
+            'oxygen_debt': activity_oxygen_debt,
+            'spo2_distribution': activity_spo2_distribution
         })
     
     return jsonify(activities_list)

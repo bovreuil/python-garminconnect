@@ -195,15 +195,16 @@ const PAGE_CONFIGS = {
 
                 // Find the SpO2 level data for activity
                 const levelData = activity.spo2_distribution.at_level.find(item => item.spo2 === parseInt(level));
-                return levelData ? levelData.percent : 0;
+                // Return seconds converted to minutes (activities chart should show minutes, not percentages)
+                return levelData ? levelData.seconds / 60 : 0;
             },
 
             getActivityTotal: (activity, metric) => {
                 if (!activity || !activity.spo2_distribution || !activity.spo2_distribution.at_level) return 0;
 
-                // Calculate total percentage for activity
-                const totalPercent = activity.spo2_distribution.at_level.reduce((sum, item) => sum + item.percent, 0);
-                return totalPercent;
+                // Calculate total seconds converted to minutes for activity
+                const totalSeconds = activity.spo2_distribution.at_level.reduce((sum, item) => sum + item.seconds, 0);
+                return totalSeconds / 60;
             }
         },
 

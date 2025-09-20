@@ -399,7 +399,13 @@ function createActivitiesChart(activities, selectedDate) {
                         label: function(context) {
                             const value = context.parsed.x;
                             const zone = context.dataset.label;
-                            return `${zone}: ${value.toFixed(1)}%`;
+                            
+                            // For SpO2 distribution page, show minutes instead of percentages
+                            if (currentPageConfig.dataType === 'spo2_distribution') {
+                                return `SpO2 ${zone}%: ${value.toFixed(1)} minutes`;
+                            } else {
+                                return `${zone}: ${value.toFixed(1)}%`;
+                            }
                         }
                     }
                 },
