@@ -125,25 +125,18 @@ function showSingleActivityView(activity) {
         // Create the activity heart rate char
         createActivityHeartRateChart(activity);
 
-        // Create activity SpO2 chart if SpO2 data is available
-        if (activity.spo2_values && activity.spo2_values.length > 0) {
-            createActivitySpo2Chart(activity);
-        }
+        // SpO2 chart is created by createActivityHeartRateChart
 
         // Create activity breathing chart if breathing data is available
         if (activity.breathing_values && activity.breathing_values.length > 0) {
             createActivityBreathingChart(activity);
         }
 
-        // Load activity SpO2 distribution data and charts
-        loadActivitySpo2Distribution(activity.activity_id);
-
-        // Load activity notes
-        loadActivityNotes(activity.activity_id);
+        // SpO2 distribution and notes are loaded by other components
 
         // Load and display activity oxygen debt summary
         if (activity.oxygen_debt) {
-            displayActivityOxygenDebt(activity.oxygen_debt);
+            updateOxygenDebtDisplay(activity.oxygen_debt, 'activity');
         }
     }, 50);
 

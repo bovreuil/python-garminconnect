@@ -20,13 +20,10 @@ function createHeartRateChart(dateLabel, dayData) {
         return;
     }
 
-    console.log('Chart element:', chartElement);
-    console.log('Chart container:', chartContainer);
-    console.log('Chart container dimensions:', chartContainer.offsetWidth, 'x', chartContainer.offsetHeight);
-    console.log('Chart element dimensions:', chartElement.offsetWidth, 'x', chartElement.offsetHeight);
+    // Chart elements found
 
     const ctx = chartElement.getContext('2d');
-    console.log('Chart context:', ctx);
+    // Chart context obtained
 
     // Clean up any existing message overlay and restore canvas visibility
     const existingMessage = document.getElementById('hrChartMessage');
@@ -173,7 +170,7 @@ function createHeartRateChart(dateLabel, dayData) {
     const spo2Alerts = [];
 
     if (spo2TimeSeries.length > 0) {
-        console.log('Processing SpO2 data for day:', spo2TimeSeries.length, 'points');
+        // Processing SpO2 data for day
         let alertCount = 0;
 
         spo2TimeSeries.forEach(spo2Point => {
@@ -198,7 +195,7 @@ function createHeartRateChart(dateLabel, dayData) {
 
                 if (spo2Value <= 87) {
                     alertCount++;
-                    console.log('Found SpO2 alert at:', timestamp, 'SpO2:', spo2Value);
+                    // SpO2 alert found
                 }
             }
         });
@@ -356,7 +353,7 @@ function createHeartRateChart(dateLabel, dayData) {
 
 // Create activity heart rate char
 function createActivityHeartRateChart(activity) {
-    console.log('Creating activity heart rate chart for activity:', activity);
+    // Creating activity heart rate chart
 
     // Ensure the single activity section is visible
     const singleActivitySection = document.getElementById('singleActivitySection');
@@ -400,15 +397,14 @@ function createActivityHeartRateChart(activity) {
         return;
     }
 
-    console.log('Activity chart element:', chartElement);
-    console.log('Activity chart container:', chartContainer);
+    // Activity chart elements found
 
     const ctx = chartElement.getContext('2d');
     if (!ctx) {
         console.error('Could not get 2D context for activity chart');
         return;
     }
-    console.log('Activity chart context:', ctx);
+    // Activity chart context obtained
 
     // Destroy existing chart if it exists
     if (activityHrChart) {
@@ -508,7 +504,7 @@ function createActivityHeartRateChart(activity) {
     const spo2Data = [];
     const spo2Alerts = [];
     if (activity.spo2_values && activity.spo2_values.length > 0) {
-        console.log('Processing SpO2 data for activity:', activity.spo2_values.length, 'points');
+        // Processing SpO2 data for activity
         let alertCount = 0;
         activity.spo2_values.forEach(spo2Point => {
             const spo2Timestamp = new Date(spo2Point[0]);
@@ -531,7 +527,6 @@ function createActivityHeartRateChart(activity) {
 
                 if (spo2Value <= 87) {
                     alertCount++;
-                    console.log('Found activity SpO2 alert at:', spo2Timestamp, 'SpO2:', spo2Value);
                 }
             }
         });
@@ -545,7 +540,7 @@ function createActivityHeartRateChart(activity) {
     const breathingData = [];
 
     if (breathingTimeSeries.length > 0) {
-        console.log('Processing breathing data for activity:', breathingTimeSeries.length, 'points');
+        // Processing breathing data for activity
         breathingTimeSeries.forEach(breathingPoint => {
             const breathingTimestamp = new Date(breathingPoint[0]);
             // Only include breathing data that falls within the Garmin activity range
@@ -559,7 +554,7 @@ function createActivityHeartRateChart(activity) {
         console.log('Filtered breathing data points within Garmin range:', breathingData.length);
     }
 
-    console.log('First few HR data points:', hrTimeSeries.slice(0, 5));
+    // HR data points processed
 
     // Use the already sorted HR data from the extractor
     const sortedData = hrTimeSeries;
@@ -595,8 +590,7 @@ function createActivityHeartRateChart(activity) {
 
     console.log('Processed activity timestamps length:', timestamps.length);
     console.log('Processed activity HR values length:', hrValues.length);
-    console.log('First few timestamps:', timestamps.slice(0, 5));
-    console.log('First few HR values:', hrValues.slice(0, 5));
+    // Timestamps and HR values processed
 
     // Create a smart dataset that only includes null values for actual gaps
     const chartLabels = [];
@@ -633,8 +627,7 @@ function createActivityHeartRateChart(activity) {
 
     console.log('Chart labels length:', chartLabels.length);
     console.log('Chart data length:', chartData.length);
-    console.log('First few chart labels:', chartLabels.slice(0, 5));
-    console.log('First few chart data points:', chartData.slice(0, 5));
+    // Chart labels and data processed
 
     // Use standardized x-axis range from Garmin activity data
     const startTime = garminStartTime;
