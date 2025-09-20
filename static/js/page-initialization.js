@@ -7,8 +7,9 @@
 
 // Initialize common page elements and configuration
 function initializePage() {
-    // Register the DataLabels plugin
-    // Chart.register(ChartDataLabels); // Temporarily disabled for debugging
+    // Register the DataLabels plugin but disable globally
+    Chart.register(ChartDataLabels);
+    Chart.defaults.plugins.datalabels.display = false;
 
     // Add CSS for notes fields
     injectNotesCSS();

@@ -65,6 +65,9 @@ function createHeartRateChart(dateLabel, dayData) {
                     },
                     tooltip: {
                         enabled: false
+                    },
+                    datalabels: {
+                        display: false
                     }
                 },
                 scales: {
@@ -298,6 +301,9 @@ function createHeartRateChart(dateLabel, dayData) {
                                 return null; // Hide background dataset from tooltip
                             }
                         }
+                    },
+                    datalabels: {
+                        display: false
                     }
                 },
                 scales: {
@@ -467,6 +473,9 @@ function createActivityHeartRateChart(activity) {
                         },
                         tooltip: {
                             enabled: false
+                        },
+                        datalabels: {
+                            display: false
                         }
                     },
                     scales: {
@@ -826,6 +835,9 @@ function createActivityHeartRateChart(activity) {
                                 return null; // Hide background dataset from tooltip
                             }
                         }
+                    },
+                    datalabels: {
+                        display: false
                     }
                 },
                 scales: {

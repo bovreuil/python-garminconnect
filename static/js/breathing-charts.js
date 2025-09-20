@@ -201,6 +201,9 @@ function createActivityBreathingChart(activity, breathingData, chartId, containe
                         }
                     }
                 },
+                datalabels: {
+                    display: false
+                }
             },
             scales: {
                 x: {

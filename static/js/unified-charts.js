@@ -240,6 +240,50 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
                             }
                         }
                     }
+                },
+                datalabels: {
+                    display: function(context) {
+                        // Only show total value on the top segment of each bar
+                        const datasetIndex = context.datasetIndex;
+                        const dataIndex = context.dataIndex;
+                        const dataset = context.chart.data.datasets[datasetIndex];
+                        
+                        // Check if this is the last dataset (top segment)
+                        const isLastDataset = datasetIndex === context.chart.data.datasets.length - 1;
+                        
+                        if (isLastDataset) {
+                            // Calculate total for this bar
+                            const weekData = weeklyData[dataIndex];
+                            if (weekData) {
+                                const total = currentPageConfig.zones.reduce((sum, zone) => sum + (weekData[zone] || 0), 0);
+                                return total > 0; // Only show if there's data
+                            }
+                        }
+                        return false;
+                    },
+                    anchor: 'end',
+                    align: 'top',
+                    color: '#2c3e50',
+                    font: {
+                        weight: 'bold',
+                        size: 11
+                    },
+                    formatter: function(value, context) {
+                        // Calculate total for this bar
+                        const dataIndex = context.dataIndex;
+                        const weekData = weeklyData[dataIndex];
+                        if (weekData) {
+                            const total = currentPageConfig.zones.reduce((sum, zone) => sum + (weekData[zone] || 0), 0);
+                            
+                            // For SpO2 distribution page, show total minutes
+                            if (currentPageConfig.dataType === 'spo2_distribution') {
+                                return `${total.toFixed(1)}m`;
+                            } else {
+                                return `${total.toFixed(1)}`;
+                            }
+                        }
+                        return '';
+                    }
                 }
             }
         }
@@ -373,6 +417,49 @@ function updateTwoWeekChart(dateLabels, dataResults) {
                                 return `Total: ${total.toFixed(1)}`;
                             }
                         }
+                    }
+                },
+                datalabels: {
+                    display: function(context) {
+                        // Only show total value on the top segment of each bar
+                        const datasetIndex = context.datasetIndex;
+                        const dataIndex = context.dataIndex;
+                        
+                        // Check if this is the last dataset (top segment)
+                        const isLastDataset = datasetIndex === context.chart.data.datasets.length - 1;
+                        
+                        if (isLastDataset) {
+                            // Calculate total for this bar
+                            const dayData = dataResults[dataIndex];
+                            if (dayData) {
+                                const total = currentPageConfig.dataExtractor.getTotal(dayData, currentMetric);
+                                return total > 0; // Only show if there's data
+                            }
+                        }
+                        return false;
+                    },
+                    anchor: 'end',
+                    align: 'top',
+                    color: '#2c3e50',
+                    font: {
+                        weight: 'bold',
+                        size: 11
+                    },
+                    formatter: function(value, context) {
+                        // Calculate total for this bar
+                        const dataIndex = context.dataIndex;
+                        const dayData = dataResults[dataIndex];
+                        if (dayData) {
+                            const total = currentPageConfig.dataExtractor.getTotal(dayData, currentMetric);
+                            
+                            // For SpO2 distribution page, show total minutes
+                            if (currentPageConfig.dataType === 'spo2_distribution') {
+                                return `${total.toFixed(1)}m`;
+                            } else {
+                                return `${total.toFixed(1)}`;
+                            }
+                        }
+                        return '';
                     }
                 }
             }

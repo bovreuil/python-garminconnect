@@ -103,6 +103,9 @@ function createSpo2VerticalStackedBarChart(chartId, data, title) {
                         }
                     }
                 },
+                datalabels: {
+                    display: false
+                }
             },
             scales: {
                 x: {
@@ -243,6 +246,9 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
                             ];
                         }
                     }
+                },
+                datalabels: {
+                    display: false
                 }
             },
             scales: {
@@ -483,6 +489,9 @@ function createSpo2Chart(dateLabel, spo2Data, spo2Alerts, chartId, containerId) 
                         }
                     }
                 },
+                datalabels: {
+                    display: false
+                }
             },
                             scales: {
                     x: {
@@ -767,6 +776,9 @@ function createActivitySpo2Chart(activity, spo2Data, spo2Alerts, chartId, contai
                         }
                     }
                 },
+                datalabels: {
+                    display: false
+                }
             },
                             scales: {
                     x: {
