@@ -2776,9 +2776,10 @@ def parse_o2ring_timestamp(time_str):
         logger.error(f"Error parsing O2Ring timestamp '{time_str}': {e}")
         return None
 
-@app.route('/api/data/batch', methods=['POST'])
-def get_batch_data():
-    """Get TRIMP data for multiple dates in a single request."""
+
+@app.route('/api/data/batch/trimp', methods=['POST'])
+def get_trimp_batch_data():
+    """Get TRIMP data for multiple dates in a single request (Dashboard page)."""
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
@@ -2828,52 +2829,12 @@ def get_batch_data():
                     trimp_data = trimp_results.get('presentation_buckets', {})
                     total_trimp = trimp_results.get('total_trimp', 0.0)
                 
-                # Calculate oxygen debt data for this day - try cached first
-                from database import get_cached_oxygen_debt_data
-                cached_oxygen_debt = get_cached_oxygen_debt_data(date, 'daily')
-                
-                oxygen_debt_data = {}
-                spo2_distribution_data = {}
-                
-                if cached_oxygen_debt:
-                    # Use cached oxygen debt data
-                    oxygen_debt_data = cached_oxygen_debt['oxygen_debt_data']
-                else:
-                    # Fallback: calculate oxygen debt from SpO2 data (rare case)
-                    from datetime import datetime
-                    import pytz
-                    uk_tz = pytz.timezone('Europe/London')
-                    start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
-                    end_of_day = start_of_day + timedelta(days=1)
-                    start_timestamp = int(start_of_day.timestamp() * 1000)
-                    end_timestamp = int(end_of_day.timestamp() * 1000)
-                    
-                    o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
-                    if o2ring_data:
-                        spo2_series = [[row[0], row[1]] for row in o2ring_data]
-                        oxygen_debt_data = calculate_oxygen_debt_with_caching(date, spo2_series, 'daily')
-                
-                # Calculate SpO2 distribution data (always calculate for consistency)
-                from datetime import datetime
-                import pytz
-                uk_tz = pytz.timezone('Europe/London')
-                start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
-                end_of_day = start_of_day + timedelta(days=1)
-                start_timestamp = int(start_of_day.timestamp() * 1000)
-                end_timestamp = int(end_of_day.timestamp() * 1000)
-                
-                o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
-                if o2ring_data:
-                    spo2_distribution_data = calculate_spo2_distribution(o2ring_data)
-                
                 results[date] = {
                     'date': date,
                     'presentation_buckets': trimp_data,
                     'total_trimp': total_trimp,
                     'daily_score': data['daily_score'],
-                    'activity_type': data['activity_type'],
-                    'oxygen_debt': oxygen_debt_data,
-                    'spo2_distribution': spo2_distribution_data
+                    'activity_type': data['activity_type']
                 }
             else:
                 # Check for TRIMP overrides even when there's no daily data
@@ -2896,6 +2857,152 @@ def get_batch_data():
                         results[date] = None
                 else:
                     results[date] = None
+    
+    finally:
+        cur.close()
+        conn.close()
+    
+    return jsonify({
+        'success': True,
+        'data': results
+    })
+
+@app.route('/api/data/batch/oxygen-debt', methods=['POST'])
+def get_oxygen_debt_batch_data():
+    """Get oxygen debt data for multiple dates in a single request (Oxygen Debt page)."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.get_json()
+    if not data or 'dates' not in data:
+        return jsonify({'error': 'No dates provided'}), 400
+    
+    dates = data['dates']
+    if not isinstance(dates, list) or len(dates) == 0:
+        return jsonify({'error': 'Invalid dates format'}), 400
+    
+    # Validate date format for all dates
+    for date in dates:
+        if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
+            return jsonify({'error': f'Invalid date format: {date}. Expected YYYY-MM-DD'}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    results = {}
+    
+    try:
+        for date in dates:
+            # Get basic data from daily_data table
+            cur.execute("""
+                SELECT heart_rate_series, daily_score, activity_type
+                FROM daily_data 
+                WHERE date = ?
+            """, (date,))
+            
+            data = cur.fetchone()
+            
+            if data:
+                # Get oxygen debt data from cache
+                from database import get_cached_oxygen_debt_data
+                cached_oxygen_debt = get_cached_oxygen_debt_data(date, 'daily')
+                
+                oxygen_debt_data = {}
+                
+                if cached_oxygen_debt:
+                    # Use cached oxygen debt data
+                    oxygen_debt_data = cached_oxygen_debt['oxygen_debt_data']
+                else:
+                    # Fallback: calculate oxygen debt from SpO2 data (rare case)
+                    from datetime import datetime
+                    import pytz
+                    uk_tz = pytz.timezone('Europe/London')
+                    start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
+                    end_of_day = start_of_day + timedelta(days=1)
+                    start_timestamp = int(start_of_day.timestamp() * 1000)
+                    end_timestamp = int(end_of_day.timestamp() * 1000)
+                    
+                    o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
+                    if o2ring_data:
+                        spo2_series = [[row[0], row[1]] for row in o2ring_data]
+                        oxygen_debt_data = calculate_oxygen_debt_with_caching(date, spo2_series, 'daily')
+                
+                results[date] = {
+                    'date': date,
+                    'oxygen_debt': oxygen_debt_data,
+                    'daily_score': data['daily_score'],
+                    'activity_type': data['activity_type']
+                }
+            else:
+                results[date] = None
+    
+    finally:
+        cur.close()
+        conn.close()
+    
+    return jsonify({
+        'success': True,
+        'data': results
+    })
+
+@app.route('/api/data/batch/spo2-distribution', methods=['POST'])
+def get_spo2_distribution_batch_data():
+    """Get SpO2 distribution data for multiple dates in a single request (SpO2 Distribution page)."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.get_json()
+    if not data or 'dates' not in data:
+        return jsonify({'error': 'No dates provided'}), 400
+    
+    dates = data['dates']
+    if not isinstance(dates, list) or len(dates) == 0:
+        return jsonify({'error': 'Invalid dates format'}), 400
+    
+    # Validate date format for all dates
+    for date in dates:
+        if not (len(date) == 10 and date[4] == '-' and date[7] == '-'):
+            return jsonify({'error': f'Invalid date format: {date}. Expected YYYY-MM-DD'}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    results = {}
+    
+    try:
+        for date in dates:
+            # Get basic data from daily_data table
+            cur.execute("""
+                SELECT heart_rate_series, daily_score, activity_type
+                FROM daily_data 
+                WHERE date = ?
+            """, (date,))
+            
+            data = cur.fetchone()
+            
+            if data:
+                # Calculate SpO2 distribution data from raw O2Ring data
+                from datetime import datetime
+                import pytz
+                uk_tz = pytz.timezone('Europe/London')
+                start_of_day = uk_tz.localize(datetime.strptime(date, '%Y-%m-%d'))
+                end_of_day = start_of_day + timedelta(days=1)
+                start_timestamp = int(start_of_day.timestamp() * 1000)
+                end_timestamp = int(end_of_day.timestamp() * 1000)
+                
+                o2ring_data = get_o2ring_data_for_period(start_timestamp, end_timestamp)
+                spo2_distribution_data = {}
+                if o2ring_data:
+                    spo2_distribution_data = calculate_spo2_distribution(o2ring_data)
+                
+                results[date] = {
+                    'date': date,
+                    'spo2_distribution': spo2_distribution_data,
+                    'daily_score': data['daily_score'],
+                    'activity_type': data['activity_type']
+                }
+            else:
+                results[date] = None
     
     finally:
         cur.close()

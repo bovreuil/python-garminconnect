@@ -39,7 +39,17 @@ function loadTwoWeekData(startDate, endDate) {
         currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    fetch('/api/data/batch', {
+    // Determine the correct batch endpoint based on page data type
+    let batchEndpoint = '/api/data/batch'; // fallback
+    if (currentPageConfig.dataType === 'trimp') {
+        batchEndpoint = '/api/data/batch/trimp';
+    } else if (currentPageConfig.dataType === 'oxygen_debt') {
+        batchEndpoint = '/api/data/batch/oxygen-debt';
+    } else if (currentPageConfig.dataType === 'spo2_distribution') {
+        batchEndpoint = '/api/data/batch/spo2-distribution';
+    }
+
+    fetch(batchEndpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -86,8 +96,18 @@ function loadFourteenWeekData() {
 
     console.log(`Loading data for ${dateLabels.length} days: ${dateLabels[0]} to ${dateLabels[dateLabels.length - 1]}`);
 
+    // Determine the correct batch endpoint based on page data type
+    let batchEndpoint = '/api/data/batch'; // fallback
+    if (currentPageConfig.dataType === 'trimp') {
+        batchEndpoint = '/api/data/batch/trimp';
+    } else if (currentPageConfig.dataType === 'oxygen_debt') {
+        batchEndpoint = '/api/data/batch/oxygen-debt';
+    } else if (currentPageConfig.dataType === 'spo2_distribution') {
+        batchEndpoint = '/api/data/batch/spo2-distribution';
+    }
+
     // Fetch data using batch API
-    fetch('/api/data/batch', {
+    fetch(batchEndpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
