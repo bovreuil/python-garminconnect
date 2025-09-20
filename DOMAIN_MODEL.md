@@ -1012,6 +1012,86 @@ if (typeof loadTwoWeekSpo2Data === 'function') {
 - **Single views**: Day and activity views working
 - **Data integrity**: Correct data displayed with proper colors/labels
 
+## Performance Architecture Lessons (September 2025)
+
+### API Endpoint Specialization
+
+**Problem Discovered**: The monolithic `/api/data/batch` endpoint was serving ALL data types (TRIMP, oxygen debt, SpO2 distribution) to ALL pages, causing massive performance overhead.
+
+**Solution Implemented**: Split into specialized endpoints:
+- `/api/data/batch/trimp` (Dashboard page only)
+- `/api/data/batch/oxygen-debt` (Oxygen Debt page only)  
+- `/api/data/batch/spo2-distribution` (SpO2 Distribution page only)
+
+**Architectural Principle**: **Data Type Separation at API Level**
+- Each page should only request the data it actually needs
+- No page should load data types it doesn't use
+- Specialized endpoints enable targeted caching strategies
+
+### Caching System Consistency
+
+**Problem Discovered**: SpO2 distribution was calculating from raw O2Ring data on every request (15+ seconds), while oxygen debt used efficient caching.
+
+**Solution Implemented**: Applied the same caching pattern used for oxygen debt:
+- Hash-based data validation
+- Cache-first approach with fallback calculation
+- Automatic invalidation when source data changes
+
+**Architectural Principle**: **Consistent Caching Patterns**
+- When multiple derived data types come from the same source, use identical caching strategies
+- Cache invalidation scenarios should be the same for related data types
+- Performance patterns should be consistent across similar functionality
+
+### Import Management in Large Refactoring
+
+**Problem Discovered**: Created new caching functions but forgot to add imports, causing 500 errors.
+
+**Solution Implemented**: Systematic import audit checklist.
+
+**Process Lesson**: **Import Audit Checklist**
+- When adding new functions to existing modules, always verify imports are updated
+- Large refactoring requires systematic verification of all dependencies
+- Test imports early in the development cycle
+
+## Critical Process Lessons (September 2025)
+
+### Testing Before Committing (Non-Negotiable)
+
+**Violation**: Attempted to commit without testing, violating established process.
+
+**Process Principle**: **Always Test Before Committing**
+- No exceptions to the test-first commit process
+- Every commit must represent working, tested code
+- Performance changes especially require validation before commit
+
+### Configuration Objects Over Parameterization
+
+**Problem**: Initially tried to parameterize charts directly instead of separating concerns.
+
+**Solution**: Page configuration system where charts are data-agnostic and configuration objects define data extraction.
+
+**Architectural Principle**: **Configuration Objects Over Parameterization**
+- Better to have dedicated configuration objects than complex parameter passing
+- Configuration objects are more maintainable and extensible
+- Clear separation between chart logic and data extraction logic
+
+## Updated Architecture Principles
+
+### API Design Principles
+1. **Single Responsibility**: Each endpoint serves one specific data type
+2. **Page-Specific Optimization**: Endpoints optimized for specific page needs
+3. **Caching Integration**: Endpoints designed to work with caching systems
+
+### Caching Design Principles  
+1. **Consistency**: Related data types use identical caching patterns
+2. **Hash Validation**: All cached data validated with source data hashes
+3. **Automatic Invalidation**: Cache invalidation tied to source data changes
+
+### Development Process Principles
+1. **Test-First Commits**: No commit without successful testing
+2. **Import Auditing**: Systematic verification of all dependencies
+3. **Configuration Objects**: Prefer configuration over parameterization
+
 ---
 
 *This document serves as the authoritative description of our domain model and refactoring methodology. All code should align with these concepts and terminology.*
