@@ -207,6 +207,17 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
                     callbacks: {
                         title: function(context) {
                             return weekLabels[context[0].dataIndex];
+                        },
+                        label: function(context) {
+                            const value = context.parsed.y;
+                            const zone = context.dataset.label;
+                            
+                            // For SpO2 distribution page, show minutes instead of percentages
+                            if (currentPageConfig.dataType === 'spo2_distribution') {
+                                return `SpO2 ${zone}%: ${value.toFixed(1)} minutes`;
+                            } else {
+                                return `${zone}: ${value.toFixed(1)}%`;
+                            }
                         }
                     }
                 }
@@ -315,11 +326,28 @@ function updateTwoWeekChart(dateLabels, dataResults) {
                             const index = context[0].dataIndex;
                             return dateLabels[index];
                         },
+                        label: function(context) {
+                            const value = context.parsed.y;
+                            const zone = context.dataset.label;
+                            
+                            // For SpO2 distribution page, show minutes instead of percentages
+                            if (currentPageConfig.dataType === 'spo2_distribution') {
+                                return `SpO2 ${zone}%: ${value.toFixed(1)} minutes`;
+                            } else {
+                                return `${zone}: ${value.toFixed(1)}%`;
+                            }
+                        },
                         afterBody: function(context) {
                             const dataIndex = context[0].dataIndex;
                             const dayData = dataResults[dataIndex];
                             const total = currentPageConfig.dataExtractor.getTotal(dayData, currentMetric);
-                            return `Total: ${total.toFixed(1)}`;
+                            
+                            // For SpO2 distribution page, show total minutes instead of percentage
+                            if (currentPageConfig.dataType === 'spo2_distribution') {
+                                return `Total: ${total.toFixed(1)} minutes`;
+                            } else {
+                                return `Total: ${total.toFixed(1)}`;
+                            }
                         }
                     }
                 }

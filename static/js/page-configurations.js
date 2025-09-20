@@ -176,15 +176,16 @@ const PAGE_CONFIGS = {
 
                 // Find the SpO2 level data (only 'at' metric for SpO2 distribution)
                 const levelData = dayData.spo2_distribution.at_level.find(item => item.spo2 === parseInt(level));
-                return levelData ? levelData.percent : 0;
+                // Return seconds converted to minutes (day charts should show minutes, not percentages)
+                return levelData ? levelData.seconds / 60 : 0;
             },
 
             getTotal: (dayData, metric) => {
                 if (!dayData || !dayData.spo2_distribution || !dayData.spo2_distribution.at_level) return 0;
 
-                // Calculate total percentage (should be 100% for SpO2 distribution)
-                const totalPercent = dayData.spo2_distribution.at_level.reduce((sum, item) => sum + item.percent, 0);
-                return totalPercent;
+                // Calculate total seconds converted to minutes for day
+                const totalSeconds = dayData.spo2_distribution.at_level.reduce((sum, item) => sum + item.seconds, 0);
+                return totalSeconds / 60;
             },
 
             // Activity-specific data extraction (activities have different structure)
