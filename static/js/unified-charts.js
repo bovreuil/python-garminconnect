@@ -340,6 +340,10 @@ function updateTwoWeekChart(dateLabels, dataResults) {
                 }
             },
             plugins: {
+                legend: {
+                    display: currentPageConfig.zones.length <= 10, // Hide legend for pages with many zones
+                    position: 'top'
+                },
                 tooltip: {
                     callbacks: {
                         title: function(context) {
