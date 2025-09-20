@@ -8,6 +8,8 @@
     <script src="{{ url_for('static', filename='js/chart-timeline-utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/time-series-extractors.js') }}"></script>
 <script src="{{ url_for('static', filename='js/data-loading.js') }}"></script>
+<script src="{{ url_for('static', filename='js/page-configurations.js') }}"></script>
+<script src="{{ url_for('static', filename='js/unified-charts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/heart-rate-charts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/breathing-charts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/spo2-charts.js') }}"></script>
@@ -83,13 +85,13 @@
 
 
 <script>
-// Oxygen debt page-specific initialization
-let currentMetric = 'area'; // 'area' or 'minutes'
-
-// Initialize the oxygen debt page
+// Oxygen debt page-specific initialization using unified chart system
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize common page elements
     initializePage();
+    
+    // Initialize page-specific charts
+    initializePageCharts();
     
     // Setup common event listeners
     setupCommonEventListeners();
@@ -125,7 +127,7 @@ function navigateToWeek(targetDate) {
 
 // goToSingleDateToday moved to dashboard-navigation.js
 
-// Switch between area and minutes
+// Switch between area and minutes using unified system
 function switchMetric(metric) {
     currentMetric = metric;
     
