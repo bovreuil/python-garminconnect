@@ -46,18 +46,18 @@
                 <div class="mb-4" id="activitySpo2DistributionChartsContainer" style="display: none;">
                     <div class="mb-2">
                         <div class="btn-group" role="group" aria-label="Activity SpO2 Chart Type">
-                            <input type="radio" class="btn-check" name="activitySpo2ChartType" id="activitySpo2AtOrBelowRadio" value="at_or_below" checked>
-                            <label class="btn btn-outline-primary btn-sm" for="activitySpo2AtOrBelowRadio">At or Below</label>
-                            
-                            <input type="radio" class="btn-check" name="activitySpo2ChartType" id="activitySpo2AtRadio" value="at">
+                            <input type="radio" class="btn-check" name="activitySpo2ChartType" id="activitySpo2AtRadio" value="at" checked>
                             <label class="btn btn-outline-primary btn-sm" for="activitySpo2AtRadio">At</label>
+                            
+                            <input type="radio" class="btn-check" name="activitySpo2ChartType" id="activitySpo2AtOrBelowRadio" value="at_or_below">
+                            <label class="btn btn-outline-primary btn-sm" for="activitySpo2AtOrBelowRadio">At or Below</label>
                         </div>
                     </div>
                     <!-- Old chart gets full width -->
-                    <h6 id="activitySpo2ChartTitle">SpO2 Time at or Below Level</h6>
+                    <h6 id="activitySpo2ChartTitle">SpO2 Time at Level</h6>
                     <div class="chart-container" style="height: 320px; margin-bottom: 20px;">
-                        <canvas id="activitySpo2AtOrBelowChart"></canvas>
-                        <canvas id="activitySpo2AtChart" style="display: none;"></canvas>
+                        <canvas id="activitySpo2AtChart"></canvas>
+                        <canvas id="activitySpo2AtOrBelowChart" style="display: none;"></canvas>
                     </div>
                     
                     <table style="width: 100%; border-collapse: collapse;">
