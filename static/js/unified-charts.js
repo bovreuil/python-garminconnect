@@ -59,7 +59,12 @@ function applyCurrentToggleState() {
 
 // Load two weeks of data (universal function)
 function loadTwoWeekData(startDate, endDate) {
+    // Normalize dates to start of day to avoid time component issues
+    currentStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    currentEndDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+    
     showLoading();
+    updateDateRange();
     console.log(`Loading two-week data for ${startDate} to ${endDate}`);
 
     // Generate array of 14 date labels

@@ -74,8 +74,8 @@ function initializeChartVariables() {
     window.activitySpo2IndividualLevelsChart = null;
 
     // Global state variables
-    window.currentStartDate = null;
-    window.currentEndDate = null;
+    window.currentStartDate = null; // Track the current 2-week period start date
+    window.currentEndDate = null; // Track the current 2-week period end date
     window.currentDataResults = []; // Store the current data results for click handling
     window.selectedDate = null; // Track the currently selected date for single date view
     window.selectedActivity = null; // Track the currently selected activity
