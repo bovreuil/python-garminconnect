@@ -112,11 +112,11 @@ function loadActivitiesForDate(dateLabel) {
                     });
                 });
             }
-            createActivitiesChart(activities);
+            createActivitiesChart(activities, dateLabel);
         })
         .catch(error => {
             console.error(`Error loading activities for ${dateLabel}:`, error);
-            createActivitiesChart([]);
+            createActivitiesChart([], dateLabel);
         });
 }
 

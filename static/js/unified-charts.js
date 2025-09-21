@@ -23,6 +23,40 @@ function initializePageCharts() {
     console.log(`Initializing charts for ${currentPageConfig.name} page`);
 }
 
+// Apply current page toggle state to currentPageConfig (works for all pages)
+function applyCurrentToggleState() {
+    // Reset to original configuration first
+    const originalConfig = getCurrentPageConfig();
+    currentPageConfig = { ...originalConfig };
+    
+    // Apply SpO2 filtering if on SpO2 page
+    if (currentPageConfig.dataType === 'spo2_distribution' && typeof window.currentSpO2View !== 'undefined') {
+        if (window.currentSpO2View === 'below95') {
+            // Filter out zones 95, 96, 97, 98, 99
+            const filteredZones = currentPageConfig.zones.filter(zone => parseInt(zone) < 95);
+            const filteredColors = {};
+            
+            // Filter colors to match filtered zones
+            filteredZones.forEach(zone => {
+                filteredColors[zone] = originalConfig.colors[zone];
+            });
+            
+            console.log(`SpO2 Filtering: ${originalConfig.zones.length} zones -> ${filteredZones.length} zones`);
+            console.log('Filtered zones:', filteredZones);
+            
+            // Update the current page config
+            currentPageConfig = {
+                ...currentPageConfig,
+                zones: filteredZones,
+                colors: filteredColors
+            };
+        }
+    }
+    
+    // For dashboard and oxygen debt pages, currentMetric is handled by the data extraction functions
+    // No additional filtering needed here as the metric is passed to dataExtractor functions
+}
+
 // Load two weeks of data (universal function)
 function loadTwoWeekData(startDate, endDate) {
     showLoading();
@@ -138,6 +172,9 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
     if (fourteenWeekChart) {
         fourteenWeekChart.destroy();
     }
+
+    // Apply current toggle state for all pages
+    applyCurrentToggleState();
 
     console.log(`Updating 14-week chart with ${currentPageConfig.name} data`);
 
@@ -297,6 +334,9 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     if (twoWeekChart) {
         twoWeekChart.destroy();
     }
+
+    // Apply current toggle state for all pages
+    applyCurrentToggleState();
 
     console.log(`Updating 2-week chart with ${currentPageConfig.name} data`);
 
@@ -479,6 +519,9 @@ function createActivitiesChart(activities, selectedDate) {
         console.log('No activities to display');
         return;
     }
+
+    // Apply current toggle state for all pages
+    applyCurrentToggleState();
 
     console.log(`Creating activities chart with ${currentPageConfig.name} data for ${activities.length} activities`);
 

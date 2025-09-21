@@ -27,6 +27,10 @@
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>SpO2 Distribution Analysis</h1>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-secondary active" id="allBtn">All</button>
+                <button type="button" class="btn btn-outline-secondary" id="below95Btn">Below 95</button>
+            </div>
         </div>
     </div>
 </div>
@@ -90,13 +94,51 @@ document.addEventListener('DOMContentLoaded', function() {
     // Setup common event listeners
     setupCommonEventListeners();
     
-    // SpO2 Distribution page-specific event listeners (no metric switching needed)
+    // SpO2 Distribution page-specific event listeners
+    document.getElementById('allBtn').addEventListener('click', () => switchSpO2View('all'));
+    document.getElementById('below95Btn').addEventListener('click', () => switchSpO2View('below95'));
     
     // Initialize by loading 14-week data and going to today
     loadFourteenWeekData();
     goToToday();
 });
 
+// SpO2 Distribution toggle functionality
+window.currentSpO2View = 'all'; // Default to 'all'
+
+function switchSpO2View(view) {
+    if (window.currentSpO2View === view) return;
+    
+    window.currentSpO2View = view;
+    
+    // Update button states
+    document.getElementById('allBtn').classList.toggle('active', view === 'all');
+    document.getElementById('below95Btn').classList.toggle('active', view === 'below95');
+    
+    // Reload charts with filtered data
+    loadFourteenWeekData();
+    
+    // Reload two-week data with new toggle state
+    if (currentStartDate && currentEndDate) {
+        loadTwoWeekData(currentStartDate, currentEndDate);
+    } else if (window.twoWeekChart) {
+        // If 2-week chart exists but dates aren't set, try to reload with current chart data
+        if (window.twoWeekChart && window.currentDataResults && window.currentDataResults.length > 0) {
+            // Calculate date range from existing data
+            const startDate = window.currentDataResults[0]?.date;
+            const endDate = window.currentDataResults[window.currentDataResults.length - 1]?.date;
+            if (startDate && endDate) {
+                loadTwoWeekData(startDate, endDate);
+            }
+        }
+    }
+    
+    // Update activities chart if single date view is open and we have a selected date
+    const singleDateSection = document.getElementById('singleDateSection');
+    if (singleDateSection.style.display !== 'none' && selectedDate) {
+        loadActivitiesForDate(selectedDate);
+    }
+}
 
 
 // navigateWeek moved to dashboard-navigation.js
