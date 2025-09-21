@@ -85,18 +85,18 @@
 
 
 <script>
-// Oxygen debt page-specific initialization using unified chart system
+// Oxygen debt page initialization using unified chart system
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize common page elements
     initializePage();
     
-    // Initialize page-specific charts
+    // Initialize universal charts
     initializePageCharts();
     
     // Setup common event listeners
     setupCommonEventListeners();
     
-    // Oxygen debt page-specific event listeners
+    // Oxygen debt page event listeners
     document.getElementById('areaBtn').addEventListener('click', () => switchMetric('area'));
     document.getElementById('minutesBtn').addEventListener('click', () => switchMetric('minutes'));
     
@@ -162,7 +162,7 @@ function switchMetric(metric) {
 // - updateFourteenWeekChart: universal function uses page configuration
 // - createActivitiesChart: universal function uses page configuration
 // - loadFourteenWeekData: universal function loads any page's data type
-// - aggregateWeekOxygenDebtData: page-specific function in page-configurations.js
+// - aggregateWeekOxygenDebtData: data aggregation function in page-configurations.js
 
 </script>
 {% endblock %}

@@ -1,7 +1,7 @@
 /**
  * Unified Chart Creation System
  *
- * Page-aware chart functions that work with any data type based on page configuration.
+ * Universal chart functions that work with any data type based on page configuration.
  * This replaces the duplicated chart functions in each template.
  */
 
@@ -13,7 +13,7 @@ let activitiesChart = null;
 // Current metric for the page
 let currentMetric = null;
 
-// Initialize page-specific charts
+// Initialize universal charts
 function initializePageCharts() {
     currentPageConfig = getCurrentPageConfig();
 

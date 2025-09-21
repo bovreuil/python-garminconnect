@@ -606,10 +606,8 @@ function uploadCsvData() {
                 modal.hide();
             }, 2000);
 
-            // Refresh the 14-week char
-            if (typeof loadFourteenWeekData === 'function') {
-                loadFourteenWeekData();
-            }
+            // Refresh the 14-week chart
+            loadFourteenWeekData();
 
             // Refresh the two-week char
             if (selectedDate) {
@@ -664,10 +662,8 @@ function clearCsvOverride() {
                 modal.hide();
             }, 2000);
 
-            // Refresh the 14-week char
-            if (typeof loadFourteenWeekData === 'function') {
-                loadFourteenWeekData();
-            }
+            // Refresh the 14-week chart
+            loadFourteenWeekData();
 
             // Refresh the two-week char
             if (selectedDate) {

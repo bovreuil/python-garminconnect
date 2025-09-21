@@ -88,13 +88,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize common page elements
     initializePage();
     
-    // Initialize page-specific charts
+    // Initialize universal charts
     initializePageCharts();
     
     // Setup common event listeners
     setupCommonEventListeners();
     
-    // SpO2 Distribution page-specific event listeners
+    // SpO2 Distribution page event listeners
     document.getElementById('allBtn').addEventListener('click', () => switchSpO2View('all'));
     document.getElementById('below95Btn').addEventListener('click', () => switchSpO2View('below95'));
     
@@ -155,7 +155,7 @@ function switchSpO2View(view) {
 // - updateFourteenWeekChart: universal function uses SpO2 distribution data  
 // - createActivitiesChart: universal function uses SpO2 distribution data
 // - loadFourteenWeekData: universal function loads any page's data type
-// - aggregateWeekData: page-specific function in page-configurations.js
+// - aggregateWeekData: data aggregation function in page-configurations.js
 
 </script>
 {% endblock %}

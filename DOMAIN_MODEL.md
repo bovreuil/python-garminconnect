@@ -259,7 +259,7 @@ When time series data changes, recalculate derived data for:
 
 ## Unified Chart Architecture (Current State)
 
-### ✅ Page-Aware Chart System (COMPLETE)
+### ✅ Unified Chart System (COMPLETE)
 
 **Zero Duplication Achieved**: Same chart functions work for all pages
 - **Universal Functions**: `updateFourteenWeekChart()`, `updateTwoWeekChart()`, `createActivitiesChart()`
@@ -355,7 +355,7 @@ When time series data changes, recalculate derived data for:
 
 ### Common Anti-Patterns to Avoid
 
-**❌ Don't Create Page-Specific Chart Functions**:
+**❌ Don't Create Data-Type-Specific Chart Functions**:
 ```javascript
 // WRONG - creating new chart functions
 function updateTwoWeekChartForNewPage() { ... }
@@ -392,7 +392,7 @@ const data = config.dataExtractor.getZoneData(dayData, zone, metric);
 ### Major Achievements (2024-2025)
 
 **✅ Unified Chart System** (September 2025):
-- **Page-Aware Architecture**: Universal chart functions work with any data type
+- **Universal Architecture**: Chart functions work with any data type through configuration
 - **Zero Duplication**: Same chart functions serve all three pages
 - **Configuration-Driven**: Data extraction logic separated from chart logic
 - **Easy Extension**: New pages require only configuration, not new code
@@ -428,7 +428,7 @@ Formats     Standardized Arrays     Cached Results      Universal Functions
 
 **Module Organization** (Production-Ready):
 - **unified-charts.js**: Universal chart functions (14-week, 2-week, activities)
-- **page-configurations.js**: Page-specific data extraction and aggregation rules
+- **page-configurations.js**: Data extraction and aggregation rules for each data type
 - **time-series-extractors.js**: Clean data extraction from raw formats
 - **dashboard-navigation.js**: Timing and navigation logic
 - **chart-utilities.js**: Shared chart creation utilities
@@ -668,7 +668,7 @@ legend: {
 
 **Code Metrics**:
 - **Template size**: ~150 lines (mostly HTML structure)
-- **New JavaScript**: <50 lines (only page-specific initialization)
+- **New JavaScript**: <50 lines (only data-type-specific initialization)
 - **Duplication**: 0% (all chart logic reused)
 - **Configuration**: <100 lines (data extraction rules)
 
@@ -745,7 +745,7 @@ legend: {
 
 ### API Design Principles
 1. **Single Responsibility**: Each endpoint serves one specific data type
-2. **Page-Specific Optimization**: Endpoints optimized for specific page needs
+2. **Data-Type-Specific Optimization**: Endpoints optimized for specific data type needs
 3. **Caching Integration**: Endpoints designed to work with caching systems
 
 ### Caching Design Principles  
@@ -805,7 +805,7 @@ plugins: { datalabels: { display: true } } // Selective enable
 // Universal toggle state application
 function applyCurrentToggleState() {
     // Reset to original configuration
-    // Apply page-specific filtering
+    // Apply data-type-specific filtering
     // Update all dependent charts
 }
 ```
