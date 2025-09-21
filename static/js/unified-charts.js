@@ -357,7 +357,17 @@ function updateTwoWeekChart(dateLabels, dataResults) {
     let maxValue = 0;
     dataResults.forEach(dayData => {
         if (dayData) {
-            const dayTotal = currentPageConfig.dataExtractor.getTotal(dayData, currentMetric);
+            // For filtered views (like SpO2 "below 95"), calculate total from filtered zones only
+            let dayTotal;
+            if (currentPageConfig.dataType === 'spo2_distribution' && typeof window.currentSpO2View !== 'undefined' && window.currentSpO2View === 'below95') {
+                // Calculate total from filtered zones only (exclude 95-99)
+                dayTotal = currentPageConfig.zones.reduce((sum, zone) => {
+                    return sum + currentPageConfig.dataExtractor.getZoneData(dayData, zone, currentMetric);
+                }, 0);
+            } else {
+                // Use original getTotal for unfiltered views
+                dayTotal = currentPageConfig.dataExtractor.getTotal(dayData, currentMetric);
+            }
             maxValue = Math.max(maxValue, dayTotal);
         }
     });
@@ -443,7 +453,18 @@ function updateTwoWeekChart(dateLabels, dataResults) {
                         afterBody: function(context) {
                             const dataIndex = context[0].dataIndex;
                             const dayData = dataResults[dataIndex];
-                            const total = currentPageConfig.dataExtractor.getTotal(dayData, currentMetric);
+                            
+                            // For filtered views (like SpO2 "below 95"), calculate total from filtered zones only
+                            let total;
+                            if (currentPageConfig.dataType === 'spo2_distribution' && typeof window.currentSpO2View !== 'undefined' && window.currentSpO2View === 'below95') {
+                                // Calculate total from filtered zones only (exclude 95-99)
+                                total = currentPageConfig.zones.reduce((sum, zone) => {
+                                    return sum + currentPageConfig.dataExtractor.getZoneData(dayData, zone, currentMetric);
+                                }, 0);
+                            } else {
+                                // Use original getTotal for unfiltered views
+                                total = currentPageConfig.dataExtractor.getTotal(dayData, currentMetric);
+                            }
                             
                             // For SpO2 distribution page, show total minutes instead of percentage
                             if (currentPageConfig.dataType === 'spo2_distribution') {
@@ -485,7 +506,17 @@ function updateTwoWeekChart(dateLabels, dataResults) {
                         const dataIndex = context.dataIndex;
                         const dayData = dataResults[dataIndex];
                         if (dayData) {
-                            const total = currentPageConfig.dataExtractor.getTotal(dayData, currentMetric);
+                            // For filtered views (like SpO2 "below 95"), calculate total from filtered zones only
+                            let total;
+                            if (currentPageConfig.dataType === 'spo2_distribution' && typeof window.currentSpO2View !== 'undefined' && window.currentSpO2View === 'below95') {
+                                // Calculate total from filtered zones only (exclude 95-99)
+                                total = currentPageConfig.zones.reduce((sum, zone) => {
+                                    return sum + currentPageConfig.dataExtractor.getZoneData(dayData, zone, currentMetric);
+                                }, 0);
+                            } else {
+                                // Use original getTotal for unfiltered views
+                                total = currentPageConfig.dataExtractor.getTotal(dayData, currentMetric);
+                            }
                             
                             // For SpO2 distribution page, show total minutes
                             if (currentPageConfig.dataType === 'spo2_distribution') {
@@ -538,14 +569,26 @@ function createActivitiesChart(activities, selectedDate) {
     // Calculate x-axis maximum
     let maxValue = 0;
     activities.forEach(activity => {
-        // Use activity-specific total calculation if available, otherwise fall back to regular
-        if (currentPageConfig.dataExtractor.getActivityTotal) {
-            const activityTotal = currentPageConfig.dataExtractor.getActivityTotal(activity, currentMetric);
-            maxValue = Math.max(maxValue, activityTotal);
+        // For filtered views (like SpO2 "below 95"), calculate total from filtered zones only
+        let activityTotal;
+        if (currentPageConfig.dataType === 'spo2_distribution' && typeof window.currentSpO2View !== 'undefined' && window.currentSpO2View === 'below95') {
+            // Calculate total from filtered zones only (exclude 95-99)
+            activityTotal = currentPageConfig.zones.reduce((sum, zone) => {
+                if (currentPageConfig.dataExtractor.getActivityZoneData) {
+                    return sum + currentPageConfig.dataExtractor.getActivityZoneData(activity, zone, currentMetric);
+                } else {
+                    return sum + currentPageConfig.dataExtractor.getZoneData(activity, zone, currentMetric);
+                }
+            }, 0);
         } else {
-            const activityTotal = currentPageConfig.dataExtractor.getTotal(activity, currentMetric);
-            maxValue = Math.max(maxValue, activityTotal);
+            // Use original getTotal for unfiltered views
+            if (currentPageConfig.dataExtractor.getActivityTotal) {
+                activityTotal = currentPageConfig.dataExtractor.getActivityTotal(activity, currentMetric);
+            } else {
+                activityTotal = currentPageConfig.dataExtractor.getTotal(activity, currentMetric);
+            }
         }
+        maxValue = Math.max(maxValue, activityTotal);
     });
 
     const { axisMax: xAxisMax } = calculateAxisScaling(maxValue, true, 100);
