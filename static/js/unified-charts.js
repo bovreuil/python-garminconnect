@@ -120,20 +120,8 @@ function loadFourteenWeekData() {
 
     showLoading();
 
-    // Calculate date range for 14 weeks (98 days)
-    const endDate = new Date();
-    endDate.setHours(0, 0, 0, 0);
-
-    const startDate = new Date(endDate);
-    startDate.setDate(startDate.getDate() - 97); // 98 days total (including today)
-
-    // Generate date labels
-    const dateLabels = [];
-    const currentDate = new Date(startDate);
-    while (currentDate <= endDate) {
-        dateLabels.push(currentDate.toISOString().split('T')[0]);
-        currentDate.setDate(currentDate.getDate() + 1);
-    }
+    // Use the proper 14-week calculation function
+    const { startDate, endDate, dateLabels } = calculate14WeekPeriod();
 
     console.log(`Loading data for ${dateLabels.length} days: ${dateLabels[0]} to ${dateLabels[dateLabels.length - 1]}`);
 
@@ -238,9 +226,9 @@ function updateFourteenWeekChart(dateLabels, dataResults) {
                     const clickIndex = xAxis.getValueForPixel(x);
 
                     if (clickIndex >= 0 && clickIndex < weekLabels.length) {
+                        // Get the week start date (Monday) for this week
                         const weekStartDate = new Date(dateLabels[clickIndex * 7]);
-                        const monday = getWeekStart(weekStartDate);
-                        navigateToWeek(monday);
+                        navigateToWeek(weekStartDate);
                     }
                 }
             },
