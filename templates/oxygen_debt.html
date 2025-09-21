@@ -138,19 +138,9 @@ function switchMetric(metric) {
     // Reload 14-week data with new metric
     loadFourteenWeekData();
     
-    // Reload two-week data with new metric
-    if (currentStartDate && currentEndDate) {
-        loadTwoWeekData(currentStartDate, currentEndDate);
-    } else if (window.twoWeekChart) {
-        // If 2-week chart exists but dates aren't set, try to reload with current chart data
-        if (window.twoWeekChart && window.currentDataResults && window.currentDataResults.length > 0) {
-            // Calculate date range from existing data
-            const startDate = window.currentDataResults[0]?.date;
-            const endDate = window.currentDataResults[window.currentDataResults.length - 1]?.date;
-            if (startDate && endDate) {
-                loadTwoWeekData(startDate, endDate);
-            }
-        }
+    // Reload two-week chart with new metric (if chart exists with data)
+    if (window.twoWeekChart && window.currentTwoWeekResults && window.currentTwoWeekLabels) {
+        updateTwoWeekChart(window.currentTwoWeekLabels, window.currentTwoWeekResults);
     }
     
     // Update activities chart if single date view is open and we have a selected date

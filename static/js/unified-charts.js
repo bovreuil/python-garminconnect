@@ -95,6 +95,8 @@ function loadTwoWeekData(startDate, endDate) {
         if (data.success) {
             console.log('Two-week batch data loaded successfully');
             const dataResults = dateLabels.map(dateLabel => data.data[dateLabel] || null);
+            window.currentTwoWeekResults = dataResults; // Store 2-week data separately
+            window.currentTwoWeekLabels = dateLabels; // Store 2-week labels separately
             updateTwoWeekChart(dateLabels, dataResults);
         } else {
             console.error('Failed to load two-week batch data:', data.error);
@@ -505,6 +507,9 @@ function updateTwoWeekChart(dateLabels, dataResults) {
             }
         }
     });
+    
+    // Set global reference for toggle functionality
+    window.twoWeekChart = twoWeekChart;
 }
 
 // Create activities chart (universal function)
