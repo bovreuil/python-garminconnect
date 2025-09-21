@@ -267,11 +267,11 @@ function createSpo2HorizontalBarChart(chartId, data, title) {
                     },
                     ticks: {
                         stepSize: 1, // Show every integer value
-                        maxTicksLimit: 18, // Force showing all 18 values (98-81)
+                        maxTicksLimit: 20, // Force showing all values (80-99)
                         autoSkip: false, // Don't skip any ticks
                         callback: function(value, index, values) {
-                            // Map the index to the actual SpO2 value (98 down to 81)
-                            const spo2Values = [98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81];
+                            // Get SpO2 values from the actual data (sorted in descending order)
+                            const spo2Values = data.map(item => item.spo2).sort((a, b) => b - a);
                             return spo2Values[index] || value;
                         }
                     }
